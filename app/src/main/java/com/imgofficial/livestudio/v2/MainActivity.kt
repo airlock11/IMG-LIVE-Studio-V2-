@@ -83,6 +83,7 @@ class MainActivity : Activity() {
    loadUrl("$origin/assets/index.html")
   }
   setContentView(browser)
+  window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
  }
 
  private fun handleMediaRequest(request: PermissionRequest) {
@@ -148,6 +149,7 @@ class MainActivity : Activity() {
   pendingMediaRequest?.deny()
   pendingFileChooser?.onReceiveValue(null)
   pendingFileChooser = null
+  window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   browser.removeJavascriptInterface("IMGNative")
   browser.destroy()
   super.onDestroy()
