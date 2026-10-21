@@ -1,0 +1,148 @@
+/* Dedicated horizontal controller on Phone 2 — isolated from camera/recorder UI. */
+html.img-remote-console-active,html.img-remote-console-active body{overscroll-behavior:none;overflow:hidden}
+.app.remote-console-app{position:relative;max-width:none!important;width:100%!important;height:100dvh!important;min-height:0!important;margin:0!important;overflow:hidden!important;box-shadow:none!important;border-radius:0!important;background:#09131b!important}
+.app.remote-console-app>.content{flex:1;min-height:0;overflow:hidden!important;padding:0!important}
+.app.remote-console-app .remote-page{width:100%;max-width:none!important;height:100%;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+.remote-console{--rc-bg:#0b151e;--rc-panel:#172734;--rc-edge:#344a58;--rc-soft:#223847;--rc-text:#f3f8fc;--rc-sub:#adc4d0;--rc-accent:#188b68;position:fixed;inset:0;width:100vw;height:100dvh;z-index:40;display:flex;flex-direction:column;background:var(--rc-bg);color:var(--rc-text);font-family:Inter,Arial,system-ui,sans-serif;overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
+.remote-console *{box-sizing:border-box}
+.remote-console button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.rc-topbar{display:flex;gap:8px;align-items:center;justify-content:space-between;min-height:35px;height:35px;flex:none;padding:4px max(8px,env(safe-area-inset-right)) 4px max(8px,env(safe-area-inset-left));background:#111f29;border-bottom:1px solid #2b3e4b}
+.rc-brand{font-size:12px;letter-spacing:.06em;font-weight:1000;white-space:nowrap}.rc-brand b{color:#6de0b5}
+.rc-connection{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:#bfd2db;white-space:nowrap;font-weight:800}
+.rc-connection i{background:#e2ab57;border-radius:50%;width:7px;height:7px}.rc-connection i.rc-connected{background:#45db9e;box-shadow:0 0 6px #2ca974}
+.rc-sport{color:#d3e8ec;font-size:10px;letter-spacing:.08em;font-weight:900;white-space:nowrap}
+.rc-network{font-size:10px;color:#9bbacb;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rc-content{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,.82fr) minmax(290px,1.75fr);gap:6px;padding:6px max(6px,env(safe-area-inset-right)) 6px max(6px,env(safe-area-inset-left));overflow:hidden}
+.rc-team,.rc-operations{border:1px solid var(--rc-edge);border-radius:13px;background:var(--rc-panel);min-width:0;min-height:0;overflow:hidden}
+.rc-team{display:flex;flex-direction:column;gap:5px;padding:7px}
+.rc-team-0{background:linear-gradient(160deg,#203344,#15252f 70%)}.rc-team-1{background:linear-gradient(160deg,#263745,#172731 70%)}
+.rc-team-head{min-height:0;display:flex;gap:2px;flex-direction:column}
+.rc-team-head>span:first-child{color:var(--rc-sub);font-size:9px;letter-spacing:.1em;font-weight:850}
+.rc-team-name{display:block;color:#f5fbff!important;font-size:clamp(13px,1.9vw,19px);font-weight:950;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-score{flex:1;min-height:30px;display:flex;justify-content:center;align-items:center;color:#fff!important;font-variant-numeric:tabular-nums;font-size:clamp(38px,5.8vw,72px);font-weight:1000;line-height:.9;letter-spacing:-.05em;text-shadow:0 2px 5px #0005}
+.rc-team-scoring{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;flex:none}
+.rc-team-scoring .rc-btn{min-height:32px}
+.rc-btn{display:inline-flex;align-items:center;justify-content:center;min-width:0;min-height:30px;gap:4px;border:1px solid #45606d;background:#243b4a;border-radius:9px;color:#f2f9fa!important;font-size:clamp(10px,1.4vw,13px);font-weight:900;white-space:nowrap;cursor:pointer;padding:4px 7px;line-height:1.15}
+.rc-btn:active{filter:brightness(1.18);transform:scale(.97)}
+.rc-btn:disabled{opacity:.42;cursor:not-allowed}
+.rc-btn.rc-accent,.rc-btn.rc-rally{background:#147d60;border-color:#23916f;color:#fff!important}
+.rc-btn.rc-warn{background:#7d382e;border-color:#a65441}
+.rc-btn.rc-selected{background:#287c64;border-color:#6ac5a4;color:#fff!important;box-shadow:inset 0 0 0 1px #41a983}
+.rc-btn.rc-layout,.rc-btn.rc-exit{min-height:26px;padding:3px 10px;font-size:10px;border-radius:7px}
+.rc-btn.rc-exit{color:#ffbcb7!important;border-color:#705255;background:#3a2930}
+.rc-team-scoring .rc-btn{font-size:14px;font-weight:1000;padding:4px 6px}
+.rc-foul{display:flex;align-items:center;justify-content:space-between;gap:6px;flex:none;margin-top:2px}
+.rc-foul span{font-size:10px;color:#cce0e8;font-weight:800;white-space:nowrap;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rc-foul strong{font-size:14px;color:#fff;font-variant-numeric:tabular-nums}
+.rc-foul .rc-btn{flex:0 0 28px;min-height:24px;font-size:14px}
+.rc-team-footer{color:#bfd1d9;font-size:11px;font-weight:850;text-align:center}
+.rc-rally{min-height:43px;flex:none;font-size:13px}
+.rc-operations{padding:8px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#496171 transparent;display:flex;flex-direction:column;gap:8px}
+.rc-group{padding:7px 8px;background:#1d303f;border:1px solid #344958;border-radius:9px;flex:none}
+.rc-label{font-size:9px;letter-spacing:.09em;color:#b7d0db;font-weight:950;text-transform:uppercase;margin-bottom:6px}
+.rc-clock-display{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.rc-clock-display strong{font-size:clamp(22px,3.2vw,34px);font-weight:950;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.04em;line-height:1}
+.rc-clock-display span{font-size:9px;color:#b2cad3;font-weight:900}
+.rc-clock-display span.rc-running{color:#67dfab}
+.rc-button-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.rc-shot-row{display:grid;grid-template-columns:1fr repeat(4,minmax(0,.9fr));gap:5px;align-items:center}
+.rc-shot-row strong{font-size:21px;color:#fff;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rc-period-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+.rc-period-row .rc-btn{padding:4px 0;font-size:10px}
+.rc-possession-row{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px}
+.rc-possession-row .rc-btn{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:9px}
+.rc-break-row{display:flex;gap:5px;flex-wrap:wrap}.rc-break-row .rc-btn{flex:1 1 auto}
+.rc-serve-status{font-size:11px;color:#d8e8ef;margin-bottom:8px}
+.rc-pickle-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.rc-pickle-row .rc-btn{white-space:normal}
+.rc-street-meta,.rc-score-call{color:#d1e1e9;font-size:11px;margin:4px 0 8px}
+.rc-queue{color:#f2bc66;font-size:10px;font-weight:800}.rc-error{color:#ff9797;font-size:10px}
+.rc-rotate-tip{display:none}
+.rc-edit-backdrop{position:absolute;inset:0;z-index:50;background:#031016dc;display:flex;justify-content:center;align-items:center;padding:20px}
+.rc-edit-sheet{max-width:330px;width:100%;padding:16px;border-radius:16px;background:#203443;border:1px solid #557483;box-shadow:0 10px 35px #0008}
+.rc-edit-sheet h2{font-size:19px;color:#fff;margin-bottom:10px}
+.rc-edit-sheet label{display:inline-flex;flex-direction:column;color:#d0e4e9;font-size:11px;font-weight:800;gap:5px;width:48%;padding-right:6px}
+.rc-edit-sheet input{background:#112633;color:#fff;border:1px solid #5c7c8b;border-radius:9px;font-size:20px;font-weight:900;padding:7px;min-width:0;width:100%;font-variant-numeric:tabular-nums}
+.rc-edit-actions{display:flex;gap:7px;margin-top:14px}.rc-edit-actions .rc-btn{flex:1;min-height:40px;font-size:13px}
+@media(orientation:portrait){
+ .remote-console-app .remote-console{
+  inset:auto;top:0;left:100vw;width:100dvh;height:100vw;
+  transform:rotate(90deg);transform-origin:top left
+ }
+ .remote-console-app .rc-rotate-tip{display:none}
+}
+@media(orientation:landscape) and (max-height:420px){
+ .rc-topbar{height:29px;min-height:29px;padding-top:1px;padding-bottom:1px}
+ .rc-content{gap:5px;padding:5px}
+ .rc-team{gap:4px;padding:7px}
+ .rc-score{font-size:clamp(42px,7vw,80px)}
+ .rc-team-scoring .rc-btn{min-height:32px}
+ .rc-foul .rc-btn{min-height:26px}
+ .rc-operations{gap:5px;padding:5px}
+ .rc-group{padding:5px 6px}
+ .rc-label{margin-bottom:4px}
+ .rc-btn{min-height:26px}
+ .rc-clock-display{margin-bottom:4px}
+ .rc-clock-display strong{font-size:23px}
+ .rc-shot-row strong{font-size:18px}
+}
+@media(orientation:landscape) and (max-width:900px){
+ .rc-content{grid-template-columns:minmax(0,.74fr) minmax(0,.74fr) minmax(235px,1.95fr);gap:5px;padding:5px}
+ .rc-team{padding:6px;gap:4px}
+ .rc-team-name{font-size:11px}
+ .rc-score{font-size:clamp(34px,5.2vw,60px)}
+ .rc-team-scoring .rc-btn{font-size:12px;min-height:28px}
+ .rc-foul span{font-size:8px}
+ .rc-foul .rc-btn{min-height:22px;flex:0 0 24px;font-size:12px}
+ .rc-sport{display:none}
+ .rc-btn.rc-layout,.rc-btn.rc-exit{padding:2px 5px;font-size:9px}
+}
+@media(orientation:portrait) and (max-height:700px){
+ .remote-console-app .rc-topbar{height:30px;min-height:30px}
+ .remote-console-app .rc-content{padding:5px;gap:5px}
+ .remote-console-app .rc-team{padding:6px;gap:4px}
+ .remote-console-app .rc-team-scoring .rc-btn{min-height:30px}
+ .remote-console-app .rc-score{font-size:clamp(34px,4.8vh,60px)}
+}
+/* Chrome may report physical portrait even while the controller is CSS-rotated.
+   Give its virtual landscape viewport the same wider tool panel as real landscape. */
+@media(orientation:portrait){
+ .remote-console-app .rc-content{
+  grid-template-columns:minmax(0,.74fr) minmax(0,.74fr) minmax(235px,1.95fr);
+  gap:5px;padding:5px
+ }
+ .remote-console-app .rc-team{padding:6px;gap:4px}
+ .remote-console-app .rc-team-name{font-size:11px}
+ .remote-console-app .rc-score{font-size:clamp(34px,5.2vh,60px)}
+ .remote-console-app .rc-team-scoring .rc-btn{font-size:12px;min-height:28px}
+ .remote-console-app .rc-foul span{font-size:8px}
+ .remote-console-app .rc-foul .rc-btn{min-height:22px;flex:0 0 24px;font-size:12px}
+ .remote-console-app .rc-sport{display:none}
+ .remote-console-app .rc-btn.rc-layout,.remote-console-app .rc-btn.rc-exit{padding:2px 5px;font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){.remote-console *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* Remote shot-clock visibility uses the broadcaster's existing overlay toggle. */
+.rc-shot-group .rc-label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rc-shot-toggle{display:inline-flex;gap:5px;align-items:center;justify-content:flex-end;border:0;background:transparent;color:#cbdce4;font-size:10px;font-weight:950;cursor:pointer;padding:0;min-height:25px;touch-action:manipulation}
+.rc-toggle-thumb{display:inline-block;position:relative;width:34px;height:19px;border:1px solid #597280;border-radius:99px;background:#455765;transition:background .12s;flex:none}
+.rc-toggle-thumb:before{content:"";position:absolute;left:2px;top:2px;height:13px;width:13px;border-radius:50%;background:#fff;transition:transform .12s}
+.rc-shot-toggle.active .rc-toggle-thumb{background:#17875f;border-color:#3aab7c}
+.rc-shot-toggle.active .rc-toggle-thumb:before{transform:translateX(15px)}
+.rc-toggle-label{min-width:23px;text-align:right;color:#f4fbff;font-size:9px}
+.rc-shot-disabled{opacity:.65}
+.rc-shot-disabled .rc-btn:disabled{opacity:.35}
+.rc-btn.rc-end-live{background:#8f3634;border:1px solid #b44b43;color:#fff!important;font-size:10px;font-weight:950;min-height:26px;padding:3px 9px;flex:none}
+.rc-btn.rc-end-live:disabled{opacity:.48}
+.rc-end-confirm p{font-size:13px;line-height:1.45;color:#d4e4eb;margin:5px 0 12px}
+.rc-end-confirm .rc-btn.rc-end-live{font-size:12px;min-height:42px}
+.rc-ended-message{color:#dcf0e9;font-size:12px;line-height:1.5;margin:6px 0 12px}
+@media (orientation:landscape) and (max-width:900px){
+ .rc-topbar{gap:5px}
+ .rc-btn.rc-end-live{padding:2px 6px;font-size:9px}
+ .rc-shot-toggle{min-height:24px}
+}
+@media (orientation:portrait){
+ .remote-console-app .rc-topbar{gap:5px}
+ .remote-console-app .rc-btn.rc-end-live{padding:2px 6px;font-size:9px}
+}

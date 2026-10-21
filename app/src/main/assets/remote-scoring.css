@@ -1,0 +1,66 @@
+/* IMG LIVE Studio — Cloud Remote Scoring UI. This file doesn't affect video compositor. */
+.remote-host-box{display:block;min-width:0}
+.remote-status{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:11px;font-weight:800;border-radius:99px;padding:5px 9px;background:#dce5df;color:#485e54}
+.remote-status:before{content:"";height:7px;width:7px;border-radius:50%;background:#899c8f}
+.remote-status.connected{background:#d8efe4;color:#146645}
+.remote-status.connected:before{background:#198b5c}
+.remote-main-button,.remote-secondary-button{display:flex;justify-content:center;align-items:center;gap:8px;width:100%;min-height:44px;padding:10px 14px;border-radius:12px;border:1px solid #176f51;background:#176f51;color:#fff;font-size:13px;font-weight:850;cursor:pointer}
+.remote-secondary-button{background:var(--surface,#fff);color:var(--ink,#192922);border-color:var(--line,#bfd3c5)}
+.remote-main-button:disabled,.remote-secondary-button:disabled{opacity:.55;cursor:default}
+.remote-host-content{display:grid;grid-template-columns:minmax(0,185px) minmax(0,1fr);align-items:center;gap:13px;margin:15px 0 10px}
+.remote-qr{width:194px;max-width:100%;min-height:184px;padding:7px;background:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.remote-qr img,.remote-qr canvas{max-width:100%!important;max-height:100%!important;height:auto!important}
+.remote-join-details{display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:0}
+.remote-code{font-size:clamp(17px,3vw,25px);font-weight:900;letter-spacing:.1em;overflow-wrap:anywhere}
+.remote-minibtn{border:1px solid var(--line,#cad9cc);border-radius:10px;background:var(--surface,#fff);padding:9px 12px;font-size:12px;font-weight:800;color:var(--ink,#182d24);cursor:pointer}
+.remote-minibtn.danger{border-color:#dbb4b3;color:#b94141}
+.remote-request{padding:12px;background:#eaf6ef;border:1px solid #b0dcc6;border-radius:12px;display:grid;gap:9px;margin:8px 0}
+.remote-request strong{font-size:12px;color:#165b42}
+.remote-action-row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 3px}
+.remote-footnote{color:var(--sub,#637467);font-size:10px}
+.remote-settings-entry{width:100%;text-align:left}
+.remote-live-access{padding:7px 10px}
+.remote-live-access>button{min-height:31px;border:1px solid var(--line,#c5d7ca);background:var(--surface,#fff);border-radius:9px;padding:4px 10px;display:flex;align-items:center;gap:7px;font-size:11px;font-weight:900;color:var(--ink,#152d25)}
+.remote-page{min-height:100%;max-width:900px;padding:15px 18px 90px;margin:auto;overflow-y:auto;overscroll-behavior:contain}
+.remote-page-header{display:flex;align-items:center;gap:15px;margin:2px 0 18px}
+.remote-page-header h1{font-size:23px;margin:4px 0 0}
+.remote-back{border:1px solid var(--line,#c5d7ca);background:var(--surface,#fff);color:var(--ink,#152d25);font-size:20px;width:42px;height:42px;border-radius:14px}
+.remote-join-card,.remote-controller{background:var(--surface,#fff);border:1px solid var(--line,#d0decf);border-radius:20px;padding:19px;box-shadow:0 4px 15px #07160f0d;max-width:600px;margin:0 auto}
+.remote-join-card h2,.remote-waiting h2{font-size:20px;margin:7px 0 9px}
+.remote-join-card p,.remote-waiting p,.remote-help{font-size:13px;color:var(--sub,#627568);line-height:1.5;margin:5px 0 17px}
+.remote-scan-icon{width:58px;height:58px;background:#e5f2e9;color:#166c4b;border-radius:16px;display:grid;place-items:center}
+.remote-code-label{display:block;margin:17px 0 7px;font-size:12px;font-weight:800;color:var(--sub,#5d7066)}
+.remote-code-input{width:100%;text-transform:uppercase;font-size:19px!important;font-weight:850;letter-spacing:.13em;text-align:center;min-height:51px!important}
+.remote-secondary-button{margin-top:11px}
+.remote-scan-area{margin-top:12px;background:#0c191c;padding:8px;border-radius:16px;display:grid;gap:9px}
+.remote-scan-area[hidden]{display:none!important}
+.remote-scan-area video{width:100%;max-height:240px;border-radius:12px;object-fit:cover;display:block}
+.remote-controller-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:15px;color:var(--sub,#627368);font-weight:800;font-size:12px}
+.remote-match-label{color:var(--sub,#617267);text-align:center;text-transform:uppercase;font-size:12px;font-weight:900;letter-spacing:.1em;margin-bottom:15px}
+.remote-team-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.remote-team-card{background:var(--surface-secondary,#f3f6f2);border:1px solid var(--line,#d4dfd2);border-radius:15px;min-width:0;padding:12px;display:flex;flex-direction:column;gap:12px;text-align:center}
+.remote-team-name{font-size:12px;font-weight:900;white-space:normal;overflow-wrap:anywhere;min-height:33px}
+.remote-score-number{font-size:clamp(43px,12vw,72px);font-weight:950;line-height:1;color:var(--ink,#11221c);font-variant-numeric:tabular-nums}
+.remote-score-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.remote-score-row button,.remote-game-tools button{min-height:44px;min-width:0;border-radius:12px;border:1px solid var(--line,#c6d4c9);background:var(--surface,#fff);color:var(--ink,#152e23);font-size:15px;font-weight:900;touch-action:manipulation;cursor:pointer}
+.remote-score-row button.remote-score-plus,.remote-team-card>button.primary{background:#187351;color:#fff;border-color:#187351}
+.remote-team-card>button.primary{min-height:46px;border-radius:12px;font-weight:900}
+.remote-foul-row{display:flex;align-items:center;justify-content:space-between;gap:4px;font-weight:850;font-size:11px;color:var(--sub,#627568)}
+.remote-foul-row button{min-width:30px;min-height:32px;background:var(--surface,#fff);border:1px solid var(--line,#cbdacb);border-radius:8px;font-size:19px;font-weight:900;color:var(--ink,#17251e)}
+.remote-game-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:15px}
+.remote-game-tools button{font-size:12px}
+.remote-pending{color:#ae702c;font-size:11px;font-weight:850;margin-top:14px}
+.remote-error{color:#c23c3c;font-size:12px;overflow-wrap:anywhere}
+.remote-waiting{text-align:center;padding:34px 12px;color:var(--ink,#142c23)}
+.remote-footer-actions{display:flex;justify-content:space-between;gap:10px;margin-top:25px}
+.remote-footer-actions button{background:transparent;border:0;text-decoration:underline;color:var(--sub,#64786c);font-size:12px;font-weight:800;padding:12px}
+.remote-footer-actions button.danger{color:#b13d3d}
+html[data-theme="dark"] .remote-qr{background:#fff}
+html[data-theme="dark"] .remote-request{background:#193f30;border-color:#376b54}
+html[data-theme="dark"] .remote-request strong{color:#c4f2d9}
+html[data-theme="dark"] .remote-status{background:#30443f;color:#bed5c5}
+html[data-theme="dark"] .remote-status.connected{background:#214d36;color:#a1ebbe}
+html[data-theme="dark"] .remote-join-card,html[data-theme="dark"] .remote-controller{box-shadow:none}
+html[data-theme="dark"] .remote-score-row button.remote-score-plus,html[data-theme="dark"] .remote-team-card>button.primary{background:#176d50;color:#fff}
+@media(max-width:390px){.remote-host-content{grid-template-columns:1fr}.remote-qr{margin:0 auto}.remote-join-details{align-items:center}.remote-team-card{padding:9px;gap:9px}.remote-score-row button{min-height:40px}.remote-page{padding:10px 11px 85px}}
+@media(orientation:landscape) and (max-height:520px){.remote-page{padding-bottom:14px}.remote-controller{max-width:860px}.remote-score-number{font-size:38px}.remote-team-card{gap:7px}.remote-page-header{margin-bottom:5px}.remote-join-card{max-width:780px}}

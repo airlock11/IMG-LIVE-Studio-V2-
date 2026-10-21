@@ -1,10 +1,31 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#091310"><title>IMG LIVE Studio V2</title><style>
-:root{font-family:system-ui,Arial,sans-serif;color:#f4fff9;background:#091310}*{box-sizing:border-box}body{margin:0;padding:24px 18px 88px}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:30px}header strong{font-size:28px;color:#00d47b}header span{font-weight:700;letter-spacing:2px;font-size:12px}.muted{color:#b4c9be}.panel{background:#162420;border:1px solid #2b4038;border-radius:20px;padding:20px;margin:12px 0}.btn{background:#00d47b;color:#05251a;border:0;border-radius:13px;padding:15px 18px;font-weight:800;width:100%;margin:8px 0}.secondary{background:#1b2c26;color:white;border:1px solid #355345}nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:space-around;background:#101d19;padding:12px 4px max(12px,env(safe-area-inset-bottom));border-top:1px solid #2b4038}nav button{border:0;background:transparent;color:#b4c9be;padding:8px}h1{font-size:27px}input,select{background:#20332b;color:white;border:1px solid #486254;border-radius:10px;padding:12px;width:100%;margin:7px 0 14px}.score{font-size:40px;color:#00d47b;font-weight:900}.row{display:flex;justify-content:space-between;align-items:center;gap:8px}.row>*{flex:1}section{display:none}section.active{display:block}</style></head><body>
-<header><div><strong>IMG</strong> <span>LIVE STUDIO</span></div><span class="muted">V2</span></header>
-<section id="home" class="active"><p class="muted">Your broadcast desk</p><h1>Ready for game day?</h1><div class="panel"><p style="color:#00d47b">IMG LIVE STUDIO</p><h2>Every game. One great broadcast.</h2><button class="btn" onclick="show('setup')">GO LIVE</button></div><button class="btn secondary" onclick="show('events')">Events</button><button class="btn secondary" onclick="show('settings')">Settings</button></section>
-<section id="setup"><h1>Game setup</h1><label>Sport</label><select id="sport"><option>Basketball</option><option>Pickleball</option></select><label>Home team</label><input id="homeTeam" value="HOME"><label>Away team</label><input id="awayTeam" value="AWAY"><button class="btn" onclick="prepare()">OPEN PRODUCTION DESK</button></section>
-<section id="studio"><h1>Production desk</h1><p class="muted">Preview only · Native video pipeline pending</p><div class="panel"><div class="row"><div><span id="hname">HOME</span><div id="hs" class="score">0</div><button class="btn secondary" onclick="score('hs')">+1</button></div><div><span id="aname">AWAY</span><div id="as" class="score">0</div><button class="btn secondary" onclick="score('as')">+1</button></div></div></div><button class="btn secondary" onclick="native('camera')">Camera</button><button class="btn secondary" onclick="native('broadcast')">Start stream</button><button class="btn secondary" onclick="native('record')">Record</button><button class="btn secondary" onclick="native('replay')">Instant replay</button></section>
-<section id="events"><h1>Events</h1><p class="muted">No scheduled events</p></section>
-<section id="settings"><h1>Settings</h1><div class="panel"><h3>Stream destinations</h3><p class="muted">Facebook and YouTube connections are not configured.</p><h3>QR remote scoring</h3><p class="muted">Secure pairing service pending.</p></div></section>
-<nav><button onclick="show('home')">Home</button><button onclick="show('setup')">Setup</button><button onclick="show('studio')">Studio</button><button onclick="show('events')">Events</button><button onclick="show('settings')">Settings</button></nav>
-<script>function show(id){document.querySelectorAll('section').forEach(x=>x.classList.toggle('active',x.id===id))}function prepare(){document.getElementById('hname').textContent=document.getElementById('homeTeam').value;document.getElementById('aname').textContent=document.getElementById('awayTeam').value;show('studio')}function score(id){const e=document.getElementById(id);e.textContent=Number(e.textContent)+1}function native(action){if(window.IMGNative)window.IMGNative.command(action);else alert('Native Android engine required: '+action)}</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#F8F6F2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="description" content="IMG LIVE Studio — interactive mobile-first multisport broadcasting UI prototype.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="assets/img-logo-hq.png">
+<link rel="apple-touch-icon" href="assets/img-logo-hq.png">
+<title>IMG LIVE Studio — Mobile UI Prototype</title>
+<link rel="stylesheet" href="app.css?v=broadcast-canvas-wysiwyg-v12">
+<link rel="stylesheet" href="remote-scoring.css?v=broadcast-canvas-wysiwyg-v12">
+<link rel="stylesheet" href="remote-console.css?v=broadcast-canvas-wysiwyg-v12">
+<script src="vendor/mp4-muxer.js" defer></script>
+<script src="pickleball-rules.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="media.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="stream-config.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="facebook-live.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="vendor/qrcode.min.js" defer></script>
+<script src="remote-scoring.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="remote-console.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+<script src="app.js?v=broadcast-canvas-wysiwyg-v12" defer></script>
+</head>
+<body>
+<div id="app"></div>
+<noscript>Please enable JavaScript to use the IMG LIVE Studio UI prototype.</noscript>
+</body>
+</html>
