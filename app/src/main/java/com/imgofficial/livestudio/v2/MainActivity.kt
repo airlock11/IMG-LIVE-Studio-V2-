@@ -48,7 +48,13 @@ class MainActivity : Activity() {
     }
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
      val url = request.url
-     return url.scheme != "https" || url.host != "appassets.androidplatform.net"
+     if(url.scheme == "https" && url.host == "appassets.androidplatform.net") return false
+     if(request.isForMainFrame && request.hasGesture() &&
+       (url.scheme == "https" || url.scheme == "http")) {
+      try { startActivity(Intent(Intent.ACTION_VIEW, url)) }
+      catch (_: Exception) { Toast.makeText(this@MainActivity,"No browser available",Toast.LENGTH_SHORT).show() }
+     }
+     return true
     }
    }
    webChromeClient = object : WebChromeClient() {
