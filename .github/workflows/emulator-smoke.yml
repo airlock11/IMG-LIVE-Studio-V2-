@@ -36,6 +36,8 @@ jobs:
             sleep 18
             adb shell pidof com.imgofficial.livestudio.v2
             adb shell dumpsys activity activities | grep -F 'com.imgofficial.livestudio.v2'
+            adb logcat -d -t 2500 > img-v2-logcat.txt
+            if grep -E 'FATAL EXCEPTION|Process: com.imgofficial.livestudio.v2' img-v2-logcat.txt; then exit 1; fi
             adb shell screencap -p /sdcard/img-v2.png
             adb pull /sdcard/img-v2.png img-v2-emulator.png
             adb shell uiautomator dump /sdcard/img-v2-ui.xml
@@ -48,3 +50,4 @@ jobs:
           path: |
             img-v2-emulator.png
             img-v2-ui.xml
+            img-v2-logcat.txt
