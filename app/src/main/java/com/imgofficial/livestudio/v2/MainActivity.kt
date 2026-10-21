@@ -4,6 +4,10 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
+import android.webkit.ValueCallback
+import android.webkit.WebSettings
 import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
@@ -18,6 +22,8 @@ import androidx.webkit.WebViewAssetLoader
 class MainActivity : Activity() {
  private lateinit var browser: WebView
  private var pendingMediaRequest: PermissionRequest? = null
+ private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
+ private val fileChooserRequest = 502
  private val origin = "https://appassets.androidplatform.net"
  private val loader by lazy {
   WebViewAssetLoader.Builder()
@@ -29,6 +35,8 @@ class MainActivity : Activity() {
   super.onCreate(savedInstanceState)
   browser = WebView(this).apply {
    settings.javaScriptEnabled = true
+   settings.mediaPlaybackRequiresUserGesture = true
+   settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
    settings.domStorageEnabled = true
    settings.allowFileAccess = false
    settings.allowContentAccess = false
@@ -44,6 +52,18 @@ class MainActivity : Activity() {
     }
    }
    webChromeClient = object : WebChromeClient() {
+    override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
+     pendingFileChooser?.onReceiveValue(null)
+     pendingFileChooser = callback
+     return try {
+      startActivityForResult(params.createIntent(), fileChooserRequest)
+      true
+     } catch (error: Exception) {
+      pendingFileChooser = null
+      callback.onReceiveValue(null)
+      false
+     }
+    }
     override fun onPermissionRequest(request: PermissionRequest) {
      runOnUiThread { handleMediaRequest(request) }
     }
@@ -80,6 +100,16 @@ class MainActivity : Activity() {
   } else request.grant(request.resources)
  }
 
+ @Deprecated("Deprecated in Java")
+ override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+  super.onActivityResult(requestCode, resultCode, data)
+  if(requestCode == fileChooserRequest) {
+   val callback = pendingFileChooser ?: return
+   pendingFileChooser = null
+   callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
+  }
+ }
+
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray) {
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
   if(requestCode==501) {
@@ -110,6 +140,8 @@ class MainActivity : Activity() {
  }
  override fun onDestroy() {
   pendingMediaRequest?.deny()
+  pendingFileChooser?.onReceiveValue(null)
+  pendingFileChooser = null
   browser.removeJavascriptInterface("IMGNative")
   browser.destroy()
   super.onDestroy()
