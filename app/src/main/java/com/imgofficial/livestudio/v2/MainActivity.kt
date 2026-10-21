@@ -15,6 +15,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.CookieManager
 import android.widget.Toast
 import androidx.webkit.WebViewAssetLoader
 
@@ -38,6 +39,9 @@ class MainActivity : Activity() {
    settings.mediaPlaybackRequiresUserGesture = true
    settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
    settings.domStorageEnabled = true
+   settings.setSupportMultipleWindows(false)
+   settings.javaScriptCanOpenWindowsAutomatically = false
+   CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
    settings.allowFileAccess = false
    settings.allowContentAccess = false
    settings.allowFileAccessFromFileURLs = false
@@ -82,6 +86,7 @@ class MainActivity : Activity() {
    addJavascriptInterface(NativeBridge(), "IMGNative")
    loadUrl("$origin/assets/index.html")
   }
+  if(savedInstanceState != null) browser.restoreState(savedInstanceState)
   setContentView(browser)
   window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
  }
@@ -144,6 +149,10 @@ class MainActivity : Activity() {
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {
   if(browser.canGoBack()) browser.goBack() else super.onBackPressed()
+ }
+ override fun onSaveInstanceState(outState: Bundle) {
+  browser.saveState(outState)
+  super.onSaveInstanceState(outState)
  }
  override fun onDestroy() {
   pendingMediaRequest?.deny()
