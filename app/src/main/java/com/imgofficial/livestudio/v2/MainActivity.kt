@@ -84,7 +84,7 @@ class MainActivity : Activity() {
     }
    }
    addJavascriptInterface(NativeBridge(), "IMGNative")
-   loadUrl("$origin/assets/index.html")
+   if(savedInstanceState == null) loadUrl("$origin/assets/index.html")
   }
   if(savedInstanceState != null) browser.restoreState(savedInstanceState)
   setContentView(browser)
