@@ -1,0 +1,50 @@
+name: IMG V2 Android Emulator Smoke
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/emulator-smoke.yml'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble debug APK
+        run: gradle :app:assembleDebug
+      - name: Boot emulator and inspect actual app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.imgofficial.livestudio.v2/.MainActivity
+            sleep 18
+            adb shell pidof com.imgofficial.livestudio.v2
+            adb shell dumpsys activity activities | grep -F 'com.imgofficial.livestudio.v2'
+            adb shell screencap -p /sdcard/img-v2.png
+            adb pull /sdcard/img-v2.png img-v2-emulator.png
+            adb shell uiautomator dump /sdcard/img-v2-ui.xml
+            adb pull /sdcard/img-v2-ui.xml img-v2-ui.xml
+      - name: Upload actual emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: IMG-V2-Actual-Emulator
+          path: |
+            img-v2-emulator.png
+            img-v2-ui.xml
