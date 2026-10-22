@@ -227,7 +227,9 @@ test('YouTube readiness is automatic and never exposed as an operator button',as
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
  assert.ok(studio.includes('await accounts.checkYoutubeLiveReadiness()'));
- assert.ok(studio.includes('check.privateDrafts||[]'));
+ assert.ok(studio.includes('await accounts.createYoutubePrivateDraft({'));
+ assert.ok(studio.includes('startNow:true'));
+ assert.ok(!studio.includes('check.privateDrafts||[]'));
  assert.ok(!html.includes('Check live readiness'));
  assert.ok(!studio.includes('youtube-start-live-button'));
  assert.ok(studio.includes('native-private-video-start:'));
