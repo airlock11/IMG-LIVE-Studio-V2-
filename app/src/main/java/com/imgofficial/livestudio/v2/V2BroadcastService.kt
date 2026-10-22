@@ -54,6 +54,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var networkTracking=false
  private var ingestDestination:String?=null // RAM only, never passed to Activity or logs
  private var recoveryAttempts=0
+ private var connectedAtLeastOnce=false
  private var recoveryQueued=false
  private var videoBitrate=2300000
  private val minBitrate=450000
@@ -89,7 +90,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   if(!networkReady && (running||connecting)){
    notifyState("Connection lost • awaiting internet")
-  }else if(networkReady && !previouslyReady && connecting && ingestDestination!=null){
+  }else if(networkReady && !previouslyReady && connecting && connectedAtLeastOnce && ingestDestination!=null){
    scheduleRecovery()
   }
   publish()
@@ -235,6 +236,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   attempted=true
   connecting=true
   recoveryAttempts=0
+  connectedAtLeastOnce=false
   ingestDestination=null
   val sequence=++generation
   notifyState("Preparing PRIVATE YouTube RTMPS upload…")
@@ -379,6 +381,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  override fun onConnectionSuccess(){ui.post{
   if(ended)return@post
   connecting=false;running=true
+  connectedAtLeastOnce=true
   recoveryAttempts=0
   recoveryQueued=false
   healthySamples=0;congestedSamples=0
