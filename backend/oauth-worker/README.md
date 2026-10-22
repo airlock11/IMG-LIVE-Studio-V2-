@@ -8,6 +8,7 @@ This is **not deployed or production ready**. The Android client is still a prot
 - KV namespace `ACCOUNT_SESSIONS` (session metadata; currently includes provider tokens).
 - Secret `GOOGLE_CLIENT_SECRET`.
 - Secret `FACEBOOK_APP_SECRET`.
+- Secret `TOKEN_ENCRYPTION_KEY` (32 cryptographically random bytes encoded as unpadded base64url; store only in Cloudflare secrets).
 - Variables `GOOGLE_CLIENT_ID`, `FACEBOOK_APP_ID`, `PUBLIC_ORIGIN` (HTTPS base origin, ending in /).
 
 Register callback URLs:
@@ -16,7 +17,7 @@ Register callback URLs:
 
 Do **not** deploy with real users until:
 1. A trusted Android app-to-backend authentication/session design is implemented. The current cookie approach is not reliable with Android WebView's disabled third-party cookies and cross-site SameSite restrictions.
-2. Encrypt tokens before writing to KV using a server-side managed encryption key, and implement token refresh, rotation, and revocation.
+2. AES-GCM encryption is now implemented for new tokens, but requires `TOKEN_ENCRYPTION_KEY`. Implement key rotation, token refresh, and revocation before production. Previously stored plaintext tokens must be deleted or migrated securely.
 3. Replace the browser-only callback completion with verified Android App Links and an authenticated state reconciliation endpoint.
 4. Add CSRF defenses for connection actions, rate limiting, session expiration/logout, audit logging, and provider-specific error handling.
 5. Configure and review the Meta/Google applications and permissions. Facebook user login alone does not guarantee access to Live Video publishing.
