@@ -387,6 +387,7 @@ export default {async fetch(req,env){
    if(Number(req.headers.get("content-length")||0)>1024)return withCors(json({error:"request_too_large"},413),req);
    const body=await req.json().catch(()=>null);
    const draftId=body?.draftRequestId;
+   const understandsAutoStart=body?.clientProtocolVersion===2;
    if(body?.operatorConfirmed!==true||typeof draftId!=="string"||!/^[a-f0-9]{32}$/.test(draftId))
     return withCors(json({error:"invalid_private_ingest_request"},400),req);
    const draft=await env.OAUTH_DB.prepare(
@@ -445,7 +446,7 @@ export default {async fetch(req,env){
      // RTMPS secret never persisted or included in readiness/HTML responses.
      return withCors(json({prepared:true,resumed:true,privacy:"private",
       broadcastTitle:draft.title,rtmpsUrl:url,streamId:prior.stream_id,
-      autoStart:item.contentDetails.enableAutoStart===true}),req);
+      autoStart:understandsAutoStart && item.contentDetails.enableAutoStart===true}),req);
     }catch(_){return withCors(json({error:"private_ingest_resume_api_unavailable"},502),req);}
    }
    // D1 claim precedes external writes: failed/ambiguous attempts cannot be
@@ -508,7 +509,7 @@ export default {async fetch(req,env){
     .bind(streamId,session,draftId).run();
    if(saved.meta?.changes!==1)return withCors(json({error:"private_ingest_session_revoked"},409),req);
    return withCors(json({prepared:true,privacy:"private",broadcastTitle:draft.title,
-    rtmpsUrl,streamId,autoStart:event.contentDetails.enableAutoStart===true}),req);
+    rtmpsUrl,streamId,autoStart:understandsAutoStart && event.contentDetails.enableAutoStart===true}),req);
   }
 
   // Native-only global logout revokes the D1 session and cascades all linked
