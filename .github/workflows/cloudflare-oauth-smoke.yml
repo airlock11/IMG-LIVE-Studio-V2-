@@ -52,6 +52,17 @@ jobs:
             });
             assert.equal(readiness.status,401,'Readiness must not be available without a native session');
             assert.equal(readiness.data.error,'not_authenticated');
+            const draft=await get('/api/connections/youtube/private-draft',{
+              method:'POST',headers:{Origin:'https://appassets.androidplatform.net','Content-Type':'application/json'},body:'{}'
+            });
+            assert.ok(draft.status===401||draft.status===503,'Private draft must require a trusted authenticated native session');
+            assert.ok(['not_authenticated','private_drafts_disabled'].includes(draft.data.error));
+            const forgedDraft=await get('/api/connections/youtube/private-draft',{
+              method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'
+            });
+            assert.equal(forgedDraft.status,403,'Cross-origin private draft creation must be denied');
+            assert.equal(forgedDraft.data.error,'forbidden_origin');
+
             const facebook=await get('/api/connections/facebook/authorize',{
               method:'POST',headers:{Origin:'https://appassets.androidplatform.net','Content-Type':'application/json'},body:'{}'
             });
