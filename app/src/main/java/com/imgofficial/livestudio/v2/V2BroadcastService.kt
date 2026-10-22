@@ -288,6 +288,73 @@ class V2BroadcastService:Service(),ConnectChecker {
    setIsPortrait(portrait)
   }
  }
+ private fun pollQuality(){
+  if(!qualityPolling && running && !ended){
+   qualityPolling=true
+   ui.postDelayed(qualityTick,5000)
+  }
+ }
+ private fun sampleUploadQuality(){
+  val engine=stream?:return
+  val client=engine.getStreamClient()
+  val dropped=client.getDroppedVideoFrames()
+  val increase=(dropped-previousDropped).coerceAtLeast(0L)
+  previousDropped=dropped
+  val congested=client.hasCongestion(35f)||increase>=3
+  if(!networkReady || congested){
+   congestedSamples++
+   healthySamples=0
+   if(congestedSamples>=2){
+    val reduced=(videoBitrate*0.72).toInt().coerceAtLeast(minBitrate)
+    if(reduced<videoBitrate){
+     videoBitrate=reduced
+     try{engine.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
+     notifyState("Weak upload • reducing video to "+(videoBitrate/1000)+" kbps")
+    }
+    congestedSamples=0
+   }
+  }else{
+   congestedSamples=0
+   healthySamples++
+   // Increase slowly only after sustained good RTMPS queue behaviour.
+   if(healthySamples>=5&&videoBitrate<maxBitrate){
+    videoBitrate=(videoBitrate+180000).coerceAtMost(maxBitrate)
+    try{engine.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
+    notifyState("Upload improved • video "+(videoBitrate/1000)+" kbps")
+    healthySamples=0
+   }
+  }
+  publish()
+ }
+ private fun scheduleRecovery(){
+  if(ended||!connecting||!networkReady||recoveryQueued||ingestDestination==null)return
+  if(recoveryAttempts>=5){
+   stopBroadcast()
+   notifyState("Recovery limit reached; private upload stopped safely.")
+   return
+  }
+  val attempt=++recoveryAttempts
+  val epoch=generation
+  recoveryQueued=true
+  val delay=when(attempt){1->3000L;2->6000L;3->12000L;4->24000L;else->30000L}
+  notifyState("Recovering private feed • attempt "+attempt+"/5")
+  ui.postDelayed({
+   recoveryQueued=false
+   if(epoch!=generation||ended||!connecting||running)return@postDelayed
+   if(!networkReady){
+    notifyState("Waiting for internet • original private feed retained")
+    return@postDelayed
+   }
+   val original=ingestDestination?:return@postDelayed
+   try{
+    // Recover the ORIGINAL RTMPS endpoint, not a new YouTube draft.
+    // A transport restart may cause a brief gap after an actual outage.
+    if(stream?.isStreaming==true)stream?.stopStream()
+    stream?.startStream(original)
+    notifyState("Reconnecting to existing private YouTube stream…")
+   }catch(_:Exception){scheduleRecovery()}
+  },delay)
+ }
  fun stopBroadcast(){
   generation++
   connecting=false;running=false;ended=true
@@ -312,19 +379,31 @@ class V2BroadcastService:Service(),ConnectChecker {
  override fun onConnectionSuccess(){ui.post{
   if(ended)return@post
   connecting=false;running=true
+  recoveryAttempts=0
+  recoveryQueued=false
+  healthySamples=0;congestedSamples=0
+  previousDropped=stream?.getStreamClient()?.getDroppedVideoFrames()?:0L
+  pollQuality()
   notifyState("RTMPS accepted • check YouTube Studio Stream health")
  }}
  override fun onConnectionFailed(reason:String){ui.post{
   if(ended)return@post
-  if(stream?.isStreaming==true && stream?.getStreamClient()?.reTry(2500,reason)==true)
-   notifyState("Connection interrupted • automatic retry in progress")
-  else{
-   stopBroadcast()
-   notifyState("Connection lost; retry limit reached. No public broadcast started.")
-  }
+  running=false;connecting=true
+  ui.removeCallbacks(qualityTick);qualityPolling=false
+  if(networkReady&&stream?.isStreaming==true&&
+   stream?.getStreamClient()?.reTry(2500,reason)==true){
+   notifyState("Signal interrupted • retrying existing private stream")
+  }else if(networkReady){
+   scheduleRecovery()
+  }else notifyState("No internet • waiting to reconnect private feed")
  }}
  override fun onDisconnect(){ui.post{
-  if(!ended && running)notifyState("RTMPS disconnected; check YouTube Studio")
+  if(!ended&&running){
+   running=false;connecting=true
+   ui.removeCallbacks(qualityTick);qualityPolling=false
+   if(networkReady)scheduleRecovery()
+   else notifyState("RTMPS disconnected • waiting for internet")
+  }
  }}
  override fun onAuthError(){ui.post{stopBroadcast();notifyState("YouTube rejected the private RTMPS upload.")}}
  override fun onAuthSuccess(){}
