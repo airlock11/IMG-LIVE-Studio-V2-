@@ -12,13 +12,26 @@ android {
   applicationId = if (sideBySideTest) "com.imgofficial.livestudio.v2.test" else "com.imgofficial.livestudio.v2"
   minSdk = 26
   targetSdk = 35
-  versionCode = if (sideBySideTest) 3 else 2
-  versionName = if (sideBySideTest) "0.3.0-v2-test" else "0.2.0-v2-private-video"
+  versionCode = if (sideBySideTest) 4 else 3
+  versionName = if (sideBySideTest) "0.4.0-v2-operator" else "0.3.0-v2-private-video"
   manifestPlaceholders["imgAppLabel"] = if (sideBySideTest) "IMG LIVE Studio V2 Test" else "IMG LIVE Studio"
   val oauthOrigin = providers.gradleProperty("imgOAuthBackendUrl").orElse("").get()
   require(oauthOrigin.isEmpty() || (oauthOrigin.startsWith("https://") && !oauthOrigin.contains('"') && !oauthOrigin.contains('\\'))) { "Invalid trusted OAuth backend origin" }
   require(!sideBySideTest || oauthOrigin.isNotEmpty()) { "V2 device-test build requires an explicit trusted OAuth backend URL" }
   buildConfigField("String", "OAUTH_BACKEND_URL", "\"$oauthOrigin\"")
+ }
+ // Stable update packages require a private keystore supplied from CI secrets.
+ // Never commit signing materials or use the runner's ephemeral debug certificate
+ // for an APK described as update-compatible.
+ val signingFile = System.getenv("IMG_V2_KEYSTORE_PATH").orEmpty()
+ if(signingFile.isNotBlank()){
+  signingConfigs.create("v2Stable"){
+   storeFile = file(signingFile)
+   storePassword = System.getenv("IMG_V2_STORE_PASSWORD")
+   keyAlias = System.getenv("IMG_V2_KEY_ALIAS")
+   keyPassword = System.getenv("IMG_V2_KEY_PASSWORD")
+  }
+  buildTypes.getByName("release").signingConfig = signingConfigs.getByName("v2Stable")
  }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 
