@@ -21,6 +21,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.CookieManager
 import android.view.View
+import androidx.browser.customtabs.CustomTabsIntent
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.webkit.WebViewAssetLoader
@@ -265,7 +266,17 @@ class MainActivity : Activity() {
     Toast.makeText(this,"Untrusted authorization link",Toast.LENGTH_LONG).show()
     return
    }
-   startActivity(Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE))
+   // Google OAuth must use a trusted browser surface, NOT an embedded WebView.
+   // Chrome Custom Tabs runs as an in-app sheet and retains Google's browser
+   // authentication security; once it closes, V2 verifies the pairing.
+   try{
+    CustomTabsIntent.Builder()
+     .setShowTitle(true)
+     .setToolbarColor(android.graphics.Color.rgb(16,23,27))
+     .build().launchUrl(this,uri)
+   }catch(_:Exception){
+    startActivity(Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE))
+   }
   } catch (_: Exception) {
    Toast.makeText(this,"Unable to open account authorization",Toast.LENGTH_LONG).show()
   }
@@ -291,6 +302,14 @@ class MainActivity : Activity() {
  // Returning from the system Google login browser doesn't always fire WebView
  // visibilitychange. Explicitly prompt the existing page to verify pairing;
  // the connection badge still changes only after confirmed backend status.
+ override fun onNewIntent(newIntent:Intent) {
+  super.onNewIntent(newIntent)
+  if(newIntent.data?.scheme=="imglivestudiov2"&&newIntent.data?.host=="oauth-complete"){
+   // The deep link transports no account, token, code or pairing secret.
+   // Only the original encrypted native cookie can establish connection.
+   browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
+  }
+ }
  override fun onResume() {
   super.onResume()
   if(::browser.isInitialized && browser.url?.startsWith("$origin/assets/")==true)
