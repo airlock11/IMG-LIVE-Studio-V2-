@@ -38,66 +38,117 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  private var uploadGeneration=0
  // RootEncoder's rotation=90 turns the 1280x720 source into a 720x1280
  // portrait H.264 stream. Match the physical preview to that 9:16 frame.
- private val portraitWidth=720
- private val portraitHeight=1280
+
+ private val isLandscapeMode: Boolean
+  get()=intent.getStringExtra("img_video_mode")=="landscape"
  private val draftId by lazy { intent.getStringExtra("draftRequestId").orEmpty() }
 
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
-  // Only this isolated TEST Activity is portrait-locked. The hybrid V2
-  // studio, other sports modes and navigation remain unchanged.
-  requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+  val landscape=isLandscapeMode
+  // Rotate only the isolated V2 camera test Activity, never the hybrid studio.
+  // Switching is available BEFORE upload, not while video is being published.
+  requestedOrientation=if(landscape)ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+   else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   val bg=Color.rgb(12,17,24)
-  val panel=LinearLayout(this).apply {
-   orientation=LinearLayout.VERTICAL
-   setBackgroundColor(bg)
-   setPadding(20,24,20,24)
-  }
+  val dp=resources.displayMetrics.density
+  fun px(value:Int)=(value*dp+0.5f).toInt()
   fun note(message:String,size:Float=15f):TextView=TextView(this).apply {
    text=message;textSize=size;setTextColor(Color.WHITE)
-   setPadding(4,8,4,12)
+   setPadding(px(4),px(4),px(4),px(7))
   }
-  panel.addView(note("IMG LIVE STUDIO • V2",14f))
-  panel.addView(note("Private YouTube camera test",22f))
-  panel.addView(note("Portrait video • 9:16 • 720×1280",13f))
-  panel.addView(note("This is an isolated video-upload test. Only camera and microphone will be sent. Your existing V2 screens are unchanged. Uploading does not automatically make the YouTube event live.",13f))
-  // Keep the preview a true 9:16 rectangle, centered inside its available
-  // space. A MATCH_PARENT weighted SurfaceView can stretch the camera when
-  // the parent aspect does not match the encoded video.
+  val panel=LinearLayout(this).apply {
+   orientation=if(landscape)LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+   setBackgroundColor(bg)
+   setPadding(px(10),px(10),px(10),px(10))
+  }
+  val side=LinearLayout(this).apply {
+   orientation=LinearLayout.VERTICAL
+   setPadding(px(4),px(2),px(4),px(2))
+  }
+  side.addView(note("IMG LIVE STUDIO • V2",13f))
+  side.addView(note("Private YouTube camera test",if(landscape)18f else 22f))
+  val orientationLabel=note(
+   if(landscape)"LANDSCAPE • 16:9 • 1280 × 720"
+   else "PORTRAIT • 9:16 • 720 × 1280",13f
+  )
+  side.addView(orientationLabel)
+  if(!landscape)side.addView(note(
+   "Private YouTube camera and microphone upload only. No public Go Live and no changes to your V2 studio.",12f
+  ))
+  val modes=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL }
+  val portraitButton=Button(this).apply {
+   text=if(landscape)"Portrait" else "✓ Portrait"
+   textSize=12f
+   setAllCaps(false)
+   setOnClickListener { changeTestMode(false) }
+  }
+  val landscapeButton=Button(this).apply {
+   text=if(landscape)"✓ Landscape" else "Landscape"
+   textSize=12f
+   setAllCaps(false)
+   setOnClickListener { changeTestMode(true) }
+  }
+  modes.addView(portraitButton,LinearLayout.LayoutParams(0,px(45),1f))
+  modes.addView(landscapeButton,LinearLayout.LayoutParams(0,px(45),1f))
+  side.addView(modes)
+  // The live video SurfaceView is centered at the encoded frame's ratio.
+  // Black margins are intentional; stretching the video is not.
+  val videoWidth=if(landscape)1280 else 720
+  val videoHeight=if(landscape)720 else 1280
   val previewArea=FrameLayout(this).apply {setBackgroundColor(Color.BLACK)}
-  panel.addView(previewArea,LinearLayout.LayoutParams(
-   ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
   monitor=SurfaceView(this)
   previewArea.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   previewArea.addOnLayoutChangeListener{_,left,top,right,bottom,_,_,_,_->
    val availableWidth=right-left
    val availableHeight=bottom-top
    if(availableWidth>0&&availableHeight>0){
-    val targetWidth=minOf(availableWidth,availableHeight*portraitWidth/portraitHeight)
-    val targetHeight=targetWidth*portraitHeight/portraitWidth
-    val previous=monitor.layoutParams
-    if(targetWidth>0&&targetHeight>0&&(previous.width!=targetWidth||previous.height!=targetHeight)){
+    val targetWidth=minOf(availableWidth,availableHeight*videoWidth/videoHeight)
+    val targetHeight=targetWidth*videoHeight/videoWidth
+    val old=monitor.layoutParams
+    if(targetWidth>0&&targetHeight>0&&(old.width!=targetWidth||old.height!=targetHeight)){
      monitor.layoutParams=FrameLayout.LayoutParams(targetWidth,targetHeight,Gravity.CENTER)
     }
    }
   }
   monitor.holder.addCallback(this)
-  status=note("Camera permission required",14f)
-  panel.addView(status)
+  status=note("Camera permission required",13f)
   start=Button(this).apply{
    text="START PRIVATE VIDEO UPLOAD"
+   textSize=12f
+   setAllCaps(false)
    isEnabled=false
    setOnClickListener{startPrivateUpload()}
   }
   stop=Button(this).apply{
    text="STOP UPLOAD"
+   textSize=12f
+   setAllCaps(false)
    isEnabled=false
    setOnClickListener{stopUpload()}
   }
-  panel.addView(start)
-  panel.addView(stop)
-  panel.addView(Button(this).apply{text="BACK TO V2";setOnClickListener{finish()}})
+  side.addView(status)
+  side.addView(start)
+  side.addView(stop)
+  side.addView(Button(this).apply{
+   text="BACK TO V2"
+   textSize=12f
+   setAllCaps(false)
+   setOnClickListener{finish()}
+  })
+  if(landscape){
+   panel.addView(previewArea,LinearLayout.LayoutParams(0,
+    ViewGroup.LayoutParams.MATCH_PARENT,1f))
+   panel.addView(side,LinearLayout.LayoutParams(px(255),
+    ViewGroup.LayoutParams.MATCH_PARENT))
+  }else{
+   panel.addView(side,LinearLayout.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT))
+   // Portrait keeps controls reachable. The scaled preview must not stretch.
+   panel.addView(previewArea,1,LinearLayout.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+  }
   setContentView(panel)
   if(!Regex("^[a-f0-9]{32}$").matches(draftId)||
      BuildConfig.OAUTH_BACKEND_URL.isBlank()){
@@ -106,6 +157,19 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
   }
   oauth=NativeOAuthClient(this,BuildConfig.OAUTH_BACKEND_URL)
   ensurePermissions()
+ }
+
+ private fun changeTestMode(landscape:Boolean) {
+  if(connecting||streaming||publisher?.isStreaming==true){
+   status.text="Stop uploading before changing video orientation."
+   return
+  }
+  if(isLandscapeMode==landscape)return
+  // Preserve the original private draft, V2 account session and Android UI.
+  // Intent mode survives the Activity recreation caused by screen rotation.
+  intent.putExtra("img_video_mode",if(landscape)"landscape" else "portrait")
+  requestedOrientation=if(landscape)ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+   else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
  }
 
  private fun ensurePermissions() {
@@ -126,10 +190,10 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
   if(ready)return
   try {
    val engine=GenericStream(this,this)
-   // RootEncoder 2.8.1 encodes 720x1280 when the 1280x720 camera frame
-   // is prepared with rotation=90. Rotation 0 produces landscape 1280x720
-   // even while the phone itself is held vertically.
-   if(!engine.prepareVideo(1280,720,2300000,30,2,90)||
+   // A 1280x720 camera buffer uses rotation=90 for genuine 720x1280
+   // portrait video and rotation=0 for 1280x720 landscape output.
+   val videoRotation=if(isLandscapeMode)0 else 90
+   if(!engine.prepareVideo(1280,720,2300000,30,2,videoRotation)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     status.text="This device cannot initialize the camera/audio encoder."
