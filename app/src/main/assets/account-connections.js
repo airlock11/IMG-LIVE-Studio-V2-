@@ -13,6 +13,7 @@
   const state = {facebook: "disconnected", youtube: "disconnected"};
   const listeners = new Set();
   let backend = null;
+  let refreshPending = null;
   function publish() {
     const snapshot = Object.freeze({...state});
     listeners.forEach(fn => { try { fn(snapshot); } catch (_) {} });
@@ -29,13 +30,17 @@
     return backend;
   }
   async function refresh() {
+    if (refreshPending) return refreshPending;
     const origin = requireBackend();
+    refreshPending = (async () => {
     const response = await fetch(origin + "/api/connections", {credentials:"include",cache:"no-store"});
     if (!response.ok) throw new Error("Unable to check account connections");
     const data = await response.json();
     for (const name of Object.keys(providers)) state[name] = data[name]?.connected === true ? "connected" : "disconnected";
     publish();
     return {...state};
+    })();
+    try { return await refreshPending; } finally { refreshPending = null; }
   }
   async function connect(provider) {
     if (!Object.prototype.hasOwnProperty.call(providers, provider)) throw new Error("Unsupported platform");
@@ -62,6 +67,11 @@
       throw error;
     }
   }
+  // Reconcile only with the backend; returning from the external browser is not proof of login.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && backend) refresh().catch(() => {});
+  });
+  window.addEventListener("pageshow", () => { if (backend) refresh().catch(() => {}); });
   window.IMGAccounts = Object.freeze({
     configure, refresh, connect,
     getStatus: () => ({...state}),
