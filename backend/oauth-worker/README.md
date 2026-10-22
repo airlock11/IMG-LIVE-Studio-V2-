@@ -9,8 +9,8 @@ The existing IMG website and the original V1 app/Workers are not changed.
 
 ## Provisioned Cloudflare configuration
 
-- `OAUTH_STATE`: dedicated V2 Workers KV namespace
-- `ACCOUNT_SESSIONS`: dedicated V2 Workers KV namespace
+- `OAUTH_DB`: dedicated V2 D1 database `img-live-studio-v2-oauth`, schema `migrations/0001_oauth_transactional.sql`
+- `oauth_sessions`, `oauth_accounts`, `oauth_pairings`, and `oauth_states` use D1 for reliable transactional writes and atomic state claims
 - `PUBLIC_ORIGIN`: the HTTPS Worker URL above
 - `OAUTH_ENABLED`: explicitly `false`, checked on all account API endpoints
 - `TOKEN_ENCRYPTION_KEY`: 32 cryptographically random bytes (base64url), installed **only as a Cloudflare Worker secret**, never committed
@@ -37,11 +37,11 @@ Only the operator of the legitimate Meta/Google developer applications can suppl
 
 ## Production blockers — do not enable OAuth yet
 
-1. **Atomic OAuth state and cancellation:** KV read/delete and read/modify/write are not atomic or strongly consistent. Migrate single-use OAuth state and pairing/session mutations to D1 transactions or Durable Objects, and test cross-region concurrent callbacks, cancel races, and replay attacks.
-2. **Session hardening:** Implement app-bound identity and session renewal/revocation, rotation of at-rest secrets, robust logout, rate limiting, abuse monitoring and recovery.
+1. **D1 race resistance (implemented, verify in real world):** Atomic single-use callback state, pending/processing/cancelled pairing CAS, and independently updated provider rows are implemented. Unit tests exercise concurrent replay and cancellation; cross-region live-service stress tests, transactional failure injection, and recovery procedures remain pending.
+2. **Session hardening:** Implement app-bound identity and session renewal/revocation, rotation of at-rest secrets, robust logout, rate limiting, abuse monitoring, and recovery. D1 session expiry is checked but expired rows need scheduled cleanup.
 3. **OAuth correctness:** Handle refresh tokens, expiry, provider failures, app authorization denial, and account identity verification; ensure accurate provider scopes and approvals.
 4. **App return and verification:** Finish production-verified Android App Links or secure browser return handling and end-to-end Android pairing tests on a real device.
 5. **Authorized provider setup:** Configure Google and Meta applications, approved scopes, the exact redirects above, and production OAuth client credentials in Cloudflare secrets.
-6. **Publishing:** Facebook Login or Google/YouTube sign-in does **not** by itself enable broadcasting. Live publishing permissions, video destinations, account selection, a native encoder and actual RTMP publishing require independent integration and testing.
+6. **Publishing:** Facebook Login or Google/YouTube sign-in does **not** by itself enable broadcasting. Live publishing permissions, video destinations, account selection, a native encoder, and actual RTMP publishing require independent integration and testing.
 
 Only after these checks should `OAUTH_ENABLED` be set to `true` and actual Facebook/YouTube accounts be used for E2E validation.
