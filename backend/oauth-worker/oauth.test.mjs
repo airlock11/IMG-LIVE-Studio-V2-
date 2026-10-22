@@ -62,3 +62,9 @@ test('Meta OAuth token exchange must not embed app secrets in URLs', () => {
   assert.match(source, /fetch\("https:\/\/graph\.facebook\.com\/v24\.0\/oauth\/access_token",\{method:"POST"/);
   assert.doesNotMatch(source, /endpoint\.search\s*=\s*new URLSearchParams/);
 });
+
+test('session cookie uses secure host-only prefix and strict attributes', () => {
+  assert.match(source, /__Host-img_session/);
+  assert.match(source, /HttpOnly; Secure; SameSite=None; Path=\//);
+  assert.doesNotMatch(source, /"img_session="\+session/);
+});
