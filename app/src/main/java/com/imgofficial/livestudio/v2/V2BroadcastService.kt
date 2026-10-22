@@ -43,6 +43,9 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
  private var scoreVisible=true
+ private var scoreAlpha=1f
+ private var lastScoreAlpha:Float?=null
+ private var scoreTransitionEpoch=0
  private var lastScorecardImageState:V2Scorecard.State?=null
  private var lastScorecardVisible:Boolean?=null
  private var auth:NativeOAuthClient?=null
@@ -62,9 +65,38 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var recoveryAttempts=0
  private var connectedAtLeastOnce=false
  private var recoveryQueued=false
- private var videoBitrate=2300000
+ // Prefer sustainable phone temperature over maximum quality.
+ // Hardware H.264, 24 fps and lower GPU resolution reduce encode load.
+ private var videoBitrate=1250000
  private val minBitrate=450000
- private val maxBitrate=2300000
+ private val maxBitrate=1250000
+ private var thermalBitrateCap=1250000
+ private var thermalSeverity=0
+ private var thermalMonitorRegistered=false
+ private val thermalListener=if(android.os.Build.VERSION.SDK_INT>=29)
+   PowerManager.OnThermalStatusChangedListener{state->
+    ui.post{onThermalState(state)}
+   } else null
+ private fun onThermalState(state:Int){
+  if(state==thermalSeverity)return
+  thermalSeverity=state
+  if(android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_CRITICAL){
+   if(running||connecting)stopBroadcast()
+   notifyState("Phone overheating • broadcast stopped to protect the device.")
+   return
+  }
+  thermalBitrateCap=when{
+   android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_SEVERE->550000
+   android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_MODERATE->800000
+   else->maxBitrate
+  }
+  if(videoBitrate>thermalBitrateCap){
+   videoBitrate=thermalBitrateCap
+   try{stream?.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
+  }
+  if(state>=2 && (running||connecting))
+   notifyState("Phone warming • lowering upload quality to stay cooler.")
+ }
  private var congestedSamples=0
  private var healthySamples=0
  private var previousDropped=0L
@@ -133,6 +165,14 @@ class V2BroadcastService:Service(),ConnectChecker {
 
  override fun onCreate(){
   super.onCreate()
+  if(android.os.Build.VERSION.SDK_INT>=29){
+   val manager=getSystemService(POWER_SERVICE) as PowerManager
+   try{
+    thermalSeverity=manager.currentThermalStatus
+    thermalMonitorRegistered=thermalListener?.let{manager.addThermalStatusListener(it);true}?:false
+    onThermalState(thermalSeverity)
+   }catch(_:Exception){thermalMonitorRegistered=false}
+  }
   getSystemService(NotificationManager::class.java).createNotificationChannel(
    NotificationChannel(channel,"IMG V2 private broadcast",NotificationManager.IMPORTANCE_LOW)
   )
@@ -214,7 +254,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    val engine=GenericStream(this,this)
    // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
    // Streetball portrait uses a future separate mode/profile.
-   if(!engine.prepareVideo(1280,720,2300000,30,2,0)||
+   if(!engine.prepareVideo(960,540,1250000,24,2,0)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     notifyState("This phone cannot prepare the video/audio codec.")
@@ -326,14 +366,29 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreboard=scoreboard.copy(clock=value.take(5))
   updateScorecard()
  }
- fun setScorecardVisible(visible:Boolean){scoreVisible=visible;updateScorecard()}
+ fun setScorecardVisible(visible:Boolean){
+  if(scoreVisible==visible)return
+  scoreVisible=visible
+  val beginning=scoreAlpha
+  val finish=if(visible)1f else 0f
+  val epoch=++scoreTransitionEpoch
+  // Four 60ms steps. Camera and audio keep rendering continuously.
+  // It is a real GL overlay fade, visible in both preview and output.
+  for(step in 1..4){
+   ui.postDelayed({
+    if(epoch!=scoreTransitionEpoch || ended)return@postDelayed
+    val t=step/4f
+    val ease=t*t*(3f-2f*t)
+    scoreAlpha=beginning+(finish-beginning)*ease
+    updateScorecard()
+   },step*60L)
+  }
+ }
  private fun applyScorecard(){
   val gl=stream?.getGlInterface()?:return
   try{
    if(scoreFilter==null){
     scoreFilter=ImageFilterRender().also{
-     // Bitmap artwork is 960x144 (20:3). On a 1280x720 landscape frame,
-     // 84% x 22.4% renders at that same ratio without stretching.
      it.setScale(84f,22.4f)
      it.setPosition(8f,2.5f)
      gl.addFilter(it)
@@ -341,21 +396,23 @@ class V2BroadcastService:Service(),ConnectChecker {
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
+   lastScoreAlpha=null
    updateScorecard()
   }catch(_:Exception){notifyState("Video scoreboard overlay unavailable on this phone.")}
  }
  private fun updateScorecard(){
   val filter=scoreFilter?:return
-  // No work or GPU uploads when the visual scoreboard did not change.
-  if(lastScorecardVisible==scoreVisible&&
-     (!scoreVisible||lastScorecardImageState==scoreboard))return
+  if(lastScoreAlpha==scoreAlpha &&
+      lastScorecardImageState==scoreboard)return
   try{
-   filter.setImage(if(scoreVisible)V2Scorecard.render(scoreboard) else null)
+   // Never pass null to setImage: in the native GL renderer a missing
+   // texture can leave an opaque dark/black rectangle over the camera.
+   // Transparent frames are rendered for hide and fade transitions.
+   filter.setImage(V2Scorecard.render(scoreboard,scoreAlpha))
    lastScorecardImageState=scoreboard.copy()
    lastScorecardVisible=scoreVisible
-   // DO NOT request a H.264 keyframe per point or per clock tick: this
-   // caused decoder stalls and delayed/jerky score overlays.
-   // Normal upcoming frames carry the updated GL overlay.
+   lastScoreAlpha=scoreAlpha
+   // No keyframe request for score changes or clock ticks.
   }catch(_:Exception){notifyState("Unable to redraw native video scoreboard.")}
  }
  fun flipCamera(){
@@ -428,8 +485,8 @@ class V2BroadcastService:Service(),ConnectChecker {
    congestedSamples=0
    healthySamples++
    // Increase slowly only after sustained good RTMPS queue behaviour.
-   if(healthySamples>=5&&videoBitrate<maxBitrate){
-    videoBitrate=(videoBitrate+180000).coerceAtMost(maxBitrate)
+   if(healthySamples>=5&&videoBitrate<thermalBitrateCap){
+    videoBitrate=(videoBitrate+100000).coerceAtMost(thermalBitrateCap)
     try{engine.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
     notifyState("Upload improved • video "+(videoBitrate/1000)+" kbps")
     healthySamples=0
@@ -472,12 +529,14 @@ class V2BroadcastService:Service(),ConnectChecker {
   ingestDestination=null
   recoveryQueued=false
   ui.removeCallbacks(qualityTick)
+  scoreTransitionEpoch++
   qualityPolling=false
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
   stream=null
   scoreFilter=null
+  lastScoreAlpha=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
   notifyState("Upload stopped. Your YouTube account remains connected.")
@@ -524,6 +583,12 @@ class V2BroadcastService:Service(),ConnectChecker {
  override fun onAuthSuccess(){}
  override fun onDestroy(){
   ui.removeCallbacks(qualityTick)
+  scoreTransitionEpoch++
+  if(thermalMonitorRegistered && android.os.Build.VERSION.SDK_INT>=29){
+   val manager=getSystemService(POWER_SERVICE) as PowerManager
+   try{thermalListener?.let{manager.removeThermalStatusListener(it)}}catch(_:Exception){}
+   thermalMonitorRegistered=false
+  }
   if(networkTracking)try{connectivity.unregisterNetworkCallback(networkCallback)}catch(_:Exception){}
   networkTracking=false
   stopBroadcast()
