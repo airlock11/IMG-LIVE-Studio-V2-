@@ -84,9 +84,15 @@
     if(result.status==="expired"){delete pairingCodes[provider];state[provider]="disconnected";publish();}
     return result.status;
   }
-  function cancelPending(provider) {
+  async function cancelPending(provider) {
     if (!Object.prototype.hasOwnProperty.call(providers,provider)) throw new Error("Unsupported platform");
     if(state[provider]!=="authorization-pending") return false;
+    const code=pairingCodes[provider];
+    if (!code) throw new Error("Missing authorization pairing code");
+    const response=await fetch(requireBackend()+"/api/connections/"+provider+"/cancel",{
+      method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pairingCode:code})
+    });
+    if(!response.ok || (await response.json()).cancelled!==true) throw new Error("Could not cancel authorization on server");
     delete pairingCodes[provider];
     state[provider]="disconnected";
     publish();
