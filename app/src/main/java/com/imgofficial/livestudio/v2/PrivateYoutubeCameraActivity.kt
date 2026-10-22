@@ -47,6 +47,24 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     intent.getStringExtra("img_home")?:"HOME",
     intent.getStringExtra("img_away")?:"AWAY"
    )
+   val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
+    "rivalry-plate","center-dial","broadcast-classic","crown-pill",
+    "split-box","match-cube","edge-box","legacy-tv")
+   val graphicsIndex=ids.indexOf(intent.getStringExtra("img_graphics")).coerceAtLeast(0)
+   broadcast?.configureGraphics(
+    graphicsIndex,
+    intent.getStringExtra("img_graphics_position").orEmpty(),
+    intent.getIntExtra("img_graphics_size",60),
+    intent.getIntExtra("img_graphics_opacity",100),
+    intent.getIntExtra("img_graphics_width",100),
+    intent.getIntExtra("img_graphics_height",100),
+    intent.getIntExtra("img_graphics_offset_x",0),
+    intent.getIntExtra("img_graphics_offset_y",0),
+    intent.getIntExtra("img_graphics_margin",3),
+    intent.getBooleanExtra("img_graphics_animated",true),
+    decodeLogo(intent.getStringExtra("img_logo_home")),
+    decodeLogo(intent.getStringExtra("img_logo_away"))
+   )
    // Rotating the operator screen recreates its Activity. A service that
    // was preview-only may also be recreated when Android briefly unbinds it.
    // All V2 basketball/pickleball streams use the same landscape profile.
@@ -62,6 +80,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    broadcast=null;status.text="Broadcast service disconnected."
    refresh()
   }
+ }
+ private fun decodeLogo(data:String?):android.graphics.Bitmap?{
+  if(data==null||data.length>35000||!data.startsWith("data:image/png;base64,"))return null
+  return try{
+   val bytes=android.util.Base64.decode(data.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..27000)return null
+   val options=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
+   if(options.outWidth !in 1..128 || options.outHeight !in 1..128)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
  }
  private fun dp(n:Int)=(resources.displayMetrics.density*n+.5f).toInt()
  private fun text(value:String,size:Float=14f)=TextView(this).apply {
@@ -226,9 +255,32 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    line.addView(right,LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(7)})
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  heading("BROADCAST GRAPHICS • SCORING ANIMATION")
-  pair(tool("PRIME TV • WIPE"){broadcast?.setGraphicsStyle(0)},
-   tool("COURTSIDE • TV"){broadcast?.setGraphicsStyle(1)})
+  heading("BROADCAST GRAPHICS • LIVE STYLES")
+  val names=V2BroadcastGraphicsRenderer.names
+  for(i in names.indices step 3){
+   val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+   for(j in i until minOf(i+3,names.size)){
+    val btn=tool(names[j]){
+     broadcast?.setGraphicsStyle(j)
+     refresh()
+    }.apply{textSize=if(names[j].length>11)10f else 11f}
+    val params=LinearLayout.LayoutParams(0,dp(39),1f)
+    if(j>i)params.leftMargin=dp(4)
+    line.addView(btn,params)
+   }
+   tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
+  }
+  heading("SIZE & PLACEMENT")
+  pair(tool("SMALLER −"){broadcast?.resizeGraphics(-5)},
+   tool("LARGER +"){broadcast?.resizeGraphics(5)})
+  pair(tool("BOTTOM CENTER"){broadcast?.placeGraphicsAt("bottom-center")},
+   tool("BOTTOM RIGHT"){broadcast?.placeGraphicsAt("bottom-right")})
+  pair(tool("BOTTOM LEFT"){broadcast?.placeGraphicsAt("bottom-left")},
+   tool("TOP RIGHT"){broadcast?.placeGraphicsAt("top-right")})
+  pair(tool("TOP LEFT"){broadcast?.placeGraphicsAt("top-left")},
+   tool("RESET POSITION"){broadcast?.placeGraphicsAt(
+    if(V2BroadcastGraphicsRenderer.compact(broadcast?.graphicsStyle()?:0))
+     "bottom-right" else "bottom-center")})
   fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
    return android.widget.Switch(this).apply{
     text=name
@@ -283,7 +335,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    setDimAmount(.28f)
    val maxWidth=resources.displayMetrics.widthPixels
    val maxHeight=resources.displayMetrics.heightPixels
-   setLayout(minOf((maxWidth*.72f).toInt(),dp(500)),minOf((maxHeight*.83f).toInt(),dp(340)))
+   setLayout(minOf((maxWidth*.84f).toInt(),dp(880)),minOf((maxHeight*.92f).toInt(),dp(525)))
    attributes=attributes.apply{gravity=Gravity.BOTTOM or Gravity.RIGHT;x=dp(6);y=dp(4)}
    decorView.translationY=dp(200).toFloat()
    decorView.animate().translationY(0f).setDuration(190).start()
