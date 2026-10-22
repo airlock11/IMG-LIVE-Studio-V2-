@@ -89,6 +89,15 @@ export default {async fetch(req,env){
   try{origin(env);}catch(_){return json({error:"invalid_service_origin"},503);}
   const session=await readSession(env,req);
   if(path==="/api/connections"&&method==="GET")return withCors(json(await status(env,session)),req);
+  // Native-only global logout revokes the D1 session and cascades all linked
+  // provider accounts, pending authorizations, and pairing codes atomically.
+  if(path==="/api/connections/logout"&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return json({error:"unsupported_media_type"},415);
+   if(session)await env.OAUTH_DB.prepare("DELETE FROM oauth_sessions WHERE session_id=?").bind(session).run();
+   const headers={"set-cookie":"__Host-img_session=; "+cookieAttrs+"; Max-Age=0"};
+   return withCors(json({signedOut:true},200,headers),req);
+  }
 
   const matchPair=path.match(/^\/api\/connections\/(facebook|youtube)\/pairing$/);
   if(matchPair&&method==="POST"){
