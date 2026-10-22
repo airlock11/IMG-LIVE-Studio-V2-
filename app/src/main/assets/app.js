@@ -199,7 +199,8 @@ function youtubeDestination(){
   '<span class="destination-name"><strong>YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+(data.options.yt?' · Selected':'')+'</small></span>'+
   '<span class="broadcast-destination-indicator"><span class="toggle '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span>'+ic(youtubeExpanded?'up':'chevron',18)+'</span></button>'+
   '<div class="broadcast-destination-body" id="youtube-destination-body" '+(youtubeExpanded?'':'hidden')+'>'+
-  (connected?'<p class="helper">Ready to prepare a private YouTube upload. Your account stays connected when you close V2.</p>'+
+  (connected?'<p class="helper">YouTube is connected to IMG LIVE Studio.</p>'+
+   '<label class="form-group"><span class="small-label">Livestream title</span><input class="input" data-quick="liveTitle" maxlength="100" autocomplete="off" placeholder="Enter livestream title" value="'+esc(data.options.broadcast.liveTitle||'')+'"></label>'+
    '<label class="form-group"><span class="small-label">Audience classification</span><select class="input" data-youtube-audience="1" aria-label="YouTube audience classification">'+
    '<option value="" '+(!youtubeAudience?'selected':'')+'>Select audience</option>'+
    '<option value="no" '+(youtubeAudience==='no'?'selected':'')+'>Not made for kids</option>'+
@@ -214,6 +215,8 @@ function youtubeDestination(){
   '</div></div>';
 }
 function youtubeTitle(){
+ const requested=String(data.options.broadcast.liveTitle||'').trim();
+ if(requested)return requested.slice(0,100);
  const event=selectedEvent(),teams=gameTeams();
  const base=event?.name||[teams[0]?.name||'Home',teams[1]?.name||'Away'].join(' vs ');
  return (sportName()+' • '+base).slice(0,98);
@@ -230,7 +233,12 @@ async function startPrivateYouTubeFromStudio(){
   if(status.youtube!=='connected')throw Error('Connect YouTube in Broadcast Settings.');
   const check=await accounts.checkYoutubeLiveReadiness();
   if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
-  let owned=check.privateDrafts?.[0]?.requestId;
+  const requestedTitle=String(data.options.broadcast.liveTitle||'').trim();
+  // Do not silently stream an older saved event under the wrong title.
+  // Reusing a confirmed existing event is allowed only if its title matches
+  // the chosen title, or the broadcaster left the title field empty.
+  let owned=(check.privateDrafts||[]).find(d=>
+   !requestedTitle||d.title===requestedTitle)?.requestId;
   if(!owned){
    // Creating a new PRIVATE event is a separate, quota-limited Google API
    // action. Require an explicit audience classification and use a unique
