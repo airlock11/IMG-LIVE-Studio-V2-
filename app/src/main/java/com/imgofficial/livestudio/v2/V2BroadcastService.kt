@@ -233,10 +233,17 @@ class V2BroadcastService:Service(),ConnectChecker {
   generation++
   connecting=false;running=false;ended=true
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
+  try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
+  try{stream?.release()}catch(_:Exception){}
+  stream=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
   notifyState("Upload stopped. Your YouTube account remains connected.")
-  if(foreground){ stopForeground(STOP_FOREGROUND_REMOVE);foreground=false }
+  if(foreground){
+   stopForeground(STOP_FOREGROUND_REMOVE)
+   foreground=false
+   stopSelf() // No invisible microphone/camera service after explicit Stop
+  }
  }
  override fun onConnectionStarted(url:String){ui.post{if(!ended)notifyState("Connecting secure RTMPS…")}}
  override fun onConnectionSuccess(){ui.post{
