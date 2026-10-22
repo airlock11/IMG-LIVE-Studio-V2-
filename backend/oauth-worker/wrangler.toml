@@ -22,6 +22,8 @@ OAUTH_ENABLED = "false"
 # YouTube-only testing is enabled temporarily in Cloudflare, never by default
 # from source control. Both flags remain disabled here for safe redeploys.
 YOUTUBE_TEST_ENABLED = "false"
+# Explicit private-only draft test permission. Keep disabled by default.
+YOUTUBE_DRAFT_ENABLED = "false"
 YOUTUBE_TEST_EXPIRES_AT = ""
 GOOGLE_CLIENT_ID = "860935049821-bgdenrs7svu1923kagci6vtmc71ahmeh.apps.googleusercontent.com"
 
