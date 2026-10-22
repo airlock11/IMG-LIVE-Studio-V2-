@@ -164,26 +164,6 @@
   publish();
   return true;
  }
- async function youtubeLiveReadiness(){
-  if(statuses.youtube!=="connected")throw Error("Connect YouTube before checking live access");
-  const revision=sessionRevision;
-  const response=await nativeRequest("youtubeLiveReadiness");
-  if(revision!==sessionRevision||statuses.youtube!=="connected")throw Error("YouTube session changed");
-  if(typeof response?.liveApiAccessible!=="boolean"||response?.publishingConfigured!==false||
-     !Array.isArray(response?.broadcasts))throw Error("Invalid live readiness response");
-  return Object.freeze({
-   liveApiAccessible:response.liveApiAccessible,
-   liveEnabled:response.liveEnabled===true?true:response.liveEnabled===false?false:null,
-   publishingConfigured:false,
-   reason:String(response.reason||"").slice(0,80),
-   broadcasts:response.broadcasts.slice(0,12).map(b=>({
-    title:String(b.title||"Untitled").slice(0,150),
-    status:String(b.status||"unknown").slice(0,40),
-    privacy:String(b.privacy||"unknown").slice(0,24),
-    hasStream:b.hasStream===true
-   }))
-  });
- }
  async function disconnect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
   const revision=sessionRevision;
@@ -199,7 +179,7 @@
  });
  window.addEventListener("pageshow",()=>{if(ready)refresh().catch(()=>{});});
  window.IMGAccounts=Object.freeze({
-  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,youtubeLiveReadiness,checkYoutubeLiveReadiness,
+  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,checkYoutubeLiveReadiness,
   getStatus:()=>({...statuses}),
   subscribe(fn){listeners.add(fn);fn({...statuses});return()=>listeners.delete(fn);}
  });
