@@ -72,7 +72,11 @@ internal object V2BroadcastGraphicsRenderer {
   p.shader=null;p.style=Paint.Style.FILL;p.color=color
   p.typeface=Typeface.create("sans-serif-condensed",Typeface.BOLD)
   p.textSize=size;p.textAlign=align
-  c.drawText(value,x,y,p,maxW)
+  val normalScale=p.textScaleX
+  if(maxW<Float.MAX_VALUE && p.measureText(value)>maxW)
+   p.textScaleX=(maxW/p.measureText(value)).coerceIn(.48f,1f)
+  c.drawText(value,x,y,p)
+  p.textScaleX=normalScale
  }
  private fun mark(c:Canvas,p:Paint,x:Float,y:Float,r:Float,color:Int,
   name:String,logo:Bitmap?=null){
