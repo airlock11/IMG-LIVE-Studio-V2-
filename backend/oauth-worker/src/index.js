@@ -661,7 +661,7 @@ export default {async fetch(req,env){
    ]);
    if(completed[0]?.meta?.changes!==1||completed[1]?.meta?.changes!==1)
     return json({error:"authorization_expired_during_exchange"},409);
-   return new Response("<!doctype html><title>IMG LIVE Studio</title><p>Authorization completed. Return to IMG LIVE Studio to verify your connection.</p>",{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+   return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>IMG LIVE Studio — Connected</title><style>body{margin:0;background:#10171b;color:#e8fff2;font:16px system-ui;display:grid;place-items:center;min-height:100dvh}main{padding:30px;max-width:350px;text-align:center}a{display:block;margin:20px 0;background:#8be6b6;color:#10171b;padding:15px;border-radius:12px;font-weight:800;text-decoration:none}p{color:#b3c9bd;line-height:1.5}</style><main><h2>Google authorization completed</h2><p>Return to IMG LIVE Studio. Your account status will be verified securely inside the app.</p><a href="imglivestudiov2://oauth-complete">Return to IMG LIVE Studio</a><p>You can also close this sign-in tab to return to V2.</p></main>',{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","content-security-policy":"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"}});
   }
   return json({error:"not_found"},404);
  }catch(_){return json({error:"server_error"},500);}
