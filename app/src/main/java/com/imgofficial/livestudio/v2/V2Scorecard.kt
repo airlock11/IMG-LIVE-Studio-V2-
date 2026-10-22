@@ -23,8 +23,9 @@ internal object V2Scorecard {
   val period:Int=1,
   val clock:String=""
  )
- private const val W=720
- private const val H=208
+ // Slim 20:3 aspect bar: rendered proportionally in landscape GL frames.
+ private const val W=960
+ private const val H=144
  private const val ink=0xFF0D1B21.toInt()
  private const val green=0xFF8DE7BB.toInt()
  private const val pale=0xFFE9FFF3.toInt()
@@ -35,32 +36,45 @@ internal object V2Scorecard {
   val canvas=Canvas(image)
   val paint=Paint(Paint.ANTI_ALIAS_FLAG)
   paint.color=ink
-  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),H.toFloat()),27f,27f,paint)
+  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),H.toFloat()),21f,21f,paint)
   paint.color=green
-  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),8f),4f,4f,paint)
+  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),6f),3f,3f,paint)
   paint.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
   paint.textAlign=Paint.Align.CENTER
-  paint.color=muted;paint.textSize=26f
-  val sport=if(score.sport=="pickleball")"PICKLEBALL" else "BASKETBALL"
-  canvas.drawText("IMG  •  "+sport,360f,42f,paint)
-  paint.color=pale;paint.textSize=35f
-  canvas.drawText(name(score.home).uppercase(),130f,96f,paint)
-  canvas.drawText(name(score.away).uppercase(),590f,96f,paint)
-  paint.color=green;paint.textSize=72f
-  canvas.drawText(score.homeScore.coerceIn(0,999).toString(),190f,162f,paint)
-  canvas.drawText(score.awayScore.coerceIn(0,999).toString(),530f,162f,paint)
-  paint.color=pale;paint.textSize=34f
-  canvas.drawText("—",360f,152f,paint)
-  paint.textSize=22f;paint.color=muted
-  val marker=if(score.sport=="pickleball")"GAME "+score.period.coerceIn(1,9) else "Q"+score.period.coerceIn(1,9)
-  canvas.drawText(marker,360f,190f,paint)
-  if(score.sport=="basketball"){
-   canvas.drawText("F "+score.homeFouls.coerceIn(0,99),110f,191f,paint)
-   canvas.drawText("F "+score.awayFouls.coerceIn(0,99),610f,191f,paint)
-  }
+
+  val left=name(score.home).uppercase()
+  val right=name(score.away).uppercase()
+  val isPickle=score.sport=="pickleball"
+  val period=if(isPickle)"GAME ${score.period.coerceIn(1,9)}" else
+   "Q${score.period.coerceIn(1,9)}"
+  val leftName=if(left.length>12)left.take(12) else left
+  val rightName=if(right.length>12)right.take(12) else right
+
+  paint.color=pale
+  paint.textSize=27f
+  canvas.drawText(leftName,192f,39f,paint)
+  canvas.drawText(rightName,768f,39f,paint)
+  paint.color=green
+  paint.textSize=67f
+  canvas.drawText(score.homeScore.coerceIn(0,999).toString(),196f,108f,paint)
+  canvas.drawText(score.awayScore.coerceIn(0,999).toString(),764f,108f,paint)
+
+  paint.color=muted
+  paint.textSize=21f
+  canvas.drawText("IMG • "+if(isPickle)"PICKLEBALL" else "BASKETBALL",480f,31f,paint)
+  paint.color=pale
+  paint.textSize=25f
+  canvas.drawText(period,480f,98f,paint)
   if(score.clock.isNotBlank()){
-   paint.color=green;paint.textSize=23f
-   canvas.drawText(score.clock.take(10),360f,102f,paint)
+   paint.color=green
+   paint.textSize=26f
+   canvas.drawText(score.clock.take(5),480f,66f,paint)
+  }
+  if(!isPickle){
+   paint.color=muted
+   paint.textSize=21f
+   canvas.drawText("FOULS ${score.homeFouls.coerceIn(0,99)}",192f,134f,paint)
+   canvas.drawText("FOULS ${score.awayFouls.coerceIn(0,99)}",768f,134f,paint)
   }
   return image
  }
