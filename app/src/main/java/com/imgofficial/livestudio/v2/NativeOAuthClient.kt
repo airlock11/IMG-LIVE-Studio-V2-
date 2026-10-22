@@ -98,6 +98,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   val code = command.optString("pairingCode")
   val route = when (action) {
    "refresh" -> "/api/connections"
+   "youtubeLiveReadiness" -> "/api/connections/youtube/live-readiness"
    "signOut" -> "/api/connections/logout"
    "connect" -> if (validProvider(provider)) "/api/connections/$provider/authorize" else null
    "verifyPairing" -> if (validProvider(provider)) "/api/connections/$provider/pairing" else null
@@ -120,7 +121,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
    connection.setRequestProperty("Cache-Control", "no-store")
    if (sessionCookie == null) sessionCookie = loadSession()
    sessionCookie?.let { connection.setRequestProperty("Cookie", "__Host-img_session=$it") }
-   if (action != "refresh") {
+   if (action !in setOf("refresh", "youtubeLiveReadiness")) {
     connection.requestMethod = "POST"
     connection.doOutput = true
     connection.setRequestProperty("Content-Type", "application/json")
@@ -149,6 +150,41 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
      if (item == null || !item.has("connected") || item.opt("connected") !is Boolean)
       return JSONObject().put("ok",false).put("error","Invalid account status response")
      safe.put(p, JSONObject().put("connected", item.getBoolean("connected")))
+    }
+    "youtubeLiveReadiness" -> {
+     val accessible = data.opt("liveApiAccessible")
+     val enabled = data.opt("liveEnabled")
+     val publishingConfigured = data.opt("publishingConfigured")
+     val reason = data.optString("reason")
+     val allowedReasons = setOf("live_api_accessible", "live_streaming_not_enabled", "insufficient_live_permissions")
+     if (accessible !is Boolean ||
+        !(enabled is Boolean || enabled == JSONObject.NULL) ||
+        publishingConfigured !== false || reason !in allowedReasons)
+      return JSONObject().put("ok",false).put("error","Invalid YouTube readiness response")
+     safe.put("liveApiAccessible",accessible)
+     safe.put("liveEnabled",enabled)
+     safe.put("publishingConfigured",false)
+     safe.put("reason",reason)
+     val broadcasts = data.optJSONArray("broadcasts")
+      ?: return JSONObject().put("ok",false).put("error","Invalid broadcast list")
+     if (broadcasts.length() > 12)
+      return JSONObject().put("ok",false).put("error","Broadcast list too large")
+     val safeBroadcasts = org.json.JSONArray()
+     val allowedStates = setOf("created","ready","testing","live")
+     for (index in 0 until broadcasts.length()) {
+      val item = broadcasts.optJSONObject(index)
+       ?: return JSONObject().put("ok",false).put("error","Invalid broadcast item")
+      val state = item.optString("status")
+      if (state !in allowedStates)
+       return JSONObject().put("ok",false).put("error","Invalid broadcast state")
+      safeBroadcasts.put(JSONObject()
+       .put("title",item.optString("title").take(150))
+       .put("status",state)
+       .put("privacy",item.optString("privacy").take(20))
+       .put("scheduledStartTime",item.optString("scheduledStartTime").take(40))
+       .put("hasStream",item.opt("hasStream") === true))
+     }
+     safe.put("broadcasts",safeBroadcasts)
     }
     "connect" -> {
      val pairingCode = data.optString("pairingCode")
