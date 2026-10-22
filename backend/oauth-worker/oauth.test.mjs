@@ -101,3 +101,9 @@ test('pairing cannot complete without an authenticated session', async () => {
   });
   assert.equal((await response.json()).status,'expired');
 });
+
+test('OAuth API fails closed with malformed public origin', async () => {
+  const response = await call('/api/connections', {headers:{origin:appOrigin}}, {...configured, PUBLIC_ORIGIN:'http://untrusted.example'});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,'invalid_service_origin');
+});
