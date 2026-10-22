@@ -131,13 +131,15 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
      "createYoutubePrivateDraft" -> {
       val title=command.optString("title")
       val scheduled=command.optString("scheduledStartTime")
+      val startNow=command.opt("startNow") === true
       val requestId=command.optString("draftRequestId")
       val madeForKids=command.opt("madeForKids")
-      if(title.length !in 5..100 || scheduled.length !in 20..35 ||
+      if(title.length !in 5..100 || (!startNow && scheduled.length !in 20..35) ||
          !Regex("^[a-f0-9]{32}$").matches(requestId) || madeForKids !is Boolean ||
          command.opt("operatorConfirmed") !== true)
        return JSONObject().put("ok",false).put("error","Invalid private draft fields")
-      JSONObject().put("title",title).put("scheduledStartTime",scheduled)
+      JSONObject().put("title",title).put("startNow",startNow)
+       .put("scheduledStartTime",if(startNow)JSONObject.NULL else scheduled)
        .put("requestId",requestId).put("madeForKids",madeForKids)
        .put("operatorConfirmed",true).toString()
      }
