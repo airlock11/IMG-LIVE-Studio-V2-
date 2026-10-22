@@ -38,7 +38,10 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -E "^package: name='com.imgofficial.livestudio.v2.test'"
           "$AAPT" dump badging "$APK" | grep -F "application-label:'IMG LIVE Studio V2 Test'"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
-          "$APKSIGNER" verify --print-certs "$APK" | grep 'Signer #1 certificate SHA-256 digest'
+          test -n "$APKSIGNER"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "APK signature verification passed."
           echo "NOTE: test APK is separately signed. It must not replace com.imgofficial.livestudio.v2."
       - name: Package clear install instructions
         run: |
