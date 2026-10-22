@@ -1039,11 +1039,21 @@ if(name==='toggle-facebook-panel'){
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
 if(name==='destination-yt'){
- // Choosing YouTube and collapsing its details are separate operations.
- // Once selected, closing its dropdown must NOT silently revert to Record.
+ // One tap selects YouTube and starts the official secure Google sign-in
+ // when the account is disconnected. A connected account only expands its
+ // destination settings; collapsing never silently unselects YouTube.
  if(!o.yt){o.yt=true;youtubeExpanded=true}
  else youtubeExpanded=!youtubeExpanded;
- persist();return render(true)
+ persist();render(true);
+ const accounts=window.IMGAccounts,kind=accounts?.getStatus?.().youtube;
+ if(youtubeExpanded&&kind==='disconnected'){
+  youtubeFeedback='Opening secure Google sign-in…';
+  accounts.connect('youtube').then(()=>render(true)).catch(error=>{
+   youtubeFeedback=String(error?.message||'Google sign-in unavailable.').slice(0,180);
+   toast(youtubeFeedback);render(true)
+  });
+ }
+ return;
 }
 if(name==='youtube-remove'){
  o.yt=false;youtubeExpanded=false;youtubeFeedback='';
