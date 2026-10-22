@@ -836,6 +836,7 @@ async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!dat
  data.live.active=false;data.live.recordOnly=false;if(wasFacebook)data.options.fb=false;data.live.remoteEndedAt=Date.now();data.live.remoteLiveId=null;data.live.lockedOrientation=null;data.live.clockRunning=false;data.live.slides=false;data.live.timeout=false;
  selectedEventId=null;data.selectedEventId=null;dialog=null;media?.stopCamera?.();
  try{window.screen?.orientation?.unlock?.()}catch(e){}
+ window.IMGNativeChannel?.postMessage?.('img-orientation:auto');
  persist();navigate(ev?'league-detail':'home');
  if(offline){await refreshOfflineClips();dialog={type:'recording-finished',clip:recording?{name:recording.name,bytes:recording.size,saved:recording.saved,error:recording.error}:null};render(true);}
  else toast(wasFacebook?'Facebook upload stopped; end the live video in Facebook Producer.':'Game session ended'+(ev?' · result saved':''));
@@ -931,7 +932,7 @@ if(name==='street-position-reset-all'||name.startsWith('street-position-reset-')
 }
 if(name==='edit-scoreboard'){dialog={type:'overlay-customize'};return render(true)}
 if(name==='notifications')return toast('No notifications.');
-if(name==='exit-setup'){clearTimeout(fbAttemptTimer);fbAttemptTimer=null;if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false}fbFields.streamKey='';window.IMGMedia?.stopCamera?.();return navigate('home')}
+if(name==='exit-setup'){window.IMGNativeChannel?.postMessage?.('img-orientation:auto');clearTimeout(fbAttemptTimer);fbAttemptTimer=null;if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false}fbFields.streamKey='';window.IMGMedia?.stopCamera?.();return navigate('home')}
 if(name==='enable-camera'){const media=window.IMGMedia;if(!media?.canCamera())return toast('Use HTTPS Chrome on your phone to enable the real camera.');return media.openCamera({quality:o.quality}).then(()=>{render(true);toast('Real camera preview enabled')}).catch(e=>toast(media.readableError(e)))}
 if(name==='refresh-recordings')return refreshOfflineClips();
 if(name==='download-last-recording'){try{window.IMGMedia?.downloadClip(window.IMGMedia.latestClip());}catch(e){toast(e.message)}return}
@@ -1051,7 +1052,11 @@ if(name==='confirm-reset'){const d=defaults();Object.keys(data).forEach(k=>delet
 }
 function setOption(input){const [k,v]=input.split(':');if(k==='overlayColor'&&!/^#[0-9a-fA-F]{6}$/.test(v))return;if(k==='orientation'){if(data.live.active){toast('Orientation is locked during broadcasting.');return}if(streetballActive()&&v!=='portrait'){toast('Streetball uses portrait orientation. Select Regular game for landscape.');return}data.options.orientation=v;if(!streetballActive())data.options.regularOrientation=v;persist();render(true);return requestOrientation(v)}data.options[streetballActive()&&k==='overlayColor'?'streetOverlayColor':k]=['penalty','slideSecs','quarterMins','fps'].includes(k)?Number(v):v;persist();render(true)}
 let orientationRequestId=0;
-async function requestOrientation(mode,liveStart=false){const req=++orientationRequestId;if(!window.matchMedia('(pointer:coarse)').matches){if(!liveStart)toast(mode==='landscape'?'Landscape output selected (desktop preview).':'Portrait output selected (desktop preview).');return}let locked=false;try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(req!==orientationRequestId)return;if(data.live.active&&data.live.lockedOrientation!==mode)return;if(screen.orientation&&typeof screen.orientation.lock==='function'){await screen.orientation.lock(mode);locked=true}}catch(e){}if(req!==orientationRequestId)return;if(!locked&&!window.matchMedia('(orientation: '+mode+')').matches){toast('Chrome could not rotate automatically. Enable Auto-rotate and turn your phone '+mode+'.')}else if(locked&&!liveStart)toast(mode==='landscape'?'Landscape mode activated':'Portrait mode activated')}
+async function requestOrientation(mode,liveStart=false){const req=++orientationRequestId;
+ if(window.IMGNativeChannel?.postMessage){
+  window.IMGNativeChannel.postMessage('img-orientation:'+mode);
+  return;
+ }if(!window.matchMedia('(pointer:coarse)').matches){if(!liveStart)toast(mode==='landscape'?'Landscape output selected (desktop preview).':'Portrait output selected (desktop preview).');return}let locked=false;try{if(!document.fullscreenElement&&document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen();if(req!==orientationRequestId)return;if(data.live.active&&data.live.lockedOrientation!==mode)return;if(screen.orientation&&typeof screen.orientation.lock==='function'){await screen.orientation.lock(mode);locked=true}}catch(e){}if(req!==orientationRequestId)return;if(!locked&&!window.matchMedia('(orientation: '+mode+')').matches){toast('Chrome could not rotate automatically. Enable Auto-rotate and turn your phone '+mode+'.')}else if(locked&&!liveStart)toast(mode==='landscape'?'Landscape mode activated':'Portrait mode activated')}
 function getViewScroll(){return Array.from(document.querySelectorAll('[data-scroll]')).map(x=>({name:x.dataset.scroll,top:x.scrollTop}))}
 document.addEventListener('click',e=>{const target=e.target.closest('[data-action],[data-go],[data-league],[data-event],[data-format],[data-set],[data-livetab],[data-score],[data-foul],[data-quarter]');if(!target)return;
 if(target.classList.contains('modal-backdrop')&&e.target.closest('.sheet'))return;
