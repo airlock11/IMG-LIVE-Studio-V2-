@@ -292,4 +292,19 @@ export default {async fetch(req,env){
   }
   return json({error:"not_found"},404);
  }catch(_){return json({error:"server_error"},500);}
-}};
+ },
+ // Daily Cloudflare Cron cleanup prevents expired sessions and obsolete pairing
+ // material from living indefinitely in D1. Session deletion cascades provider
+ // records and unredeemed OAuth states. No provider API calls are made here.
+ async scheduled(controller,env,ctx){
+  if(!env.OAUTH_DB)return;
+  const cutoff=now();
+  const jobs=[
+   "DELETE FROM oauth_states WHERE expires_at<=?",
+   "DELETE FROM oauth_pairings WHERE expires_at<=?",
+   "DELETE FROM oauth_accounts WHERE expires_at<=?",
+   "DELETE FROM oauth_sessions WHERE expires_at<=?"
+  ].map(sql=>env.OAUTH_DB.prepare(sql).bind(cutoff));
+  await env.OAUTH_DB.batch(jobs);
+ }
+};
