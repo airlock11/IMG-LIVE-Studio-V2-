@@ -352,6 +352,17 @@ class V2BroadcastService:Service(),ConnectChecker {
   updateScorecard()
  }
  fun nextPeriod(){adjustPeriod(1)}
+ // Direct quarter/game selection without repeated GL uploads.
+ fun selectPeriod(value:Int){
+  if(value !in 1..9 || value==scoreboard.period)return
+  val previous=scoreboard.period
+  scoreboard=scoreboard.copy(
+   period=value,
+   homeFouls=if(value>previous&&scoreboard.sport=="basketball")0 else scoreboard.homeFouls,
+   awayFouls=if(value>previous&&scoreboard.sport=="basketball")0 else scoreboard.awayFouls
+  )
+  updateScorecard()
+ }
  fun adjustPeriod(delta:Int){
   val previous=scoreboard.period
   val updated=(previous+delta).coerceIn(1,9)
