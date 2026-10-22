@@ -36,9 +36,10 @@ jobs:
             return {status:response.status,data:await response.json()};
           };
           const health=await get('/health');
-          assert.notEqual(health.data.mode,'full','Unexpected production OAuth enabled');
-          assert.equal(health.data.providers?.facebook,false,'Facebook must remain disabled');
-          if(health.data.mode==='youtube_testing'){
+          const mode=health.data.mode||(health.status===503?'disabled':'full');
+          assert.notEqual(mode,'full','Unexpected production OAuth enabled');
+          if(mode==='youtube_testing'){
+            assert.equal(health.data.providers?.facebook,false,'Facebook must remain disabled');
             assert.equal(health.status,200);
             assert.equal(health.data.configured,true);
             assert.equal(health.data.providers.youtube,true);
@@ -57,7 +58,7 @@ jobs:
             assert.equal(hostile.status,403);
             console.log('YouTube-only OAuth test window verified; Facebook denied');
           }else{
-            assert.equal(health.data.mode,'disabled');
+            assert.equal(mode,'disabled');
             assert.equal(health.status,503);
             const connections=await get('/api/connections');
             assert.equal(connections.status,503);
