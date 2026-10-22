@@ -82,9 +82,11 @@
  }
  async function connect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
+  const revision=sessionRevision;
   statuses[provider]="connecting";publish();
   try{
    const data=await nativeRequest("connect",provider);
+   if(revision!==sessionRevision)throw Error("Account session changed during authorization");
    if(!data||typeof data.pairingCode!=="string"||!/^[A-Za-z0-9_-]{43}$/.test(data.pairingCode))
     throw Error("Missing secure pairing code");
    const auth=new URL(data.authorizationUrl);
@@ -95,13 +97,14 @@
    window.IMGNativeChannel.postMessage("oauth-open:"+auth.href);
    statuses[provider]="authorization-pending";publish();
    return true;
-  }catch(e){statuses[provider]="disconnected";publish();throw e;}
+  }catch(e){if(revision===sessionRevision){statuses[provider]="disconnected";publish();}throw e;}
  }
  async function verifyPairing(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
-  const code=pairingCodes[provider];
+  const code=pairingCodes[provider],revision=sessionRevision;
   if(!code)return "not_started";
   const result=await nativeRequest("verifyPairing",provider,code);
+  if(revision!==sessionRevision)return "cancelled";
   if(result?.status==="complete"){
    await refresh();
    if(statuses[provider]!=="connected")throw Error("Login completed, but account verification failed");
@@ -116,7 +119,9 @@
   if(statuses[provider]!=="authorization-pending")return false;
   const code=pairingCodes[provider];
   if(!code)throw Error("Missing authorization pairing code");
+  const revision=sessionRevision;
   const result=await nativeRequest("cancelPending",provider,code);
+  if(revision!==sessionRevision)return false;
   if(result?.cancelled!==true)throw Error("Could not cancel server authorization");
   delete pairingCodes[provider];statuses[provider]="disconnected";publish();
   return true;
@@ -136,7 +141,9 @@
  }
  async function disconnect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
+  const revision=sessionRevision;
   const result=await nativeRequest("disconnect",provider);
+  if(revision!==sessionRevision)return false;
   if(result?.disconnected!==true||result.provider!==provider)
    throw Error("Unverified disconnect");
   delete pairingCodes[provider];statuses[provider]="disconnected";publish();
