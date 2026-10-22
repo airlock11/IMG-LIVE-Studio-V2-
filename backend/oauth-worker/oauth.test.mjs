@@ -555,7 +555,7 @@ test('private YouTube broadcast draft is strictly private, idempotent, and token
     throw Error('Unexpected YouTube endpoint '+target);
    created++;
    assert.equal(options.method,'POST');
-   assert.equal(options.redirect,'error');
+   assert.equal(options.redirect,'manual');
    assert.equal(options.headers.Authorization,'Bearer private-test-access');
    const payload=JSON.parse(options.body);
    assert.equal(payload.status.privacyStatus,'private');
@@ -669,4 +669,48 @@ test('YouTube Live readiness distinguishes upstream permission, quota, invalid r
   assert.equal(network.status,200);
   assert.equal((await network.json()).reason,'youtube_api_network_unavailable');
  }finally{globalThis.fetch=prev;}
+});
+
+test('Cloudflare YouTube Live check refuses redirects without leaking OAuth tokens',async()=>{
+ const env=activePrivateDraftEnv(),auth=await seedConnectedYoutube(env);
+ const original=globalThis.fetch;
+ let calls=0;
+ try{
+  globalThis.fetch=async (target,options)=>{
+   calls++;
+   assert.equal(target,'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id%2Csnippet%2Cstatus%2CcontentDetails&mine=true&broadcastType=all&maxResults=20');
+   assert.equal(options.redirect,'manual','Cloudflare Workers cannot use redirect error mode');
+   assert.equal(options.headers.Authorization,'Bearer private-test-access');
+   return new Response(null,{status:302,headers:{Location:'https://attacker.example/collect-secret'}});
+  };
+  const response=await call('/api/connections/youtube/live-readiness',{headers:{...ctype,cookie:auth.cookie}},env);
+  assert.equal(response.status,200);
+  const body=await response.json();
+  assert.deepEqual(body,{liveApiAccessible:false,liveEnabled:null,reason:'youtube_api_redirect_rejected',broadcasts:[],publishingConfigured:false,canCreatePrivateDraft:false});
+  assert.doesNotMatch(JSON.stringify(body),/attacker|collect-secret|private-test-access/);
+  assert.equal(calls,1,'No redirect or retry may be followed');
+ }finally{globalThis.fetch=original;}
+});
+test('Private draft creation refuses redirects and never forwards the access token',async()=>{
+ const env=activePrivateDraftEnv(),auth=await seedConnectedYoutube(env);
+ const original=globalThis.fetch;
+ let calls=0;
+ try{
+  globalThis.fetch=async (target,options)=>{
+   calls++;
+   assert.equal(target,'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet%2Cstatus%2CcontentDetails');
+   assert.equal(options.redirect,'manual','Cloudflare Workers only supports manual or follow');
+   assert.equal(options.headers.Authorization,'Bearer private-test-access');
+   return new Response(null,{status:307,headers:{Location:'https://attacker.example/private'}});
+  };
+  const result=await call('/api/connections/youtube/private-draft',{
+   method:'POST',headers:{...ctype,cookie:auth.cookie},body:JSON.stringify(draftPayload('d'.repeat(32)))
+  },env);
+  assert.equal(result.status,502);
+  const body=await result.json();
+  assert.equal(body.error,'youtube_draft_redirect_rejected');
+  assert.doesNotMatch(JSON.stringify(body),/attacker|private-test-access/);
+  assert.equal(env.OAUTH_DB.query('SELECT state FROM youtube_private_draft_requests')[0].state,'failed');
+  assert.equal(calls,1);
+ }finally{globalThis.fetch=original;}
 });
