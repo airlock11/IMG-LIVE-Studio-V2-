@@ -9,6 +9,9 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Binder
 import android.os.Build
 import android.os.Handler
@@ -45,6 +48,53 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var connecting=false
  private var ended=false
  private var foreground=false
+ private val connectivity by lazy { getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager }
+ private var networkReady=false
+ private var networkLabel="Checking connection"
+ private var networkTracking=false
+ private var ingestDestination:String?=null // RAM only, never passed to Activity or logs
+ private var recoveryAttempts=0
+ private var recoveryQueued=false
+ private var videoBitrate=2300000
+ private val minBitrate=450000
+ private val maxBitrate=2300000
+ private var congestedSamples=0
+ private var healthySamples=0
+ private var previousDropped=0L
+ private var qualityPolling=false
+ private val qualityTick=object:Runnable {
+  override fun run(){
+   qualityPolling=false
+   if(ended||!running)return
+   sampleUploadQuality()
+   pollQuality()
+  }
+ }
+ private val networkCallback=object:ConnectivityManager.NetworkCallback(){
+  override fun onAvailable(network:Network){ui.post{refreshNetwork()}}
+  override fun onCapabilitiesChanged(network:Network,caps:NetworkCapabilities){ui.post{refreshNetwork()}}
+  override fun onLost(network:Network){ui.post{refreshNetwork()}}
+ }
+ private fun refreshNetwork(){
+  val previouslyReady=networkReady
+  val active=connectivity.activeNetwork
+  val caps=active?.let{connectivity.getNetworkCapabilities(it)}
+  networkReady=caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)==true &&
+   caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+  networkLabel=when{
+   !networkReady->"Offline / waiting for internet"
+   caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)==true->"Wi-Fi online"
+   caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)==true->"Mobile data online"
+   else->"Internet online"
+  }
+  if(!networkReady && (running||connecting)){
+   notifyState("Connection lost • awaiting internet")
+  }else if(networkReady && !previouslyReady && connecting && ingestDestination!=null){
+   scheduleRecovery()
+  }
+  publish()
+ }
+ fun connectionSummary()=networkLabel+" • "+(videoBitrate/1000)+" kbps"
  private var portrait=true
  private var front=false
  private var title="Camera and microphone ready"
@@ -70,6 +120,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   getSystemService(NotificationManager::class.java).createNotificationChannel(
    NotificationChannel(channel,"IMG V2 private broadcast",NotificationManager.IMPORTANCE_LOW)
   )
+  try{
+   connectivity.registerDefaultNetworkCallback(networkCallback)
+   networkTracking=true
+   refreshNetwork()
+  }catch(_:Exception){ networkLabel="Network status unavailable" }
  }
  override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int {
   when(intent?.action) {
@@ -147,6 +202,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     false
    }else{
     engine.getStreamClient().setReTries(5)
+    engine.getStreamClient().setCheckServerAlive(true)
     engine.getStreamClient().setLogs(false)
     stream=engine
     applyFraming()
@@ -178,6 +234,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   attempted=true
   connecting=true
+  recoveryAttempts=0
+  ingestDestination=null
   val sequence=++generation
   notifyState("Preparing PRIVATE YouTube RTMPS upload…")
   if(auth==null)auth=NativeOAuthClient(this,BuildConfig.OAUTH_BACKEND_URL)
@@ -196,6 +254,7 @@ class V2BroadcastService:Service(),ConnectChecker {
      "com.imgofficial.livestudio.v2:privateBroadcast").apply{
      setReferenceCounted(false);acquire()
     }
+    ingestDestination=url
     stream?.startStream(url)
     notifyState("Connecting private RTMPS; waiting for server…")
    }catch(_:Exception){
@@ -232,6 +291,10 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun stopBroadcast(){
   generation++
   connecting=false;running=false;ended=true
+  ingestDestination=null
+  recoveryQueued=false
+  ui.removeCallbacks(qualityTick)
+  qualityPolling=false
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
@@ -266,6 +329,9 @@ class V2BroadcastService:Service(),ConnectChecker {
  override fun onAuthError(){ui.post{stopBroadcast();notifyState("YouTube rejected the private RTMPS upload.")}}
  override fun onAuthSuccess(){}
  override fun onDestroy(){
+  ui.removeCallbacks(qualityTick)
+  if(networkTracking)try{connectivity.unregisterNetworkCallback(networkCallback)}catch(_:Exception){}
+  networkTracking=false
   stopBroadcast()
   detachPreview()
   try{stream?.release()}catch(_:Exception){}
