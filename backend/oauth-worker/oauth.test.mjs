@@ -8,6 +8,7 @@ const schema=await readFile(new URL('./migrations/0001_oauth_transactional.sql',
 const schema2=await readFile(new URL('./migrations/0002_access_token_lifecycle.sql',import.meta.url),'utf8');
 const schema3=await readFile(new URL('./migrations/0003_youtube_private_drafts.sql',import.meta.url),'utf8');
 const schema5=await readFile(new URL('./migrations/0005_youtube_private_ingest.sql',import.meta.url),'utf8');
+const schema6=await readFile(new URL('./migrations/0006_youtube_ingest_diagnostics.sql',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const api='https://oauth.example.test';
 const appOrigin='https://appassets.androidplatform.net';
@@ -20,6 +21,7 @@ function memoryD1(){
  db.exec(schema2);
  db.exec(schema3);
  db.exec(schema5);
+ db.exec(schema6);
  const make=(sql,args=[])=>({
   sql,args,
   bind(...values){return make(sql,values)},
@@ -801,4 +803,48 @@ test('private ingest binds only verified private draft and never transitions liv
   assert.equal(retry.status,409);
   assert.equal(called.length,3);
  }finally{globalThis.fetch=prior}
+});
+
+test('failed ingest stores safe stage code and excludes attempted draft from readiness',async()=>{
+ const env=activePrivateDraftEnv();
+ env.YOUTUBE_INGEST_TEST_ENABLED='true';
+ const authorized=await seedConnectedYoutube(env);
+ const session=authorized.cookie.split('=')[1];
+ const ids=['a'.repeat(32),'b'.repeat(32)];
+ for(const draftId of ids)env.OAUTH_DB.execute(
+  "INSERT INTO youtube_private_draft_requests(session_id,request_id,payload_hash,state,broadcast_id,title,scheduled_start,created_at) VALUES(?,?,?,'complete',?,?,?,?)",
+  session,draftId,'hash','privateVideo123','Practice',new Date(Date.now()+3600000).toISOString(),Date.now()
+ );
+ const old=globalThis.fetch;
+ try {
+  // The Google private broadcast check fails before any stream write.
+  globalThis.fetch=async(target,options)=>{
+   assert.equal(options.method,'GET');
+   return Response.json({error:{errors:[{reason:'livePermissionBlocked'}],message:'Do not log Google error text'}},{status:403});
+  };
+  const result=await call('/api/connections/youtube/private-ingest',{
+   method:'POST',headers:{...ctype,cookie:authorized.cookie},
+   body:JSON.stringify({draftRequestId:ids[0],operatorConfirmed:true})
+  },env);
+  assert.equal(result.status,502);
+  assert.equal((await result.json()).error,'youtube_private_broadcast_check_failed');
+  const rows=env.OAUTH_DB.query('SELECT state,failure_code FROM youtube_private_ingest_attempts');
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].state,'failed');
+  assert.equal(rows[0].failure_code,'youtube_private_broadcast_check_failed');
+  assert.ok(!JSON.stringify(rows).includes('Do not log Google'));
+  // Live readiness is read-only and must not make attempted draft available again.
+  globalThis.fetch=async(target,options)=>{
+   assert.equal(options.method,'GET');
+   return Response.json({items:[{id:'privateVideo123',snippet:{title:'Practice'},
+    status:{lifeCycleStatus:'ready',privacyStatus:'private'}}]});
+  };
+  const check=await call('/api/connections/youtube/live-readiness',{
+   headers:{origin:appOrigin,cookie:authorized.cookie}
+  },env);
+  assert.equal(check.status,200);
+  const ready=await check.json();
+  assert.equal(ready.privateDrafts.length,1);
+  assert.equal(ready.privateDrafts[0].requestId,ids[1]);
+ }finally{globalThis.fetch=old}
 });
