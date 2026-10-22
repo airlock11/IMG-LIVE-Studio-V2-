@@ -19,6 +19,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 
 /**
@@ -39,11 +40,18 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var portraitButton:Button
  private lateinit var landscapeButton:Button
  private lateinit var flipButton:Button
+ private lateinit var scoreStatus:TextView
+ private lateinit var scoreboardToggle:Button
  private val draftId by lazy {intent.getStringExtra("draftRequestId").orEmpty()}
  private val conn=object:ServiceConnection {
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
+   broadcast?.configureScorecard(
+    intent.getStringExtra("img_sport")?:"basketball",
+    intent.getStringExtra("img_home")?:"HOME",
+    intent.getStringExtra("img_away")?:"AWAY"
+   )
    // Rotating the operator screen recreates its Activity. A service that
    // was preview-only may also be recreated when Android briefly unbinds it.
    // Restore the selected framing from Intent on the FIRST orientation tap.
@@ -84,9 +92,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    setPadding(dp(10),dp(10),dp(10),dp(10))
   }
   val controls=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
-  controls.addView(text("IMG LIVE STUDIO • V2",13f))
-  controls.addView(text("YouTube video upload",if(landscape)17f else 21f))
-  controls.addView(text("Live camera framing • transmitted stream stays 9:16",12f))
+  controls.addView(text("IMG LIVE STUDIO",13f))
+  controls.addView(text("Private YouTube broadcast",if(landscape)16f else 19f))
   val choices=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
   portraitButton=action("Portrait"){changeFraming(true)}
   landscapeButton=action("Landscape"){changeFraming(false)}
@@ -95,6 +102,38 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   controls.addView(choices)
   flipButton=action("Flip front / rear camera"){broadcast?.flipCamera()}
   controls.addView(flipButton)
+  scoreStatus=text("Scoreboard",14f).apply{setTextColor(Color.rgb(141,231,187))}
+  controls.addView(scoreStatus)
+  fun scoreRow(team:Int):LinearLayout {
+   val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+   val label=if(team==0)"HOME" else "AWAY"
+   val one=action("$label +1"){broadcast?.adjustScore(team,1);refreshScoreboard()}
+   val minus=action("−1"){broadcast?.adjustScore(team,-1);refreshScoreboard()}
+   row.addView(one,LinearLayout.LayoutParams(0,dp(45),2f))
+   row.addView(minus,LinearLayout.LayoutParams(0,dp(45),1f))
+   if(intent.getStringExtra("img_sport")!="pickleball"){
+    val two=action("+2"){broadcast?.adjustScore(team,2);refreshScoreboard()}
+    row.addView(two,LinearLayout.LayoutParams(0,dp(45),1f))
+   }
+   return row
+  }
+  controls.addView(scoreRow(0))
+  controls.addView(scoreRow(1))
+  val scoreActions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  val periodButton=action("Next quarter/game"){broadcast?.nextPeriod();refreshScoreboard()}
+  val homeFoul=action("Home foul"){broadcast?.addFoul(0);refreshScoreboard()}
+  val awayFoul=action("Away foul"){broadcast?.addFoul(1);refreshScoreboard()}
+  scoreActions.addView(periodButton,LinearLayout.LayoutParams(0,dp(45),2f))
+  if(intent.getStringExtra("img_sport")!="pickleball"){
+   scoreActions.addView(homeFoul,LinearLayout.LayoutParams(0,dp(45),1f))
+   scoreActions.addView(awayFoul,LinearLayout.LayoutParams(0,dp(45),1f))
+  }
+  controls.addView(scoreActions)
+  scoreboardToggle=action("Hide scoreboard"){
+   broadcast?.setScorecardVisible(!(broadcast?.scorecardVisible()?:true))
+   refreshScoreboard()
+  }
+  controls.addView(scoreboardToggle)
   status=text("Connecting private camera controls…",13f)
   controls.addView(status)
   start=action("START PRIVATE VIDEO UPLOAD"){
@@ -131,14 +170,19 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    }
   }
   monitor.holder.addCallback(this)
+  val controlScroll=ScrollView(this).apply{
+   isFillViewport=false
+   addView(controls)
+  }
   if(landscape){
-   // 75% camera/25% compact controls; never a fixed 275dp sidebar that
-   // crowds the view on phones with a small landscape viewport.
-   panel.addView(area,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,3f))
-   panel.addView(controls,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f))
+   // Camera is the hero; a compact scrollable native control rail keeps
+   // every real scoring and upload button reachable on short displays.
+   panel.addView(area,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,2f))
+   panel.addView(controlScroll,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f))
   }else{
-   panel.addView(controls)
    panel.addView(area,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+   panel.addView(controlScroll,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+    dp(315).coerceAtMost(resources.displayMetrics.heightPixels/2)))
   }
   setContentView(panel)
   if(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank()){
@@ -180,6 +224,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   service.startPrivateUpload(draftId)
   refresh()
  }
+ private fun refreshScoreboard(){
+  if(!::scoreStatus.isInitialized)return
+  val score=broadcast?.scorecard()?:return
+  val label=if(score.sport=="pickleball")"Game" else "Q"
+  scoreStatus.text="${score.home}: ${score.homeScore}   •   ${score.away}: ${score.awayScore}   $label${score.period}"
+  scoreboardToggle.text=if(broadcast?.scorecardVisible()==true)"Hide scoreboard" else "Show scoreboard"
+ }
  private fun refresh(){
   val service=broadcast
   if(!::start.isInitialized)return
@@ -194,6 +245,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    portraitButton.text=if(service.isPortrait())"✓ Portrait" else "Portrait"
    landscapeButton.text=if(service.isPortrait())"Landscape" else "✓ Landscape"
    flipButton.text=if(service.frontCamera())"Switch to rear camera" else "Switch to front camera"
+   refreshScoreboard()
   }
  }
  private fun changeFraming(portrait:Boolean){
