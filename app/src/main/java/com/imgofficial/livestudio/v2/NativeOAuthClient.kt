@@ -177,7 +177,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
       "insufficient_live_permissions","youtube_api_quota_exceeded","youtube_api_rate_limited",
       "youtube_api_not_enabled","youtube_api_forbidden","youtube_api_bad_request",
       "youtube_api_not_found","youtube_api_temporarily_unavailable",
-      "youtube_api_unexpected_response","youtube_api_network_unavailable")
+      "youtube_api_unexpected_response","youtube_api_network_unavailable","youtube_api_redirect_rejected")
      if (accessible !is Boolean ||
         !(enabled is Boolean || enabled == JSONObject.NULL) ||
         publishingConfigured !== false || reason !in allowedReasons)
