@@ -107,3 +107,14 @@ test('OAuth API fails closed with malformed public origin', async () => {
   assert.equal(response.status,503);
   assert.equal((await response.json()).error,'invalid_service_origin');
 });
+
+test('health rejects insecure public origin', async () => {
+  const response = await call('/health', {}, {...configured, PUBLIC_ORIGIN:'http://oauth.example.test'});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).configured,false);
+});
+test('health rejects malformed encryption key', async () => {
+  const response = await call('/health', {}, {...configured, TOKEN_ENCRYPTION_KEY:'not-a-valid-key'});
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).configured,false);
+});
