@@ -76,6 +76,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var periodDisplay:TextView
  private lateinit var homeDisplay:TextView
  private lateinit var awayDisplay:TextView
+ private lateinit var homeFoulsDisplay:TextView
+ private lateinit var awayFoulsDisplay:TextView
+ private lateinit var clockToggleButton:Button
+ private var lastScoreChange:Pair<Int,Int>?=null
  private var gameSeconds=600
  private var gameRunning=false
  private var lastTick=0L
@@ -99,30 +103,66 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   setColor(color);cornerRadius=dp(radius).toFloat()
  }
  private fun ink(value:String,size:Float=14f)=TextView(this).apply{
-  text=value;textSize=size;setTextColor(Color.rgb(9,47,41))
+  text=value;textSize=size;setTextColor(Color.rgb(238,250,243))
   gravity=Gravity.CENTER
+  setSingleLine(true)
+  ellipsize=android.text.TextUtils.TruncateAt.END
+ }
+ private fun smallLabel(value:String)=ink(value,11f).apply{
+  setTextColor(Color.rgb(157,191,172))
+  letterSpacing=.06f
+ }
+ private fun adjustClock(delta:Int){
+  gameSeconds=(gameSeconds+delta).coerceIn(0,5999)
+  gameRunning=false
+  lastTick=0L
+  updateGameClock()
+ }
+ private fun changeTeamScore(team:Int,delta:Int){
+  val service=broadcast?:return
+  val before=service.scorecard()
+  val old=if(team==0)before.homeScore else before.awayScore
+  service.adjustScore(team,delta)
+  val after=service.scorecard()
+  val changed=(if(team==0)after.homeScore else after.awayScore)-old
+  if(changed!=0)lastScoreChange=Pair(team,changed)
+  refreshScoreboard()
+ }
+ private fun undoScore(){
+  val previous=lastScoreChange?:return
+  broadcast?.adjustScore(previous.first,-previous.second)
+  lastScoreChange=null
+  refreshScoreboard()
  }
  private fun greenButton(value:String,run:()->Unit):Button = action(value,run).apply{
-  background=rounded(Color.rgb(0,212,123),50)
-  setTextColor(Color.rgb(0,48,37))
+  background=rounded(Color.rgb(30,220,130),11)
+  setTextColor(Color.rgb(7,36,27))
   textSize=14f
+  setTypeface(typeface,android.graphics.Typeface.BOLD)
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
-  setPadding(0,0,0,0)
+  setPadding(dp(3),0,dp(3),0)
  }
  private fun darkButton(value:String,run:()->Unit):Button=action(value,run).apply{
-  background=rounded(Color.rgb(0,77,59),14)
-  setTextColor(Color.WHITE);textSize=12f
+  background=rounded(Color.rgb(39,67,57),11)
+  setTextColor(Color.rgb(231,247,237));textSize=12f
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
+  setPadding(dp(2),0,dp(2),0)
+ }
+ private fun dangerButton(value:String,run:()->Unit):Button=darkButton(value,run).apply{
+  background=rounded(Color.rgb(127,42,49),11)
+  setTextColor(Color.WHITE)
  }
  private fun card():LinearLayout=LinearLayout(this).apply{
   orientation=LinearLayout.VERTICAL
-  background=rounded(Color.WHITE,24)
-  setPadding(dp(11),dp(10),dp(11),dp(9))
+  background=rounded(Color.rgb(23,37,32),15)
+  setPadding(dp(7),dp(5),dp(7),dp(5))
  }
  private fun updateGameClock(){
   if(!::clockDisplay.isInitialized)return
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
+  if(::clockToggleButton.isInitialized)
+   clockToggleButton.text=if(gameRunning)"Ⅱ PAUSE" else "▶ START"
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
  }
  private fun editClock(){
