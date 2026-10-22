@@ -47,6 +47,53 @@ const encryptTokens=async(env,token)=>{
  const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(JSON.stringify(token))));
  return {version:1,iv:b64url(iv),ciphertext:b64url(ciphertext)};
 };
+// Access-token expiry is not the IMG session expiry. Unknown token lifetimes
+// fail closed rather than falsely implying a provider can still publish.
+const tokenLifetime=seconds=>{
+ const n=Number(seconds);
+ return Number.isFinite(n)&&n>0?Math.min(Math.floor(n),30*86400)*1000:null;
+};
+const decode64=s=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")+"=".repeat((4-s.length%4)%4)),x=>x.charCodeAt(0));
+const decryptTokens=async(env,serialized)=>{
+ const item=JSON.parse(serialized);
+ if(item.version!==1||typeof item.iv!=="string"||typeof item.ciphertext!=="string")
+  throw Error("Invalid encrypted token");
+ const iv=decode64(item.iv);
+ if(iv.length!==12)throw Error("Invalid encryption nonce");
+ const raw=await crypto.subtle.decrypt({name:"AES-GCM",iv},await encryptionKey(env),decode64(item.ciphertext));
+ return JSON.parse(new TextDecoder().decode(raw));
+};
+// Conditional D1 update is a short cross-instance refresh lease; failed
+// renewals remain disconnected and are throttled until the lease expires.
+const refreshYoutube=async(env,session,record)=>{
+ const time=now(),lease=time+60000;
+ const claimed=await env.OAUTH_DB.prepare("UPDATE oauth_accounts SET refresh_retry_after=? WHERE session_id=? AND provider='youtube' AND encrypted_token=? AND access_expires_at<=? AND refresh_retry_after<=? AND expires_at>? RETURNING session_id")
+  .bind(lease,session,record.encrypted_token,time+30000,time,time).first();
+ if(!claimed){
+  const latest=await env.OAUTH_DB.prepare("SELECT access_expires_at FROM oauth_accounts WHERE session_id=? AND provider='youtube' AND expires_at>?").bind(session,now()).first();
+  return !!latest&&latest.access_expires_at>now()+30000;
+ }
+ try{
+  const stored=await decryptTokens(env,record.encrypted_token);
+  if(typeof stored.refresh_token!=="string"||!stored.refresh_token||!env.GOOGLE_CLIENT_ID||!env.GOOGLE_CLIENT_SECRET)
+   return false;
+  const form=new URLSearchParams({client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,grant_type:"refresh_token",refresh_token:stored.refresh_token});
+  const response=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:form});
+  if(!response.ok)return false;
+  const updated=await response.json();
+  const lifetime=tokenLifetime(updated?.expires_in);
+  if(typeof updated?.access_token!=="string"||!updated.access_token.trim()||!lifetime)return false;
+  const accessExpiresAt=now()+lifetime;
+  const newTokens=JSON.stringify(await encryptTokens(env,{
+   access_token:updated.access_token,
+   refresh_token:typeof updated.refresh_token==="string"&&updated.refresh_token?updated.refresh_token:stored.refresh_token,
+   expires_at:accessExpiresAt
+  }));
+  const saved=await env.OAUTH_DB.prepare("UPDATE oauth_accounts SET encrypted_token=?,access_expires_at=?,refresh_retry_after=0 WHERE session_id=? AND provider='youtube' AND encrypted_token=? AND refresh_retry_after=? AND expires_at>?")
+   .bind(newTokens,accessExpiresAt,session,record.encrypted_token,lease,now()).run();
+  return saved.meta?.changes===1;
+ }catch(_){return false;}
+};
 const readSession=async(env,req)=>{
  const candidate=cookie(req)["__Host-img_session"];
  if(!codeValid(candidate))return null;
@@ -55,11 +102,17 @@ const readSession=async(env,req)=>{
  return row?candidate:null;
 };
 const status=async(env,session)=>{
- if(!session)return {facebook:{connected:false},youtube:{connected:false}};
- const rows=await env.OAUTH_DB.prepare("SELECT a.provider FROM oauth_accounts a JOIN oauth_sessions s ON s.session_id=a.session_id WHERE a.session_id=? AND s.expires_at>? AND a.expires_at>?")
+ const state={facebook:{connected:false},youtube:{connected:false}};
+ if(!session)return state;
+ const rows=await env.OAUTH_DB.prepare("SELECT a.provider,a.encrypted_token,a.access_expires_at FROM oauth_accounts a JOIN oauth_sessions s ON s.session_id=a.session_id WHERE a.session_id=? AND s.expires_at>? AND a.expires_at>?")
   .bind(session,now(),now()).all();
- const connected=new Set((rows.results||[]).map(x=>x.provider));
- return {facebook:{connected:connected.has("facebook")},youtube:{connected:connected.has("youtube")}};
+ for(const account of (rows.results||[])){
+  if(!(account.provider in state))continue;
+  if(account.access_expires_at>now()+30000){state[account.provider].connected=true;continue;}
+  if(account.provider==="youtube")
+   state.youtube.connected=await refreshYoutube(env,session,account);
+ }
+ return state;
 };
 const pairingStatus=async(env,hash)=>{
  return env.OAUTH_DB.prepare("SELECT session_id,provider,status FROM oauth_pairings WHERE pairing_hash=? AND expires_at>?")
@@ -219,12 +272,17 @@ export default {async fetch(req,env){
    }
    if(!token||typeof token.access_token!=="string"||!token.access_token.trim())return failPairing("missing_provider_token",502);
    if(provider==="youtube"&&!token.token_type)return failPairing("invalid_provider_token_response",502);
-   const encrypted=JSON.stringify(await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?now()+token.expires_in*1000:null}));
+   const lifetime=tokenLifetime(token.expires_in);
+   if(!lifetime)return failPairing("invalid_provider_token_lifetime",502);
+   const accessExpiresAt=now()+lifetime;
+   const canRefresh=provider==="youtube"&&typeof token.refresh_token==="string"&&!!token.refresh_token;
+   const recordExpiresAt=canRefresh?now()+sessionLife:Math.min(now()+sessionLife,accessExpiresAt);
+   const encrypted=JSON.stringify(await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:accessExpiresAt}));
    // Store each provider independently: simultaneous Facebook/YouTube callbacks
    // cannot overwrite each other. Complete pairing in the same D1 transaction.
    const completed=await env.OAUTH_DB.batch([
-    env.OAUTH_DB.prepare("INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) SELECT s.session_id,?,?,? FROM oauth_sessions s WHERE s.session_id=? AND s.expires_at>? AND EXISTS(SELECT 1 FROM oauth_pairings p WHERE p.pairing_hash=? AND p.status='processing' AND p.expires_at>?) ON CONFLICT(session_id,provider) DO UPDATE SET encrypted_token=excluded.encrypted_token,expires_at=excluded.expires_at")
-     .bind(provider,encrypted,now()+sessionLife,attempt.session_id,now(),attempt.pairing_hash,now()),
+    env.OAUTH_DB.prepare("INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at,refresh_retry_after) SELECT s.session_id,?,?,?,?,0 FROM oauth_sessions s WHERE s.session_id=? AND s.expires_at>? AND EXISTS(SELECT 1 FROM oauth_pairings p WHERE p.pairing_hash=? AND p.status='processing' AND p.expires_at>?) ON CONFLICT(session_id,provider) DO UPDATE SET encrypted_token=excluded.encrypted_token,expires_at=excluded.expires_at,access_expires_at=excluded.access_expires_at,refresh_retry_after=0")
+     .bind(provider,encrypted,recordExpiresAt,accessExpiresAt,attempt.session_id,now(),attempt.pairing_hash,now()),
     env.OAUTH_DB.prepare("UPDATE oauth_pairings SET status='complete' WHERE pairing_hash=? AND status='processing' AND expires_at>?")
      .bind(attempt.pairing_hash,now())
    ]);
