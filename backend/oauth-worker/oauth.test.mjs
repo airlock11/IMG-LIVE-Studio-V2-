@@ -547,6 +547,40 @@ test('private YouTube draft creation requires Android origin and explicit confir
  }
  assert.equal(env.OAUTH_DB.query('SELECT * FROM youtube_private_draft_requests').length,0);
 });
+test('GO LIVE NOW accepts a private broadcast without a client schedule and enables auto-start',async()=>{
+ const env=activePrivateDraftEnv();
+ const start=await seedConnectedYoutube(env);
+ const payload=draftPayload('e'.repeat(32),{startNow:true,scheduledStartTime:null});
+ const headers={...ctype,cookie:start.cookie};
+ const original=globalThis.fetch;
+ let insertCalls=0;
+ try{
+  globalThis.fetch=async (url,request)=>{
+   assert.equal(url,'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet%2Cstatus%2CcontentDetails');
+   insertCalls++;
+   const body=JSON.parse(request.body);
+   assert.equal(body.status.privacyStatus,'private');
+   assert.equal(body.contentDetails.enableAutoStart,true);
+   assert.equal(body.contentDetails.enableAutoStop,true);
+   assert.ok(Math.abs(Date.parse(body.snippet.scheduledStartTime)-Date.now())<4*60000);
+   return Response.json({id:'newPrivateNow123',snippet:{channelId:'UC1234567890123456789012'},status:{privacyStatus:'private'}});
+  };
+  const create=await call('/api/connections/youtube/private-draft',{
+   method:'POST',headers,body:JSON.stringify(payload)
+  },env);
+  assert.equal(create.status,201);
+  const data=await create.json();
+  assert.equal(data.privacy,'private');
+  assert.equal(insertCalls,1);
+  const retry=await call('/api/connections/youtube/private-draft',{
+   method:'POST',headers,body:JSON.stringify(payload)
+  },env);
+  assert.equal(retry.status,200);
+  assert.equal((await retry.json()).alreadyCreated,true);
+  assert.equal(insertCalls,1);
+  assert.equal(env.OAUTH_DB.query('SELECT * FROM youtube_private_draft_requests').length,1);
+ }finally{globalThis.fetch=original;}
+});
 test('private YouTube broadcast draft is strictly private, idempotent, and token-free',async()=>{
  const env=activePrivateDraftEnv();
  const start=await seedConnectedYoutube(env);
