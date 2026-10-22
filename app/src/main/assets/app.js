@@ -198,7 +198,8 @@ function youtubeDestination(){
  const connected=state==="connected";
  const label=state==="connected"?"Connected":state==="verifying"?"Checking account…":
   state==="authorization-pending"?"Finish Google sign-in":
-  state==="connecting"?"Connecting…":"Not connected";
+  state==="connecting"?"Connecting…":
+  state==="verification-unavailable"?"Verification temporarily unavailable":"Not connected";
  return '<div class="broadcast-destination" id="youtube-destination">'+
   '<button type="button" class="broadcast-destination-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'" aria-controls="youtube-destination-body">'+
   '<span class="destination-name"><strong>YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+(data.options.yt?' · Selected':'')+'</small></span>'+
@@ -213,7 +214,9 @@ function youtubeDestination(){
    '<button class="outline-btn" type="button" data-action="youtube-remove">Remove from this broadcast</button>'+
    '<button class="text-link" type="button" data-action="youtube-disconnect">Disconnect Google account</button>':
    state==="authorization-pending"?
-    '<p class="helper">Complete the Google sign-in in your browser. Return here to verify the account automatically.</p><button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
+    '<p class="helper">Complete Google sign-in, then verify the account.</p><button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
+   state==="verification-unavailable"?
+    '<p class="helper">IMG cannot verify the account right now. Your saved Google authorization has NOT been erased. Retry verification without signing in again.</p><button class="solid-btn" data-action="youtube-verify">Retry account check</button>':
     '<button class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect YouTube</button>')+
   (youtubeFeedback?'<p class="helper" role="status">'+esc(youtubeFeedback)+'</p>':'')+
   '<p class="helper">GO LIVE NOW starts a new private YouTube broadcast as soon as the camera feed connects. Private means only authorized viewers can watch. Production authorization is still pending.</p>'+
@@ -235,7 +238,9 @@ async function startPrivateYouTubeFromStudio(){
  youtubeBusy=true;youtubeFeedback='Checking YouTube…';
  try{
   const status=accounts.getStatus();
-  if(status.youtube!=='connected')throw Error('Connect YouTube in Broadcast Settings.');
+  if(status.youtube==='verification-unavailable')await accounts.refresh();
+  if(accounts.getStatus().youtube!=='connected')
+   throw Error('YouTube authorization is not verified right now. Retry account status before starting.');
   const check=await accounts.checkYoutubeLiveReadiness();
   if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
   // GO LIVE NOW deliberately creates a new private event configured to
