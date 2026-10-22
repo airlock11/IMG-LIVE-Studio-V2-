@@ -226,7 +226,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    line.addView(right,LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(7)})
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  heading("CAMERA & ON-AIR GRAPHICS")
+  heading("BROADCAST GRAPHICS • SCORING ANIMATION")
+  pair(tool("PRIME TV • WIPE"){broadcast?.setGraphicsStyle(0)},
+   tool("COURTSIDE • TV"){broadcast?.setGraphicsStyle(1)})
   fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
    return android.widget.Switch(this).apply{
     text=name
@@ -242,7 +244,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     setOnCheckedChangeListener{_,checked->onToggle(checked)}
    }
   }
-  tools.addView(settingsToggle("Show scoreboard",broadcast?.scorecardVisible()==true){
+  tools.addView(settingsToggle("Animate score awards (+1 / +2 / +3)",
+   broadcast?.scoreEffectsEnabled()==true){broadcast?.setScoreEffectsEnabled(it)
+  },LinearLayout.LayoutParams(-1,dp(42)))
+  heading("CAMERA & VISIBILITY")
+  tools.addView(settingsToggle("Show Broadcast Graphics",broadcast?.scorecardVisible()==true){
    broadcast?.setScorecardVisible(it)
   },LinearLayout.LayoutParams(-1,dp(42)))
   tools.addView(settingsToggle("Touch feedback",touchFeedback){
