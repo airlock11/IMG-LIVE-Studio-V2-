@@ -37,7 +37,11 @@
     const origin = requireBackend();
     refreshPending = (async () => {
     const response = await fetch(origin + "/api/connections", {credentials:"include",cache:"no-store"});
-    if (!response.ok) throw new Error("Unable to check account connections");
+    if (!response.ok) {
+      for (const name of Object.keys(providers)) state[name] = "disconnected";
+      publish();
+      throw new Error("Unable to verify account connections");
+    }
     const data = await response.json();
     for (const name of Object.keys(providers)) {
       const confirmed = data[name]?.connected === true;
