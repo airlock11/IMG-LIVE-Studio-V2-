@@ -37,11 +37,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var status:TextView
  private lateinit var start:Button
  private lateinit var stop:Button
- private lateinit var portraitButton:Button
- private lateinit var landscapeButton:Button
- private lateinit var flipButton:Button
  private lateinit var scoreStatus:TextView
- private lateinit var scoreboardToggle:Button
  private val draftId by lazy {intent.getStringExtra("draftRequestId").orEmpty()}
  private val conn=object:ServiceConnection {
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
@@ -54,10 +50,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    )
    // Rotating the operator screen recreates its Activity. A service that
    // was preview-only may also be recreated when Android briefly unbinds it.
-   // Restore the selected framing from Intent on the FIRST orientation tap.
-   val portrait=intent.getStringExtra("img_video_mode")!="landscape"
+   // All V2 basketball/pickleball streams use the same landscape profile.
+   // Streetball portrait will be a distinct future mode, not a toggle here.
+   if(broadcast?.isPortrait()==true)broadcast?.changeFraming(false)
    if(checkPermissions())broadcast?.prepareCamera()
-   if(broadcast?.isPortrait()!=portrait)broadcast?.changeFraming(portrait)
    if(checkPermissions()&&resumed&&monitor.holder.surface.isValid)
     broadcast?.attachPreview(monitor)
    refresh()
@@ -152,20 +148,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val choices=arrayOf(
    if(service?.scorecardVisible()==true)"Hide scoreboard" else "Show scoreboard",
    "Switch front / rear camera",
-   "Portrait orientation",
-   "Landscape orientation",
    "Edit game clock",
-   "Reset game clock to 10:00"
+   "Reset game clock to 10:00",
+   "Replay (coming soon)",
+   "Sponsor & media (coming soon)"
   )
   android.app.AlertDialog.Builder(this).setTitle("IMG broadcast settings")
    .setItems(choices){_,which->
     when(which){
      0->{service?.setScorecardVisible(!(service.scorecardVisible()));refreshScoreboard()}
      1->{service?.flipCamera();refresh()}
-     2->changeFraming(true)
-     3->changeFraming(false)
-     4->editClock()
-     5->{gameSeconds=600;gameRunning=false;lastTick=0;updateGameClock()}
+     2->editClock()
+     3->{gameSeconds=600;gameRunning=false;lastTick=0;updateGameClock()}
+     4->unavailableFeature("Instant replay")
+     5->unavailableFeature("Sponsor & media")
     }
    }.setNegativeButton("Close",null).show()
  }
@@ -179,128 +175,133 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
-  val landscape=intent.getStringExtra("img_video_mode")=="landscape"
-  requestedOrientation=if(landscape)ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-   else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+  // Operator is landscape-only; never expose portrait for normal sports.
+  intent.putExtra("img_video_mode","landscape")
+  requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+  // All operator essentials are visible in one landscape page. Secondary
+  // actions live in Settings; no scroll view obscures the live scoreboard.
   val panel=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
    setBackgroundColor(Color.rgb(221,234,226))
   }
   val body=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
-   setPadding(dp(10),dp(9),dp(10),dp(8))
+   setPadding(dp(6),dp(5),dp(6),dp(4))
   }
-  val area=FrameLayout(this).apply{
-   background=rounded(Color.BLACK,23)
+  val gap=dp(5)
+  fun matchHeight(weight:Float)=LinearLayout.LayoutParams(-1,0,weight)
+  val area=FrameLayout(this).apply {
+   setBackgroundColor(Color.BLACK)
+   background=rounded(Color.BLACK,13)
    clipToOutline=true
   }
   monitor=SurfaceView(this)
   area.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   area.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
-   val maxW=r-l; val maxH=b-t
+   // Letterbox instead of stretching the camera or its GL scoreboard.
+   val maxW=r-l
+   val maxH=b-t
    if(maxW>0&&maxH>0){
-    val land=intent.getStringExtra("img_video_mode")=="landscape"
-    val rw=if(land)16 else 9
-    val rh=if(land)9 else 16
-    val w=minOf(maxW,maxH*rw/rh)
-    val h=w*rh/rw
+    val w=minOf(maxW,maxH*16/9)
+    val h=w*9/16
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
    }
   }
   monitor.holder.addCallback(this)
-  val clockCard=card()
-  clockCard.addView(ink("Clock",14f),LinearLayout.LayoutParams(-1,dp(35)))
-  val clockRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-  clockRow.addView(greenButton("✎"){editClock()},LinearLayout.LayoutParams(dp(44),dp(44)))
-  clockDisplay=ink("10:00",23f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
-  clockRow.addView(clockDisplay,LinearLayout.LayoutParams(0,dp(44),1f))
-  clockRow.addView(greenButton("▶"){
+  val clockCard=card().apply{setPadding(dp(5),dp(3),dp(5),dp(3))}
+  clockCard.addView(ink("CLOCK",12f),LinearLayout.LayoutParams(-1,dp(18)))
+  val clockRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL
+   gravity=Gravity.CENTER_VERTICAL
+  }
+  clockRow.addView(greenButton("✎"){editClock()},LinearLayout.LayoutParams(dp(33),dp(33)))
+  clockDisplay=ink("10:00",21f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
+  clockRow.addView(clockDisplay,LinearLayout.LayoutParams(0,-1,1f))
+  val clockToggle=greenButton("▶"){
    gameRunning=!gameRunning
    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
    updateGameClock()
-  },LinearLayout.LayoutParams(dp(44),dp(44)))
-  clockCard.addView(clockRow)
-  val quarterCard=card()
-  quarterCard.addView(ink(if(intent.getStringExtra("img_sport")=="pickleball")"Game" else "Quarter",14f),
-   LinearLayout.LayoutParams(-1,dp(35)))
-  val quarterRow=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-  quarterRow.addView(greenButton("−"){broadcast?.adjustPeriod(-1);refreshScoreboard()},
-   LinearLayout.LayoutParams(dp(44),dp(44)))
-  periodDisplay=ink("1st",21f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
-  quarterRow.addView(periodDisplay,LinearLayout.LayoutParams(0,dp(44),1f))
-  quarterRow.addView(greenButton("+"){broadcast?.nextPeriod();refreshScoreboard()},
-   LinearLayout.LayoutParams(dp(44),dp(44)))
-  quarterCard.addView(quarterRow)
-  val top=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-  val margin=dp(8)
-  if(landscape){
-   top.addView(area,LinearLayout.LayoutParams(0,dp(160),1f))
-   top.addView(clockCard,LinearLayout.LayoutParams(0,dp(160),1f).apply{leftMargin=margin})
-   top.addView(quarterCard,LinearLayout.LayoutParams(0,dp(160),1f).apply{leftMargin=margin})
-   body.addView(top)
-  }else{
-   body.addView(area,LinearLayout.LayoutParams(-1,dp(230)))
-   top.addView(clockCard,LinearLayout.LayoutParams(0,dp(128),1f))
-   top.addView(quarterCard,LinearLayout.LayoutParams(0,dp(128),1f).apply{leftMargin=margin})
-   body.addView(top,LinearLayout.LayoutParams(-1,-2).apply{topMargin=margin})
   }
+  clockRow.addView(clockToggle,LinearLayout.LayoutParams(dp(33),dp(33)))
+  clockCard.addView(clockRow,LinearLayout.LayoutParams(-1,0,1f))
+  val quarterCard=card().apply{setPadding(dp(5),dp(3),dp(5),dp(3))}
+  quarterCard.addView(ink(if(intent.getStringExtra("img_sport")=="pickleball")"GAME" else "QUARTER",12f),
+   LinearLayout.LayoutParams(-1,dp(18)))
+  val quarterRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL
+   gravity=Gravity.CENTER_VERTICAL
+  }
+  quarterRow.addView(greenButton("−"){broadcast?.adjustPeriod(-1);refreshScoreboard()},
+   LinearLayout.LayoutParams(dp(33),dp(33)))
+  periodDisplay=ink("1st",19f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
+  quarterRow.addView(periodDisplay,LinearLayout.LayoutParams(0,-1,1f))
+  quarterRow.addView(greenButton("+"){broadcast?.nextPeriod();refreshScoreboard()},
+   LinearLayout.LayoutParams(dp(33),dp(33)))
+  quarterCard.addView(quarterRow,LinearLayout.LayoutParams(-1,0,1f))
+  val top=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+  }
+  top.addView(area,LinearLayout.LayoutParams(0,-1,0.42f))
+  top.addView(clockCard,LinearLayout.LayoutParams(0,-1,0.29f).apply{leftMargin=gap})
+  top.addView(quarterCard,LinearLayout.LayoutParams(0,-1,0.29f).apply{leftMargin=gap})
+  body.addView(top,matchHeight(0.58f))
   fun teamCard(team:Int):LinearLayout{
-   val c=card()
+   val c=card().apply{setPadding(dp(7),dp(3),dp(7),dp(3))}
    val teamName=intent.getStringExtra(if(team==0)"img_home" else "img_away")
     ?.take(18)?.ifBlank{if(team==0)"HOME" else "AWAY"}?:if(team==0)"HOME" else "AWAY"
-   c.addView(ink(teamName,14f),LinearLayout.LayoutParams(-1,dp(27)))
-   val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+   c.addView(ink(teamName,12f),LinearLayout.LayoutParams(-1,dp(18)))
+   val row=LinearLayout(this).apply{
+    orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+   }
    row.addView(greenButton("−"){broadcast?.adjustScore(team,-1);refreshScoreboard()},
-    LinearLayout.LayoutParams(dp(39),dp(41)))
+    LinearLayout.LayoutParams(dp(33),dp(33)))
    val score=ink("0",22f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
    if(team==0)homeDisplay=score else awayDisplay=score
-   row.addView(score,LinearLayout.LayoutParams(0,dp(45),1f))
-   val pickleball=intent.getStringExtra("img_sport")=="pickleball"
-   for(points in (if(pickleball)listOf(1) else listOf(1,2,3))){
-    val btn=greenButton("+$points"){broadcast?.adjustScore(team,points);refreshScoreboard()}
-    row.addView(btn,LinearLayout.LayoutParams(dp(if(landscape)37 else 44),dp(41))
-     .apply{leftMargin=dp(3)})
-   }
-   c.addView(row)
+   row.addView(score,LinearLayout.LayoutParams(0,-1,1f))
+   val points=if(intent.getStringExtra("img_sport")=="pickleball") listOf(1) else listOf(1,2,3)
+   for(p in points)row.addView(greenButton("+$p"){broadcast?.adjustScore(team,p);refreshScoreboard()},
+    LinearLayout.LayoutParams(dp(33),dp(33)).apply{leftMargin=dp(3)})
+   c.addView(row,LinearLayout.LayoutParams(-1,0,1f))
    return c
   }
   val scoreGrid=LinearLayout(this).apply{
-   orientation=if(landscape)LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+   orientation=LinearLayout.HORIZONTAL
+   setPadding(0,gap,0,0)
   }
-  scoreGrid.addView(teamCard(0),if(landscape) LinearLayout.LayoutParams(0,dp(132),1f)
-   else LinearLayout.LayoutParams(-1,dp(118)))
-  scoreGrid.addView(teamCard(1),if(landscape)LinearLayout.LayoutParams(0,dp(132),1f)
-   .apply{leftMargin=margin} else LinearLayout.LayoutParams(-1,dp(118)).apply{topMargin=margin})
-  body.addView(scoreGrid,LinearLayout.LayoutParams(-1,-2).apply{topMargin=margin})
-  scoreStatus=ink("HOME: 0  •  AWAY: 0  Q1",13f)
-  body.addView(scoreStatus,LinearLayout.LayoutParams(-1,dp(34)))
+  scoreGrid.addView(teamCard(0),LinearLayout.LayoutParams(0,-1,1f))
+  scoreGrid.addView(teamCard(1),LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
+  body.addView(scoreGrid,matchHeight(0.29f))
+  val fouls=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL
+   setPadding(0,gap,0,0)
+   gravity=Gravity.CENTER_VERTICAL
+  }
   if(intent.getStringExtra("img_sport")!="pickleball"){
-   val fouls=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-   fouls.addView(greenButton("HOME FOUL"){broadcast?.addFoul(0);refreshScoreboard()},
-    LinearLayout.LayoutParams(0,dp(42),1f))
-   fouls.addView(greenButton("AWAY FOUL"){broadcast?.addFoul(1);refreshScoreboard()},
-    LinearLayout.LayoutParams(0,dp(42),1f).apply{leftMargin=margin})
-   body.addView(fouls)
+   fouls.addView(greenButton("HOME FOUL +1"){broadcast?.addFoul(0);refreshScoreboard()},
+    LinearLayout.LayoutParams(0,-1,1f))
+   fouls.addView(greenButton("AWAY FOUL +1"){broadcast?.addFoul(1);refreshScoreboard()},
+    LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
   }
-  val scroller=ScrollView(this).apply{
-   isFillViewport=false
-   addView(body)
-   isVerticalScrollBarEnabled=false
-  }
-  panel.addView(scroller,LinearLayout.LayoutParams(-1,0,1f))
+  body.addView(fouls,matchHeight(0.13f))
+  panel.addView(body,LinearLayout.LayoutParams(-1,0,1f))
   val footer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
    setBackgroundColor(Color.rgb(0,46,36))
-   setPadding(dp(8),dp(5),dp(8),dp(5))
+   setPadding(dp(6),dp(1),dp(6),dp(3))
   }
-  status=text("Camera preview",11f)
-  status.maxLines=2
-  footer.addView(status,LinearLayout.LayoutParams(-1,dp(28)))
-  val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+  status=text("Ready for a private broadcast",10f).apply{
+   maxLines=1
+   ellipsize=android.text.TextUtils.TruncateAt.END
+   setPadding(dp(4),0,dp(4),0)
+  }
+  footer.addView(status,LinearLayout.LayoutParams(-1,dp(15)))
+  val actions=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+  }
   start=darkButton("▶ GO LIVE"){
    if(!checkPermissions())return@darkButton
    val service=broadcast
@@ -310,29 +311,15 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    refresh()
   }
   stop=darkButton("■ STOP"){broadcast?.stopBroadcast();refresh()}
-  actions.addView(start,LinearLayout.LayoutParams(0,dp(49),1.4f))
-  actions.addView(stop,LinearLayout.LayoutParams(0,dp(49),1f).apply{leftMargin=dp(3)})
-  actions.addView(darkButton("EXIT"){finish()},LinearLayout.LayoutParams(0,dp(49),1f).apply{leftMargin=dp(3)})
-  actions.addView(darkButton("Replay"){unavailableFeature("Instant replay")},
-   LinearLayout.LayoutParams(0,dp(49),1.2f).apply{leftMargin=dp(3)})
-  actions.addView(darkButton("Media"){unavailableFeature("Sponsor & media")},
-   LinearLayout.LayoutParams(0,dp(49),1.2f).apply{leftMargin=dp(3)})
-  actions.addView(darkButton("⚙"){openOperatorSettings()},
-   LinearLayout.LayoutParams(0,dp(49),.65f).apply{leftMargin=dp(3)})
+  actions.addView(start,LinearLayout.LayoutParams(0,dp(40),1.5f))
+  actions.addView(stop,LinearLayout.LayoutParams(0,dp(40),1f).apply{leftMargin=gap})
+  actions.addView(darkButton("EXIT"){finish()},
+   LinearLayout.LayoutParams(0,dp(40),1f).apply{leftMargin=gap})
+  actions.addView(darkButton("⚙ SETTINGS"){openOperatorSettings()},
+   LinearLayout.LayoutParams(0,dp(40),1.2f).apply{leftMargin=gap})
   footer.addView(actions)
-  portraitButton=darkButton("Portrait"){changeFraming(true)}
-  landscapeButton=darkButton("Landscape"){changeFraming(false)}
-  flipButton=darkButton("Flip camera"){broadcast?.flipCamera();refresh()}
-  scoreboardToggle=darkButton("Hide scoreboard"){
-   broadcast?.setScorecardVisible(!(broadcast?.scorecardVisible()?:true))
-   refreshScoreboard()
-  }
-  val extras=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-  for(btn in listOf(portraitButton,landscapeButton,flipButton,scoreboardToggle))
-   extras.addView(btn,LinearLayout.LayoutParams(0,dp(36),1f).apply{leftMargin=dp(3)})
-  footer.addView(extras,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(5)})
   panel.addView(footer,LinearLayout.LayoutParams(-1,-2))
-  // Android 15 edge-to-edge must not place scoring controls beneath system bars.
+  // Keep controls clear of Android 15 edge-to-edge, cutouts and system bars.
   androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
   val safeRoot=FrameLayout(this).apply{
    setBackgroundColor(Color.rgb(12,17,24))
@@ -401,7 +388,6 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   periodDisplay.text=if(score.sport=="pickleball")"Game ${score.period}" else when(score.period){
    1->"1st";2->"2nd";3->"3rd";4->"4th";else->"OT${score.period-4}"
   }
-  scoreboardToggle.text=if(broadcast?.scorecardVisible()==true)"Hide board" else "Show board"
  }
  private fun refresh(){
   val service=broadcast
@@ -409,27 +395,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val usable=service!=null&&checkPermissions()
   start.isEnabled=usable&&service?.isActive()!=true&&service?.isEnded()!=true
   stop.isEnabled=service?.isActive()==true
-  portraitButton.isEnabled=usable
-  landscapeButton.isEnabled=usable
-  flipButton.isEnabled=usable
   if(service!=null) {
-   status.text=service.getStatus()+"\n"+service.connectionSummary()
-   portraitButton.text=if(service.isPortrait())"✓ Portrait" else "Portrait"
-   landscapeButton.text=if(service.isPortrait())"Landscape" else "✓ Landscape"
-   flipButton.text=if(service.frontCamera())"Switch to rear camera" else "Switch to front camera"
+   status.text=service.getStatus()+" • "+service.connectionSummary()
    refreshScoreboard()
   }
- }
- private fun changeFraming(portrait:Boolean){
-  val target=if(portrait)"portrait" else "landscape"
-  // Intent state must be saved BEFORE Android rotates/recreates this view.
-  // The newly bound service also reads this state in onServiceConnected.
-  intent.putExtra("img_video_mode",target)
-  broadcast?.changeFraming(portrait)
-  val newOrientation=if(portrait)ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-   else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-  if(requestedOrientation!=newOrientation)requestedOrientation=newOrientation
-  refresh()
  }
  override fun onBroadcastStatus(status:String,active:Boolean,connecting:Boolean,
     ended:Boolean,portrait:Boolean,front:Boolean){runOnUiThread{refresh()}}
