@@ -4,6 +4,7 @@ on:
     paths:
       - 'backend/oauth-worker/**'
       - 'app/src/main/assets/account-connections.js'
+      - 'app/src/main/assets/account-connections.test.mjs'
       - 'app/src/main/assets/connections.html'
       - '.github/workflows/oauth-fast-check.yml'
   pull_request:
@@ -31,8 +32,8 @@ jobs:
         run: |
           node --check backend/oauth-worker/src/index.js
           node --check app/src/main/assets/account-connections.js
-      - name: Run OAuth Worker security tests
-        run: node --test backend/oauth-worker/oauth.test.mjs
+      - name: Run OAuth Worker and native bridge tests
+        run: node --test backend/oauth-worker/oauth.test.mjs app/src/main/assets/account-connections.test.mjs
       - name: Verify trusted client integration
         run: |
           node - <<'NODE'
