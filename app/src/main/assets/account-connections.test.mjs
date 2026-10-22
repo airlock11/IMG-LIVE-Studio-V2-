@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
-import {runInNewContext} from 'node:vm';
+import {runInNewContext,Script} from 'node:vm';
 import {webcrypto} from 'node:crypto';
 
 const source=await readFile(new URL('./account-connections.js',import.meta.url),'utf8');
@@ -161,4 +161,17 @@ test('global logout ignores a stale account status response after the session is
  await pendingRefresh;
  assert.equal(accounts.getStatus().facebook,'disconnected');
  assert.equal(accounts.getStatus().youtube,'disconnected');
+});
+
+test('test-only Account Connections screen has working syntax and no Facebook connect control',async()=>{
+ const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
+ const match=[...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)];
+ assert.equal(match.length,1,'Expected one inline UI controller');
+ assert.doesNotThrow(()=>new Script(match[0][1]),'OAuth screen inline controller must parse');
+ assert.match(html,/<button id="facebook-button"[^>]*disabled[^>]*>Coming soon<\\/button>/);
+ assert.match(html,/<button id="youtube-verify-button"[^>]*hidden>Verify<\\/button>/);
+ assert.match(html,/img-native-resume/);
+ for(const id of ['facebook-button','youtube-button','youtube-verify-button','signout-button']){
+  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+ }
 });
