@@ -48,7 +48,10 @@ export default {async fetch(req,env){
    return withCors(new Response(null,{status:204,headers:{"access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type","access-control-max-age":"600"}}),req,env);
   }
   if(path==="/health"&&method==="GET"){
-   const ready=!!(env.OAUTH_STATE&&env.ACCOUNT_SESSIONS&&env.TOKEN_ENCRYPTION_KEY&&env.PUBLIC_ORIGIN&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
+   let validOrigin=false;
+   try { validOrigin=!!origin(env); } catch (_) { validOrigin=false; }
+   const validKey=typeof env.TOKEN_ENCRYPTION_KEY==="string" && /^[A-Za-z0-9_-]{43}$/.test(env.TOKEN_ENCRYPTION_KEY);
+   const ready=!!(env.OAUTH_STATE&&env.ACCOUNT_SESSIONS&&validKey&&validOrigin&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
    return json({ok:ready,service:"img-oauth",configured:ready},ready?200:503);
   }
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
