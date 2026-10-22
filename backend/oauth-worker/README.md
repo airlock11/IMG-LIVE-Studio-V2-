@@ -42,9 +42,12 @@ The native account screen offers **Check live readiness** after YouTube is verif
 - No user tokens, refresh tokens, CDN ingestion URLs, or stream keys ever leave the Worker.
 - The check cannot create, start, or transition a broadcast.
 - A successful `liveBroadcasts.list` response means Live API access is available, **not** that video encoding, publishing, or actual streaming has been tested.
-- Google `liveStreamingNotEnabled` and `insufficientLivePermissions` responses show actionable but non-sensitive status messages.
+- YouTube Live readiness now returns a limited **diagnostic reason** rather than the ambiguous `youtube_live_api_unavailable` error for expected upstream errors. Android differentiates disabled live streaming, insufficient permissions, rate limits, exhausted API quotas, unexpected 403 responses, invalid Google requests, and temporary network failures. These signals describe what Google returned; they do **not** independently prove channel eligibility.
+- Google's original response payload, account details, tokens and diagnostic messages are never forwarded into Android. The draft form remains hidden unless the Live API check actually succeeds.
 - Requests without a valid native session return 401; unauthorized origins return 403; the expired staging window returns 503.
 - Tests cover encrypted-token isolation, error sanitization, authentication gating, and real Worker smoke checks.
+
+If the user reports an earlier `youtube_live_api_unavailable` screenshot, install a new APK containing the updated diagnostic allowlist and retry **Check live readiness** once. Don't assume the error is a channel issue before Google's response has been classified.
 
 When the User finishes login on Android, open **Settings → Manage connections → YouTube live readiness → Check live readiness**, then report the visible result. The operator-confirmed **private draft creation** stage is now implemented, but binding RTMPS ingestion credentials, a native broadcast encoder, stream transmission, and Go Live remain separate future stages.
 
