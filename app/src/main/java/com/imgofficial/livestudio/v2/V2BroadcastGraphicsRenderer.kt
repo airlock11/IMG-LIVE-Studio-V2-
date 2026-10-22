@@ -422,28 +422,53 @@ internal object V2BroadcastGraphicsRenderer {
   if(style==9||style==8){
    bevel(c,p,21f,16f,378f,377f,SILVER,0xFF43535A.toInt(),7f,SILVER)
   }else bevel(c,p,20f,15f,380f,376f,0xFF354148.toInt(),0xFF080B10.toInt(),11f,SILVER)
-  if(style==8||style==11){
-   team(c,p,s,0,30f,38f,360f,141f,style,c1,accent,logos[0],a)
-   team(c,p,s,1,30f,183f,360f,141f,style,c2,accent,logos[1],a)
-   clock(c,p,s,81f,329f,258f,55f,style,accent)
-  }else{
-   // Two narrow side-by-side vertical team towers and a spanning bottom clock.
-   for(i in 0..1){
-    val x=29f+i*185f
-    val color=if(i==0)c1 else c2
-    val teamName=if(i==0)s.home else s.away
-    val pts=if(i==0)s.homeScore else s.awayScore
-    val foul=if(i==0)s.homeFouls else s.awayFouls
-    bevel(c,p,x,38f,178f,284f,color,mix(color,INK,.83f),5f,SILVER)
-    mark(c,p,x+89f,93f,43f,color,teamName,logos[i])
-    label(c,p,teamName.take(10).uppercase(),x+89f,162f,27f)
-    bevel(c,p,x+20f,181f,138f,93f,0xFFE3E9EA.toInt(),0xFF81939C.toInt(),3f,SILVER)
-    label(c,p,pts.toString(),x+89f,251f,69f,INK)
-    label(c,p,"FOULS: ${foul}",x+89f,306f,22f)
-    identityTransition(c,p,a,i,x,38f,178f,134f,style,accent,color,teamName,logos[i])
-    pointsFlash(c,p,a,i,x+20f,181f,138f,93f,accent,style)
+  when(style){
+   8->{ // Split Box: fixed clock/bonus tower plus two stacked score plates.
+    bevel(c,p,28f,37f,105f,283f,0xFF454A51.toInt(),0xFF080D12.toInt(),6f,SILVER)
+    label(c,p,s.clock.ifBlank{"10:00"},80f,124f,42f)
+    bevel(c,p,33f,159f,95f,76f,WHITE,0xFF9FAEB6.toInt(),4f,SILVER)
+    label(c,p,"Q${s.period}",80f,211f,38f,INK)
+    label(c,p,"BONUS",80f,271f,27f,accent)
+    team(c,p,s,0,140f,38f,249f,137f,style,c1,accent,logos[0],a)
+    team(c,p,s,1,140f,182f,249f,137f,style,c2,accent,logos[1],a)
+    bevel(c,p,45f,331f,345f,53f,0xFF515A61.toInt(),0xFF111821.toInt(),7f,SILVER)
+    label(c,p,"IMG LIVE  •  ${s.period} PERIOD",218f,369f,31f)
    }
-   clock(c,p,s,82f,333f,256f,50f,style,accent)
+   9->{ // Match Cube: opposing vertically framed team towers and a clock foot.
+    for(i in 0..1){
+     val x=29f+i*185f
+     val color=if(i==0)c1 else c2
+     val teamName=if(i==0)s.home else s.away
+     val pts=if(i==0)s.homeScore else s.awayScore
+     val foul=if(i==0)s.homeFouls else s.awayFouls
+     bevel(c,p,x,38f,178f,284f,color,mix(color,INK,.83f),5f,SILVER)
+     mark(c,p,x+89f,93f,43f,color,teamName,logos[i])
+     label(c,p,teamName.take(10).uppercase(),x+89f,162f,27f)
+     bevel(c,p,x+20f,181f,138f,93f,0xFFE3E9EA.toInt(),0xFF81939C.toInt(),3f,SILVER)
+     label(c,p,pts.toString(),x+89f,251f,69f,INK)
+     label(c,p,"FOULS: ${foul}",x+89f,306f,22f)
+     identityTransition(c,p,a,i,x,38f,178f,134f,style,accent,color,teamName,logos[i])
+     pointsFlash(c,p,a,i,x+20f,181f,138f,93f,accent,style)
+    }
+    clock(c,p,s,82f,333f,256f,50f,style,accent)
+   }
+   10->{ // Corner-edge: compact two rows, score module at end, clock dock at foot.
+    team(c,p,s,0,27f,40f,370f,132f,style,c1,accent,logos[0],a)
+    team(c,p,s,1,27f,182f,370f,132f,style,c2,accent,logos[1],a)
+    bevel(c,p,30f,320f,266f,66f,0xFF253D4B.toInt(),0xFF081018.toInt(),6f,SILVER)
+    label(c,p,s.clock.ifBlank{"10:00"},162f,366f,52f)
+    bevel(c,p,306f,320f,91f,66f,0xFF872734.toInt(),0xFF37151E.toInt(),6f,SILVER)
+    label(c,p,"24",351f,365f,51f,0xFFFFC64B.toInt())
+   }
+   else->{ // Legacy TV: embossed stacked teams plus protruding play-clock box.
+    team(c,p,s,0,28f,35f,365f,128f,style,c1,accent,logos[0],a)
+    team(c,p,s,1,28f,178f,365f,128f,style,c2,accent,logos[1],a)
+    bevel(c,p,25f,321f,256f,60f,0xFF4D5358.toInt(),0xFF11151C.toInt(),6f,SILVER)
+    label(c,p,if(s.period<=4)"Q${s.period}" else "OT",80f,365f,32f)
+    label(c,p,s.clock.ifBlank{"10:00"},200f,365f,34f)
+    bevel(c,p,285f,317f,113f,68f,0xFFAC243C.toInt(),0xFF370B16.toInt(),4f,SILVER)
+    label(c,p,"PLAY  24",340f,358f,30f)
+   }
   }
  }
  fun render(score:V2Scorecard.State,opacity:Float,
