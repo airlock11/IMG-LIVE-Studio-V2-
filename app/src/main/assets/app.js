@@ -257,6 +257,26 @@ async function startPrivateYouTubeFromStudio(){
   // MediaStream tracks before Android Camera2 prepares the native RTMPS feed.
   // This action NEVER ends an existing native foreground upload.
   window.IMGMedia?.stopCamera?.();
+  // User-supplied team emblems are reduced to bounded transparent PNGs,
+  // so the NATIVE compositor displays the real badges without downloading
+  // remote resources or passing source files to the RTMPS service.
+  async function compactBadge(raw){
+   if(typeof raw!=='string'||!/^data:image\\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   try{
+    const photo=new Image();
+    await new Promise((resolve,reject)=>{photo.onload=resolve;photo.onerror=reject;photo.src=raw;});
+    const canvas=document.createElement('canvas');canvas.width=64;canvas.height=64;
+    const ctx=canvas.getContext('2d');
+    if(!ctx)return '';
+    const f=Math.min(60/photo.naturalWidth,60/photo.naturalHeight);
+    ctx.drawImage(photo,32-photo.naturalWidth*f/2,32-photo.naturalHeight*f/2,
+     photo.naturalWidth*f,photo.naturalHeight*f);
+    const png=canvas.toDataURL('image/png');
+    return png.length<=35000?png:'';
+   }catch(_){return ''}
+  }
+  const logoHome=await compactBadge(data.options.broadcast.homeLogo);
+  const logoAway=await compactBadge(data.options.broadcast.awayLogo);
   const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
@@ -266,7 +286,8 @@ async function startPrivateYouTubeFromStudio(){
    size:Math.round(data.options.overlaySize),opacity:Math.round(data.options.overlayOpacity),
    width:Math.round(data.options.overlayWidth),height:Math.round(data.options.overlayHeight),
    offsetX:Math.round(data.options.overlayOffsetX),offsetY:Math.round(data.options.overlayOffsetY),
-   margin:Math.round(data.options.overlaySafe),animated:data.options.overlayAnimated!==false
+   margin:Math.round(data.options.overlaySafe),animated:data.options.overlayAnimated!==false,
+   logoHome,logoAway
   }));
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
