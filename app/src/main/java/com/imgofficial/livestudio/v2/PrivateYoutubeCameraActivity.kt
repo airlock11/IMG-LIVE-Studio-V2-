@@ -335,7 +335,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
 
   // Single aligned strip: video, game clock, and game period.
   val top=horizontal()
-  top.addView(camera,LinearLayout.LayoutParams(0,-1,.44f))
+  top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
   val clockCard=card()
   clockCard.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(-1,dp(18)))
   val clockMain=horizontal()
@@ -362,7 +362,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     if(index>0)leftMargin=dp(4)
    })
   clockCard.addView(timeActions)
-  top.addView(clockCard,LinearLayout.LayoutParams(0,-1,.30f).apply{leftMargin=gap})
+  top.addView(clockCard,LinearLayout.LayoutParams(0,-1,.34f).apply{leftMargin=gap})
   val quarterCard=card()
   quarterCard.addView(smallLabel(if(isPickleball)"GAME / ROUND" else "QUARTER"),
    LinearLayout.LayoutParams(-1,dp(18)))
@@ -388,7 +388,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    })
   }
   quarterCard.addView(quickPeriods)
-  top.addView(quarterCard,LinearLayout.LayoutParams(0,-1,.26f).apply{leftMargin=gap})
+  top.addView(quarterCard,LinearLayout.LayoutParams(0,-1,.30f).apply{leftMargin=gap})
   body.addView(top,sized(if(isPickleball).54f else .51f))
 
   // Balanced HOME and AWAY scoreboard, optimized for thumbs and one-tap scoring.
