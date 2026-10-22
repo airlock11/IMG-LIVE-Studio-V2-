@@ -89,6 +89,7 @@ function applyAppearance(){
 applyAppearance();
 let offlineClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
+let youtubeExpanded=false,youtubeBusy=false,youtubeAudience="",youtubeFeedback="";
 let fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''},fbConnecting=false,fbExpanded=false,fbMessage='',fbGeneration=0,fbAttemptTimer=null,fbFeedbackState='idle';
 window.IMGFacebookLive?.setListener?.(({phase,detail})=>{
  if(screen!=='live'||!data.options.fb)return;
@@ -184,6 +185,71 @@ function facebookFields(){
  '<a class="text-link" href="https://www.facebook.com/live/producer/" target="_blank" '+
  'rel="noopener noreferrer">Get Stream Key from Facebook Live Producer ↗</a></div>';
 }
+function youtubeDestination(){
+ const state=window.IMGAccounts?.getStatus?.().youtube||"disconnected";
+ const connected=state==="connected";
+ const label=state==="connected"?"Connected":state==="verifying"?"Checking account…":
+  state==="authorization-pending"?"Finish Google sign-in":
+  state==="connecting"?"Connecting…":"Not connected";
+ return '<div class="broadcast-destination" id="youtube-destination">'+
+  '<button type="button" class="broadcast-destination-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'" aria-controls="youtube-destination-body">'+
+  '<span class="destination-name"><strong>YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+'</small></span>'+
+  '<span class="broadcast-destination-indicator"><span class="toggle '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span>'+ic(youtubeExpanded?'up':'chevron',18)+'</span></button>'+
+  '<div class="broadcast-destination-body" id="youtube-destination-body" '+(youtubeExpanded?'':'hidden')+'>'+
+  (connected?'<p class="helper">Ready to prepare a private YouTube upload. Your account stays connected when you close V2.</p>'+
+   '<label class="form-group"><span class="small-label">Audience classification</span><select class="input" data-youtube-audience="1" aria-label="YouTube audience classification">'+
+   '<option value="" '+(!youtubeAudience?'selected':'')+'>Select audience</option>'+
+   '<option value="no" '+(youtubeAudience==='no'?'selected':'')+'>Not made for kids</option>'+
+   '<option value="yes" '+(youtubeAudience==='yes'?'selected':'')+'>Made for kids</option></select></label>'+
+   '<button class="outline-btn" type="button" data-action="youtube-disconnect">Disconnect account</button>':
+   state==="authorization-pending"?
+    '<p class="helper">Complete the Google sign-in in your browser. Return here to verify the account automatically.</p><button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
+    '<button class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect YouTube</button>')+
+  (youtubeFeedback?'<p class="helper" role="status">'+esc(youtubeFeedback)+'</p>':'')+
+  '<p class="helper">Private upload only. Starting the video feed does not publish the event publicly on YouTube.</p>'+
+  '</div></div>';
+}
+function youtubeTitle(){
+ const event=selectedEvent(),teams=gameTeams();
+ const base=event?.name||[teams[0]?.name||'Home',teams[1]?.name||'Away'].join(' vs ');
+ return (sportName()+' • '+base).slice(0,98);
+}
+async function startPrivateYouTubeFromStudio(){
+ const accounts=window.IMGAccounts;
+ if(!window.IMGNativeChannel?.postMessage||!accounts)
+  return toast('A V2 Android app with secure YouTube access is required.');
+ if(youtubeBusy)return;
+ youtubeExpanded=true;
+ youtubeBusy=true;youtubeFeedback='Checking YouTube…';
+ try{
+  const status=accounts.getStatus();
+  if(status.youtube!=='connected')throw Error('Connect YouTube in Broadcast Settings.');
+  const check=await accounts.checkYoutubeLiveReadiness();
+  if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
+  let owned=check.privateDrafts?.[0]?.requestId;
+  if(!owned){
+   // Creating a new PRIVATE event is a separate, quota-limited Google API
+   // action. Require an explicit audience classification and use a unique
+   // request identifier; never make a public event automatically.
+   if(!youtubeAudience)throw Error('Select the YouTube audience classification first.');
+   if(!check.canCreatePrivateDraft)throw Error('No reusable private event is available. Private event creation is currently unavailable.');
+   const title=youtubeTitle(),scheduledStartTime=new Date(Date.now()+20*60*1000).toISOString();
+   const draftRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+   await accounts.createYoutubePrivateDraft({title,scheduledStartTime,madeForKids:youtubeAudience==='yes',draftRequestId});
+   owned=draftRequestId;
+  }
+  if(!/^[a-f0-9]{32}$/.test(owned))throw Error('No valid private YouTube event is available.');
+  youtubeFeedback='';
+  window.IMGNativeChannel.postMessage('native-private-video-start:'+owned);
+ }catch(error){
+  youtubeFeedback=String(error?.message||'YouTube could not prepare the private upload.').slice(0,200);
+  toast(youtubeFeedback);
+ }finally{
+  youtubeBusy=false;
+  if(screen==='setup')render(true);
+ }
+}
+
 function facebookDestination(){
  const st=window.IMGFacebookLive?.status?.()||{};
  const connected=Boolean(st.phase==='sending'&&(data.options.fb||fbFeedbackState==='success'));
@@ -936,8 +1002,18 @@ if(name==='toggle-facebook-panel'){
  if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false;fbExpanded=false;fbMessage='';fbFeedbackState='idle';return render(true)}
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
-if(name.startsWith('destination-')){const p=name.slice(12);if(p==='tiktok')return toast('TikTok is not enabled until authorized access is available.');if(p==='fb')return; o[p]=!o[p];persist();return render(true)}
-if(name==='start-broadcast'){if(fbConnecting||fbExpanded)return;if(streetballActive())o.orientation='portrait';if(recordOnly())return startOfflineRecording();l.recordOnly=false;Object.assign(l,window.IMGPickleballRules?.initial(o,0,1,[0,0])||{
+if(name==='destination-yt'){youtubeExpanded=!youtubeExpanded;o.yt=youtubeExpanded;persist();return render(true)}
+if(name==='youtube-connect'){
+ youtubeFeedback='Connecting securely…';
+ return window.IMGAccounts?.connect('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
+}
+if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
+if(name==='youtube-disconnect'){
+ if(!confirm('Disconnect YouTube from IMG LIVE Studio?'))return;
+ return window.IMGAccounts?.disconnect('youtube').then(()=>{o.yt=false;persist();render(true)}).catch(e=>toast(e.message))
+}
+if(name.startsWith('destination-')){const p=name.slice(12);if(p==='tiktok')return toast('TikTok broadcasting is not available yet.');if(p==='fb')return; return toast('This platform is unavailable.')}
+if(name==='start-broadcast'){if(o.yt){if(o.fb)return toast('Choose one streaming destination.');return startPrivateYouTubeFromStudio()}if(fbConnecting||fbExpanded)return;if(streetballActive())o.orientation='portrait';if(recordOnly())return startOfflineRecording();l.recordOnly=false;Object.assign(l,window.IMGPickleballRules?.initial(o,0,1,[0,0])||{
  pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'Game ready'});l.active=true;l.remoteLiveId=uid();l.remoteEndedAt=0;l.lockedOrientation=o.orientation;l.clockRunning=false;l.timeout=false;l.slides=false;l.scores=[0,0];l.fouls=[0,0];l.seconds=o.quarterMins*60;l.shot=24;l.quarter=1;l.slideIndex=0;l.undo=[];persist();screen='live';history.pushState({screen},'', '#/live');render(false);return requestOrientation(o.orientation,true)}
 if(name==='toggle-clock'){if(l.timeout)return toast('Resume the game before starting the clock.');l.clockRunning=!l.clockRunning;persist();return render(true)}
 if(name==='reset-clock'){dialog={type:'reset-clock'};return render(true)}
@@ -1175,6 +1251,22 @@ window.addEventListener('resize',()=>{
  if(isTypingControl(document.activeElement)){
   if(syncKeyboardViewport())requestAnimationFrame(keepKeyboardFieldVisible);
  }else keyboardBaseHeight=Math.max(keyboardBaseHeight,window.visualViewport?.height||window.innerHeight);
+});
+window.IMGAccounts?.subscribe?.(status=>{
+ if(screen!=='setup'||!youtubeExpanded)return;
+ const label=document.querySelector('#youtube-destination .broadcast-youtube-status');
+ if(label){label.textContent=status.youtube==='connected'?'Connected':status.youtube==='verifying'?'Checking account…':
+  status.youtube==='authorization-pending'?'Finish Google sign-in':'Not connected';
+  label.classList.toggle('connected',status.youtube==='connected');}
+});
+window.addEventListener('img-native-resume',()=>{
+ if(!youtubeExpanded)return;
+ const api=window.IMGAccounts;
+ if(api?.getStatus?.().youtube==='authorization-pending')
+  api.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;render(true)});
+});
+document.addEventListener('change',e=>{
+ if(e.target?.matches?.('[data-youtube-audience]'))youtubeAudience=e.target.value;
 });
 window.addEventListener('popstate',event=>{remoteApi()?.stopScan?.();const dest=event.state?.screen||'home';if(screen==='live'&&data.live.active&&dest!=='live'){history.pushState({screen:'live'},'', '#/live');dialog={type:'exit-live'};render(true);return}screen=dest;if(screen==='create'&&!draft){draft=newDraft();createStep=0}if(screen==='add-game'&&!gameDraft){startNewGame();return}render(false)});
 // Pairing links from Phone 1 open Phone 2 directly in the remote controller.
