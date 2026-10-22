@@ -92,7 +92,7 @@ test('native-confirmed pairing transitions to connected',async()=>{
  assert.equal(await accounts.verifyPairing('youtube'),'complete');
  assert.equal(accounts.getStatus().youtube,'connected');
 });
-test('verification errors clear previous connected status',async()=>{
+test('verification failures retain session as unverified rather than falsely claiming logout',async()=>{
  let fail=false;
  const {accounts}=controller(cmd=>{
   if(cmd.action==='refresh'&&fail)return {ok:false,error:'upstream_unavailable'};
@@ -103,7 +103,7 @@ test('verification errors clear previous connected status',async()=>{
  assert.equal(accounts.getStatus().facebook,'connected');
  fail=true;
  await assert.rejects(accounts.refresh(),/upstream_unavailable/);
- assert.equal(accounts.getStatus().facebook,'disconnected');
+ assert.equal(accounts.getStatus().facebook,'verification-unavailable');
 });
 
 test('disabled staging OAuth reports a clear message without allowing login',async()=>{
