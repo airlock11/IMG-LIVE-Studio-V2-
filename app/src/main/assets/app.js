@@ -426,6 +426,7 @@ function remoteUpdated(){
 }
 
 function settings(){const o=data.options;return `<main class="page" data-scroll="main"><div class="eyebrow" style="padding-top:4px">PREFERENCES</div><h1 style="margin-top:8px">Settings</h1><p class="lead">Your operator workspace</p>
+<div style="margin:16px 0;padding:15px;border:1px solid var(--line,#40515a);border-radius:14px"><strong>Streaming accounts</strong><p class="hint">Connect Facebook and YouTube through official login.</p><a href="connections.html" style="display:inline-block;padding:12px 16px;border-radius:10px;background:#a8efd1;color:#10241d;text-decoration:none;font-weight:700">Manage connections →</a></div>
 <div class="appearance-inline" role="group" aria-label="App theme">
  <span class="appearance-switch-label ${o.appearance==='light'?'selected':''}">Light</span>
  <button type="button" class="appearance-toggle ${o.appearance==='dark'?'active':''}" data-action="appearance-toggle" role="switch" aria-checked="${o.appearance==='dark'}" aria-label="Dark mode"><span class="appearance-toggle-thumb" aria-hidden="true"></span></button>
