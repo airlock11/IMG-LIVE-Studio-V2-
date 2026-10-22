@@ -35,6 +35,17 @@ const withCors=(response,req)=>{
 const appRequest=req=>req.headers.get("origin")==="https://appassets.androidplatform.net";
 const isJson=req=>req.headers.get("content-type")?.split(";")[0]?.trim()==="application/json";
 const codeValid=s=>typeof s==="string"&&/^[A-Za-z0-9_-]{43}$/.test(s);
+
+const youtubeTestActive=env=>{
+ // The testing switch is separately scoped and time-bounded; the full
+ // production OAUTH_ENABLED switch stays OFF until Facebook and hardening land.
+ const deadline=Date.parse(env.YOUTUBE_TEST_EXPIRES_AT||"");
+ return env.YOUTUBE_TEST_ENABLED==="true"&&env.OAUTH_ENABLED!=="true"&&
+   Number.isFinite(deadline)&&deadline>now()&&deadline<=now()+48*3600*1000;
+};
+const authEnabled=(env,provider)=>env.OAUTH_ENABLED==="true"||
+ (provider==="youtube"&&youtubeTestActive(env));
+
 const encryptionKey=async env=>{
  const encoded=env.TOKEN_ENCRYPTION_KEY;
  if(!encoded||!/^[A-Za-z0-9_-]{43}$/.test(encoded))throw Error("Invalid token encryption key");
@@ -87,6 +98,7 @@ const refreshYoutube=async(env,session,record)=>{
   const newTokens=JSON.stringify(await encryptTokens(env,{
    access_token:updated.access_token,
    refresh_token:typeof updated.refresh_token==="string"&&updated.refresh_token?updated.refresh_token:stored.refresh_token,
+   channel_id:stored.channel_id||null,
    expires_at:accessExpiresAt
   }));
   const saved=await env.OAUTH_DB.prepare("UPDATE oauth_accounts SET encrypted_token=?,access_expires_at=?,refresh_retry_after=0 WHERE session_id=? AND provider='youtube' AND encrypted_token=? AND refresh_retry_after=? AND expires_at>?")
@@ -108,6 +120,7 @@ const status=async(env,session)=>{
   .bind(session,now(),now()).all();
  for(const account of (rows.results||[])){
   if(!(account.provider in state))continue;
+  if(!authEnabled(env,account.provider))continue;
   if(account.access_expires_at>now()+30000){state[account.provider].connected=true;continue;}
   if(account.provider==="youtube")
    state.youtube.connected=await refreshYoutube(env,session,account);
@@ -133,12 +146,24 @@ export default {async fetch(req,env){
    let validOrigin=false;
    try{validOrigin=!!origin(env);}catch(_){}
    const validKey=typeof env.TOKEN_ENCRYPTION_KEY==="string"&&/^[A-Za-z0-9_-]{43}$/.test(env.TOKEN_ENCRYPTION_KEY);
-   const ready=!!(env.OAUTH_ENABLED==="true"&&env.OAUTH_DB&&validOrigin&&validKey&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
-   return json({ok:ready,service:"img-oauth",configured:ready},ready?200:503);
+   const youtubeReady=!!(env.OAUTH_DB&&validOrigin&&validKey&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET);
+   const fullReady=!!(env.OAUTH_ENABLED==="true"&&youtubeReady&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
+   const testingReady=!!(youtubeReady&&youtubeTestActive(env));
+   const ready=fullReady||testingReady;
+   return json({ok:ready,service:"img-oauth",configured:ready,
+    mode:fullReady?"full":testingReady?"youtube_testing":"disabled",
+    providers:{youtube:ready,facebook:fullReady}
+   },ready?200:503);
   }
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
-  if(env.OAUTH_ENABLED!=="true")return json({error:"oauth_not_enabled"},503);
+  if(env.OAUTH_ENABLED!=="true"&&!youtubeTestActive(env))
+   return json({error:"oauth_not_enabled"},503);
   if(!env.OAUTH_DB||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
+  // In test mode every Facebook operation, including OAuth callbacks, is
+  // disabled before any state reads, token exchanges, or database mutation.
+  const requestedProvider=path.match(/^\/api\/connections\/(facebook|youtube)(?:\/|$)/)?.[1];
+  if(requestedProvider&&!authEnabled(env,requestedProvider))
+   return json({error:"provider_not_enabled"},503);
   try{origin(env);}catch(_){return json({error:"invalid_service_origin"},503);}
   const session=await readSession(env,req);
   if(path==="/api/connections"&&method==="GET")return withCors(json(await status(env,session)),req);
@@ -271,13 +296,30 @@ export default {async fetch(req,env){
     token=await result.json();
    }
    if(!token||typeof token.access_token!=="string"||!token.access_token.trim())return failPairing("missing_provider_token",502);
-   if(provider==="youtube"&&!token.token_type)return failPairing("invalid_provider_token_response",502);
+   if(provider==="youtube"){
+    if(typeof token.token_type!=="string"||token.token_type.toLowerCase()!=="bearer")
+     return failPairing("invalid_provider_token_response",502);
+    // A successful token exchange alone is not proof that this account has a
+    // YouTube channel. Validate directly with the authenticated YouTube API.
+    let channelResponse;
+    try{
+     channelResponse=await fetch("https://www.googleapis.com/youtube/v3/channels?part=id&mine=true",{
+      headers:{Authorization:"Bearer "+token.access_token,Accept:"application/json"}
+     });
+    }catch(_){return failPairing("youtube_channel_verification_failed",502);}
+    if(!channelResponse.ok)return failPairing("youtube_channel_verification_failed",502);
+    const channelData=await channelResponse.json().catch(()=>null);
+    const channelId=channelData?.items?.[0]?.id;
+    if(typeof channelId!=="string"||!/^[A-Za-z0-9_-]{16,64}$/.test(channelId))
+     return failPairing("youtube_channel_not_found",403);
+    token.verified_channel_id=channelId;
+   }
    const lifetime=tokenLifetime(token.expires_in);
    if(!lifetime)return failPairing("invalid_provider_token_lifetime",502);
    const accessExpiresAt=now()+lifetime;
    const canRefresh=provider==="youtube"&&typeof token.refresh_token==="string"&&!!token.refresh_token;
    const recordExpiresAt=canRefresh?now()+sessionLife:Math.min(now()+sessionLife,accessExpiresAt);
-   const encrypted=JSON.stringify(await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:accessExpiresAt}));
+   const encrypted=JSON.stringify(await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,channel_id:token.verified_channel_id||null,expires_at:accessExpiresAt}));
    // Store each provider independently: simultaneous Facebook/YouTube callbacks
    // cannot overwrite each other. Complete pairing in the same D1 transaction.
    const completed=await env.OAUTH_DB.batch([
