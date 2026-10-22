@@ -14,6 +14,7 @@ The existing IMG website and the original V1 app/Workers are not changed.
 - `PUBLIC_ORIGIN`: the HTTPS Worker URL above
 - `OAUTH_ENABLED`: explicitly `false`, checked on all account API endpoints
 - `TOKEN_ENCRYPTION_KEY`: 32 cryptographically random bytes (base64url), installed **only as a Cloudflare Worker secret**, never committed
+- Scheduled D1 cleanup (`0 3 * * *`, UTC): removes expired sessions, authorization states, pairings and provider account records; remains active while OAuth is disabled.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`: **not configured yet**
 
 The Android build's public `imgOAuthBackendUrl` property pins this service at build time. The Android native OAuth client makes API requests, stores the session cookie encrypted using Android Keystore, and returns only sanitized connection/pairing state to the WebView. No provider access token or IMG session cookie is passed to page JavaScript.
@@ -42,7 +43,7 @@ Only the operator of the legitimate Meta/Google developer applications can suppl
 ## Production blockers — do not enable OAuth yet
 
 1. **D1 race resistance (implemented, verify in real world):** Atomic single-use callback state, pending/processing/cancelled pairing CAS, and independently updated provider rows are implemented. Unit tests exercise concurrent replay and cancellation; cross-region live-service stress tests, transactional failure injection, and recovery procedures remain pending.
-2. **Session hardening:** Global session revocation and native encrypted session deletion are implemented. Still required: app-bound identity, session renewal and cross-device management, rotation of at-rest secrets, rate limiting, abuse monitoring, and recovery. D1 session expiry is checked but expired rows need scheduled cleanup.
+2. **Session hardening:** Global session revocation and native encrypted session deletion are implemented. Still required: app-bound identity, session renewal and cross-device management, rotation of at-rest secrets, rate limiting, abuse monitoring, and recovery. D1 session expiry is checked and scheduled cleanup is deployed; verify cron execution in production monitoring.
 3. **OAuth correctness:** The backend now tracks provider access expiration and renews Google/YouTube access tokens when an offline refresh grant exists. Further work is required for durable error recovery, provider revocation, Meta long-lived tokens, approved scopes, and verifying actual provider account identities.
 4. **App return and verification:** Finish production-verified Android App Links or secure browser return handling and end-to-end Android pairing tests on a real device.
 5. **Authorized provider setup:** Configure Google and Meta applications, approved scopes, the exact redirects above, and production OAuth client credentials in Cloudflare secrets.
