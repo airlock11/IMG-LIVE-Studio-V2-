@@ -69,6 +69,22 @@ export default {async fetch(req,env){
    if(attempt.provider!==pairing[1]||attempt.session!==session)return json({error:"pairing_session_mismatch"},403);
    return withCors(json({status:attempt.status==="complete"?"complete":"pending"}),req,env);
   }
+  const cancel=path.match(/^\/api\/connections\/(facebook|youtube)\/cancel$/);
+  if(cancel&&method==="POST"){
+   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
+   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
+   const body=await req.json().catch(()=>null);
+   if(!body||typeof body.pairingCode!=="string"||!/^[-_A-Za-z0-9]{43}$/.test(body.pairingCode))
+    return json({error:"invalid_pairing_code"},400);
+   const key="pair:"+await digest(body.pairingCode);
+   const raw=await env.OAUTH_STATE.get(key);
+   if(!raw)return withCors(json({cancelled:true}),req,env);
+   const attempt=JSON.parse(raw);
+   if(attempt.session!==session||attempt.provider!==cancel[1])return json({error:"pairing_session_mismatch"},403);
+   await env.OAUTH_STATE.put(key,JSON.stringify({...attempt,status:"cancelled"}),{expirationTtl:600});
+   return withCors(json({cancelled:true}),req,env);
+  }
   const disconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
   if(disconnect&&method==="POST"){
    if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
@@ -106,6 +122,7 @@ export default {async fetch(req,env){
    await env.OAUTH_STATE.delete(key);
    const attempt=JSON.parse(raw);
    if(attempt.provider!==provider)return json({error:"provider_mismatch"},400);
+   if(attempt.pairingHash){const pair=await env.OAUTH_STATE.get("pair:"+attempt.pairingHash);if(!pair||JSON.parse(pair).status==="cancelled")return json({error:"authorization_cancelled"},400);}
    if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
    if(u.searchParams.get("error"))return json({error:"authorization_declined"},400);
    // Exchange codes on the server only. Never return the token to the browser.
