@@ -11,7 +11,7 @@ concurrency:
   group: img-v2-cloudflare-smoke-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  check-disabled-deployment:
+  check-staging-deployment:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -19,29 +19,49 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify independent V2 OAuth Worker is reachable but login is disabled
+      - name: Verify V2 test-only YouTube mode or fail-closed disabled state
         env:
           IMG_V2_OAUTH_URL: https://img-live-studio-oauth.magsipocarnie.workers.dev
         run: |
           node --input-type=module - <<'NODE'
           import assert from 'node:assert/strict';
           const base=process.env.IMG_V2_OAUTH_URL;
-          for(const [path,expected] of [
-            ['/health','health'],
-            ['/api/connections','oauth_not_enabled']
-          ]){
+          const get=async(path,options={})=>{
             let response;
             for(let i=0;i<4;i++){
-              try {response=await fetch(base+path,{signal:AbortSignal.timeout(12000)});break;}
+              try {response=await fetch(base+path,{...options,signal:AbortSignal.timeout(12000)});break;}
               catch(error){if(i===3)throw error;await new Promise(resolve=>setTimeout(resolve,3000));}
             }
-            const payload=await response.json();
-            assert.equal(response.status,503,`${path}: OAuth must remain disabled`);
-            if(expected==='health'){
-              assert.equal(payload.configured,false);
-              assert.equal(payload.ok,false);
-            } else assert.equal(payload.error,expected);
             assert.equal(response.headers.get('cache-control'),'no-store');
-            console.log(path, 'safely disabled (503)');
+            return {status:response.status,data:await response.json()};
+          };
+          const health=await get('/health');
+          assert.notEqual(health.data.mode,'full','Unexpected production OAuth enabled');
+          assert.equal(health.data.providers?.facebook,false,'Facebook must remain disabled');
+          if(health.data.mode==='youtube_testing'){
+            assert.equal(health.status,200);
+            assert.equal(health.data.configured,true);
+            assert.equal(health.data.providers.youtube,true);
+            const connections=await get('/api/connections');
+            assert.equal(connections.status,200);
+            assert.equal(connections.data.youtube.connected,false);
+            assert.equal(connections.data.facebook.connected,false);
+            const facebook=await get('/api/connections/facebook/authorize',{
+              method:'POST',headers:{Origin:'https://appassets.androidplatform.net','Content-Type':'application/json'},body:'{}'
+            });
+            assert.equal(facebook.status,503);
+            assert.equal(facebook.data.error,'provider_not_enabled');
+            const hostile=await get('/api/connections/youtube/authorize',{
+              method:'POST',headers:{Origin:'https://attacker.example','Content-Type':'application/json'},body:'{}'
+            });
+            assert.equal(hostile.status,403);
+            console.log('YouTube-only OAuth test window verified; Facebook denied');
+          }else{
+            assert.equal(health.data.mode,'disabled');
+            assert.equal(health.status,503);
+            const connections=await get('/api/connections');
+            assert.equal(connections.status,503);
+            assert.equal(connections.data.error,'oauth_not_enabled');
+            console.log('OAuth test window is closed, all account routes disabled');
           }
           NODE
