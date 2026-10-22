@@ -411,3 +411,86 @@ test('Google token for account without YouTube channel is never considered conne
   assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_accounts').length,0);
  }finally{globalThis.fetch=previous;}
 });
+
+test('YouTube Live readiness is read-only, authenticated, and strips all ingress credentials',async()=>{
+ const env=makeEnv({
+  OAUTH_ENABLED:'false',
+  FACEBOOK_APP_ID:undefined,
+  FACEBOOK_APP_SECRET:undefined,
+  YOUTUBE_TEST_ENABLED:'true',
+  YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()
+ });
+ const notAuthorized=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin}},env);
+ assert.equal(notAuthorized.status,401);
+ const forged=await call('/api/connections/youtube/live-readiness',{headers:{origin:'https://attacker.example'}},env);
+ assert.equal(forged.status,403);
+ const account=await authorize(env,'youtube');
+ const old=globalThis.fetch;
+ let requests=0;
+ try{
+  globalThis.fetch=async (target,options)=>{
+   if(target==='https://oauth2.googleapis.com/token')
+    return Response.json({access_token:'never-leak-youtube-access',refresh_token:'never-leak-refresh',token_type:'Bearer',expires_in:3600});
+   if(target==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true')
+    return Response.json({items:[{id:'UC1234567890123456789012'}]});
+   if(target.startsWith('https://www.googleapis.com/youtube/v3/liveBroadcasts?')){
+    requests++;
+    assert.equal(options.method,'GET');
+    assert.equal(options.headers.Authorization,'Bearer never-leak-youtube-access');
+    return Response.json({items:[
+     {id:'future-video',snippet:{title:'Practice live event',scheduledStartTime:'2026-10-23T09:00:00Z',internalSecret:'private'},status:{lifeCycleStatus:'ready',privacyStatus:'unlisted'},contentDetails:{boundStreamId:'stream-123',ingestionInfo:{streamName:'secret-live-key'}}},
+     {id:'completed-video',snippet:{title:'Old'},status:{lifeCycleStatus:'complete',privacyStatus:'public'}},
+     {id:'live-video',snippet:{title:'Court A'},status:{lifeCycleStatus:'live',privacyStatus:'private'},contentDetails:{}}
+    ],cdn:{ingestionInfo:{streamName:'secret-live-key'}}});
+   }
+   throw Error('Unexpected YouTube URL: '+target);
+  };
+  const callback=await call('/api/connections/youtube/callback?state='+account.state+'&code=abc',{},env);
+  assert.equal(callback.status,200);
+  const response=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin,cookie:account.cookie}},env);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  const ready=await response.json();
+  assert.equal(ready.liveEnabled,true);
+  assert.equal(ready.liveApiAccessible,true);
+  assert.equal(ready.publishingConfigured,false);
+  assert.equal(ready.broadcasts.length,2);
+  assert.deepEqual(ready.broadcasts.map(x=>x.title),['Practice live event','Court A']);
+  assert.equal(ready.broadcasts[0].hasStream,true);
+  const serialized=JSON.stringify(ready);
+  assert.doesNotMatch(serialized,/secret-live-key|never-leak-youtube-access|never-leak-refresh|ingestionInfo|streamName|cdn/);
+  assert.equal(requests,1);
+ }finally{globalThis.fetch=old;}
+});
+test('YouTube Live eligibility error is conveyed without sharing Google API errors',async()=>{
+ const env=makeEnv();
+ const account=await authorize(env,'youtube');
+ const old=globalThis.fetch;
+ try{
+  globalThis.fetch=async target=>{
+   if(target==='https://oauth2.googleapis.com/token')
+    return Response.json({access_token:'test-youtube-token',token_type:'Bearer',expires_in:3600});
+   if(target==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true')
+    return Response.json({items:[{id:'UC1234567890123456789012'}]});
+   if(target.startsWith('https://www.googleapis.com/youtube/v3/liveBroadcasts?'))
+    return Response.json({error:{errors:[{reason:'liveStreamingNotEnabled',message:'Private Google diagnostic!'}]}},{status:403});
+   throw Error('Unknown provider');
+  };
+  assert.equal((await call('/api/connections/youtube/callback?state='+account.state+'&code=abc',{},env)).status,200);
+  const response=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin,cookie:account.cookie}},env);
+  assert.equal(response.status,200);
+  const payload=await response.json();
+  assert.deepEqual(payload,{liveApiAccessible:false,liveEnabled:false,reason:'live_streaming_not_enabled',broadcasts:[]});
+  assert.doesNotMatch(JSON.stringify(payload),/Private Google diagnostic/);
+ }finally{globalThis.fetch=old;}
+});
+test('YouTube Live readiness is blocked after the temporary OAuth window expires',async()=>{
+ const env=makeEnv({
+  OAUTH_ENABLED:'false',
+  YOUTUBE_TEST_ENABLED:'true',
+  YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()-60000).toISOString()
+ });
+ const response=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin}},env);
+ assert.equal(response.status,503);
+ assert.equal((await response.json()).error,'oauth_not_enabled');
+});
