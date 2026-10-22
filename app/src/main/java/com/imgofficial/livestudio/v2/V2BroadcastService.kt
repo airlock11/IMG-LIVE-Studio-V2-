@@ -43,6 +43,8 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
  private var scoreVisible=true
+ private var lastScorecardImageState:V2Scorecard.State?=null
+ private var lastScorecardVisible:Boolean?=null
  private var auth:NativeOAuthClient?=null
  private var preview:SurfaceView?=null
  private var wakeLock:PowerManager.WakeLock?=null
@@ -102,7 +104,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   publish()
  }
  fun connectionSummary()=networkLabel+" • "+(videoBitrate/1000)+" kbps"
- private var portrait=true
+ private var portrait=false // Basketball/Pickleball V2 always broadcasts in landscape; Streetball portrait comes later.
  private var front=false
  private var title="Camera and microphone ready"
  private val channel="img_v2_broadcast"
@@ -210,9 +212,9 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   return try {
    val engine=GenericStream(this,this)
-   // One stable portrait 9:16 encoded frame for the lifetime of this upload.
-   // Toggling orientation LIVE adjusts the GL framing inside this fixed canvas.
-   if(!engine.prepareVideo(1280,720,2300000,30,2,90)||
+   // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
+   // Streetball portrait uses a future separate mode/profile.
+   if(!engine.prepareVideo(1280,720,2300000,30,2,0)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     notifyState("This phone cannot prepare the video/audio codec.")
@@ -224,7 +226,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     stream=engine
     applyFraming()
     applyScorecard()
-    notifyState("Camera and microphone ready. Portrait output • 9:16.")
+    notifyState("Camera and microphone ready • landscape 16:9.")
     true
    }
   }catch(_:Exception){notifyState("Camera preparation failed on this device.");false}
@@ -330,19 +332,30 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    if(scoreFilter==null){
     scoreFilter=ImageFilterRender().also{
-     it.setScale(94f,16f)
-     it.setPosition(3f,3.5f)
+     // Bitmap artwork is 960x144 (20:3). On a 1280x720 landscape frame,
+     // 84% x 22.4% renders at that same ratio without stretching.
+     it.setScale(84f,22.4f)
+     it.setPosition(8f,2.5f)
      gl.addFilter(it)
     }
    }
+   lastScorecardImageState=null
+   lastScorecardVisible=null
    updateScorecard()
   }catch(_:Exception){notifyState("Video scoreboard overlay unavailable on this phone.")}
  }
  private fun updateScorecard(){
   val filter=scoreFilter?:return
+  // No work or GPU uploads when the visual scoreboard did not change.
+  if(lastScorecardVisible==scoreVisible&&
+     (!scoreVisible||lastScorecardImageState==scoreboard))return
   try{
    filter.setImage(if(scoreVisible)V2Scorecard.render(scoreboard) else null)
-   stream?.requestKeyframe()
+   lastScorecardImageState=scoreboard.copy()
+   lastScorecardVisible=scoreVisible
+   // DO NOT request a H.264 keyframe per point or per clock tick: this
+   // caused decoder stalls and delayed/jerky score overlays.
+   // Normal upcoming frames carry the updated GL overlay.
   }catch(_:Exception){notifyState("Unable to redraw native video scoreboard.")}
  }
  fun flipCamera(){
@@ -355,19 +368,20 @@ class V2BroadcastService:Service(),ConnectChecker {
   }catch(_:Exception){notifyState("Unable to switch cameras without losing capture.")}
  }
  fun changeFraming(usePortrait:Boolean){
-  if(portrait==usePortrait)return
-  portrait=usePortrait
-  applyFraming()
-  stream?.requestKeyframe()
-  notifyState(if(portrait)"Portrait framing • output remains 9:16"
-   else "Landscape framing • fitted into stable 9:16 output")
+  // For compatibility with already-installed V2 Activity calls. Portrait
+  // is deliberately unavailable until a future Streetball encoder profile.
+  if(portrait || usePortrait){
+   portrait=false
+   applyFraming()
+  }
+  notifyState("Landscape broadcast • 16:9")
  }
  private fun applyFraming(){
   stream?.getGlInterface()?.apply{
-   // Only GL composition changes; H.264 frame geometry and RTMPS session
-   // stay unchanged. No decoder renegotiation or reconnect is attempted.
-   setCameraOrientation(if(portrait)0 else 270)
-   setIsPortrait(portrait)
+   setIsPortrait(false)
+   // Camera sensor is 90 degrees relative to a landscape phone; RootEncoder
+   // renders the landscape camera through this GL orientation.
+   setCameraOrientation(270)
   }
  }
  private fun pollQuality(){
