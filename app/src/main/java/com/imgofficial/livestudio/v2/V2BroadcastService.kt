@@ -46,6 +46,11 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var scoreAlpha=1f
  private var lastScoreAlpha:Float?=null
  private var scoreTransitionEpoch=0
+ private var graphicsStyle=0 // PRIME sports-TV, COURTSIDE metallic broadcast
+ private var scoreAward:V2Scorecard.Award?=null
+ private var lastRenderedAward:V2Scorecard.Award?=null
+ private var scoreAwardEpoch=0
+ private var lastGraphicsStyle=-1
  private var lastScorecardImageState:V2Scorecard.State?=null
  private var lastScorecardVisible:Boolean?=null
  private var auth:NativeOAuthClient?=null
@@ -338,11 +343,42 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
+ fun graphicsStyle()=graphicsStyle
+ fun setGraphicsStyle(style:Int){
+  if(style !in 0..1 || graphicsStyle==style)return
+  graphicsStyle=style
+  lastGraphicsStyle=-1
+  updateScorecard()
+ }
+ private fun startScoreAward(team:Int,points:Int,prior:Int){
+  val epoch=++scoreAwardEpoch
+  scoreAward=V2Scorecard.Award(team,points,0f,prior)
+  updateScorecard()
+  // A limited 15-frame sequence over 1.68 seconds follows the broadcast
+  // reference, with an identity wipe and held points-award takeover.
+  // No continuous animation loop: this minimizes mobile GPU heat.
+  for(frame in 1..15){
+   ui.postDelayed({
+    if(epoch!=scoreAwardEpoch)return@postDelayed
+    scoreAward=if(frame==15)null else
+     V2Scorecard.Award(team,points,frame/15f,prior)
+    updateScorecard()
+   },frame*112L)
+  }
+ }
  fun adjustScore(team:Int,delta:Int){
   if(team !in 0..1 || delta !in -3..3 || delta==0)return
+  val prior=if(team==0)scoreboard.homeScore else scoreboard.awayScore
   scoreboard=if(team==0)scoreboard.copy(homeScore=(scoreboard.homeScore+delta).coerceIn(0,999))
    else scoreboard.copy(awayScore=(scoreboard.awayScore+delta).coerceIn(0,999))
-  updateScorecard()
+  val changed=(if(team==0)scoreboard.homeScore else scoreboard.awayScore)-prior
+  if(changed>0 && scoreboard.sport=="basketball"){
+   startScoreAward(team,changed,prior)
+  }else{
+   scoreAwardEpoch++
+   scoreAward=null
+   updateScorecard()
+  }
  }
  fun addFoul(team:Int){adjustFoul(team,1)}
  fun adjustFoul(team:Int,delta:Int){
@@ -407,19 +443,23 @@ class V2BroadcastService:Service(),ConnectChecker {
    lastScorecardImageState=null
    lastScorecardVisible=null
    lastScoreAlpha=null
+   lastRenderedAward=null
+   lastGraphicsStyle=-1
    updateScorecard()
   }catch(_:Exception){notifyState("Video scoreboard overlay unavailable on this phone.")}
  }
  private fun updateScorecard(){
   val filter=scoreFilter?:return
-  if(lastScoreAlpha==scoreAlpha &&
-      lastScorecardImageState==scoreboard)return
+  if(lastScoreAlpha==scoreAlpha && lastRenderedAward==scoreAward &&
+      lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
   try{
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
-   filter.setImage(V2Scorecard.render(scoreboard,scoreAlpha))
+   filter.setImage(V2Scorecard.render(scoreboard,scoreAlpha,scoreAward,graphicsStyle))
    lastScorecardImageState=scoreboard.copy()
+   lastRenderedAward=scoreAward
+   lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
    lastScoreAlpha=scoreAlpha
    // No keyframe request for score changes or clock ticks.
@@ -540,6 +580,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   recoveryQueued=false
   ui.removeCallbacks(qualityTick)
   scoreTransitionEpoch++
+  scoreAwardEpoch++
+  scoreAward=null
   qualityPolling=false
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
