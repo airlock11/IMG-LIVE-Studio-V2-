@@ -10,7 +10,7 @@
  <uses-feature android:name="android.hardware.camera" android:required="false"/>
  <uses-feature android:name="android.hardware.microphone" android:required="false"/>
  <application android:label="${imgAppLabel}" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
-  <activity android:name=".MainActivity" android:exported="true">
+  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
   </activity>
   <activity android:name=".PrivateYoutubeCameraActivity" android:exported="false" />
