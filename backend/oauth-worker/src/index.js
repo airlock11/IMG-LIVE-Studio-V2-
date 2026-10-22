@@ -444,7 +444,8 @@ export default {async fetch(req,env){
      if(!url)return withCors(json({error:"private_ingest_resume_destination_invalid"},502),req);
      // RTMPS secret never persisted or included in readiness/HTML responses.
      return withCors(json({prepared:true,resumed:true,privacy:"private",
-      broadcastTitle:draft.title,rtmpsUrl:url,streamId:prior.stream_id,autoStart:false}),req);
+      broadcastTitle:draft.title,rtmpsUrl:url,streamId:prior.stream_id,
+      autoStart:item.contentDetails.enableAutoStart===true}),req);
     }catch(_){return withCors(json({error:"private_ingest_resume_api_unavailable"},502),req);}
    }
    // D1 claim precedes external writes: failed/ambiguous attempts cannot be
@@ -507,7 +508,7 @@ export default {async fetch(req,env){
     .bind(streamId,session,draftId).run();
    if(saved.meta?.changes!==1)return withCors(json({error:"private_ingest_session_revoked"},409),req);
    return withCors(json({prepared:true,privacy:"private",broadcastTitle:draft.title,
-    rtmpsUrl,streamId,autoStart:false}),req);
+    rtmpsUrl,streamId,autoStart:event.contentDetails.enableAutoStart===true}),req);
   }
 
   // Native-only global logout revokes the D1 session and cascades all linked
