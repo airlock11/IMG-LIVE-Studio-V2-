@@ -170,6 +170,9 @@ class V2BroadcastService:Service(),ConnectChecker {
     "Stop Upload",stop).build()).build()
  }
  fun activateForeground():Boolean {
+  refreshNetwork()
+  if(!networkReady){notifyState("No verified internet. Connect Wi-Fi or mobile data first.");return false}
+  if(!prepareCamera())return false
   if(foreground)return true
   if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED||
      checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
@@ -256,6 +259,9 @@ class V2BroadcastService:Service(),ConnectChecker {
     // Only retry a rejected non-creating request by explicitly tapping Start.
     attempted=false
     notifyState(error?:"Private YouTube upload preparation failed.")
+    // A failed preparation is not an active broadcast. Release foreground
+    // camera/microphone service state while keeping the V2 login untouched.
+    if(foreground){stopForeground(STOP_FOREGROUND_REMOVE);foreground=false;stopSelf()}
     return@post
    }
    try {
