@@ -239,3 +239,82 @@ test('logout rejects forged origin and wrong media type, and is idempotent',asyn
  assert.equal(empty.status,200);
  assert.equal((await empty.json()).signedOut,true);
 });
+
+test('Facebook is not reported connected after its real access token expiry',async()=>{
+ const env=makeEnv(),start=await authorize(env);
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>Response.json({access_token:'meta-temporary',expires_in:3600});
+  assert.equal((await call('/api/connections/facebook/callback?state='+start.state+'&code=abc',{},env)).status,200);
+  const before=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+  assert.equal((await before.json()).facebook.connected,true);
+  env.OAUTH_DB.execute("UPDATE oauth_accounts SET access_expires_at=? WHERE provider='facebook'",Date.now()-1000);
+  const after=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+  assert.equal((await after.json()).facebook.connected,false);
+ }finally{globalThis.fetch=original;}
+});
+test('expired YouTube access token refreshes server-side without exposing credentials',async()=>{
+ const env=makeEnv(),start=await authorize(env,'youtube');
+ const original=globalThis.fetch;
+ let refreshes=0;
+ try{
+  globalThis.fetch=async(target,options)=>{
+   assert.equal(target,'https://oauth2.googleapis.com/token');
+   if(options.body.get('grant_type')==='authorization_code')
+    return Response.json({access_token:'old-youtube-access',refresh_token:'private-youtube-refresh',token_type:'Bearer',expires_in:3600});
+   assert.equal(options.body.get('grant_type'),'refresh_token');
+   assert.equal(options.body.get('refresh_token'),'private-youtube-refresh');
+   assert.equal(options.body.get('client_secret'),env.GOOGLE_CLIENT_SECRET);
+   refreshes++;
+   return Response.json({access_token:'new-youtube-access',token_type:'Bearer',expires_in:7200});
+  };
+  assert.equal((await call('/api/connections/youtube/callback?state='+start.state+'&code=abc',{},env)).status,200);
+  const prior=env.OAUTH_DB.query("SELECT encrypted_token FROM oauth_accounts WHERE provider='youtube'")[0].encrypted_token;
+  env.OAUTH_DB.execute("UPDATE oauth_accounts SET access_expires_at=? WHERE provider='youtube'",Date.now()-1000);
+  const view=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+  assert.equal((await view.json()).youtube.connected,true);
+  const after=env.OAUTH_DB.query("SELECT encrypted_token,access_expires_at,refresh_retry_after FROM oauth_accounts WHERE provider='youtube'")[0];
+  assert.notEqual(after.encrypted_token,prior);
+  assert.doesNotMatch(after.encrypted_token,/private-youtube-refresh|new-youtube-access/);
+  assert.ok(after.access_expires_at>Date.now()+3600000);
+  assert.equal(after.refresh_retry_after,0);
+  assert.equal(refreshes,1);
+  const again=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+  assert.equal((await again.json()).youtube.connected,true);
+  assert.equal(refreshes,1);
+ }finally{globalThis.fetch=original;}
+});
+test('failed YouTube refresh is disconnected and cooldown prevents repeated token traffic',async()=>{
+ const env=makeEnv(),start=await authorize(env,'youtube');
+ const original=globalThis.fetch;
+ let refreshes=0;
+ try{
+  globalThis.fetch=async(target,options)=>{
+   assert.equal(target,'https://oauth2.googleapis.com/token');
+   if(options.body.get('grant_type')==='authorization_code')
+    return Response.json({access_token:'initial-access',refresh_token:'initial-refresh',token_type:'Bearer',expires_in:3600});
+   refreshes++;
+   return Response.json({error:'invalid_grant'},{status:400});
+  };
+  assert.equal((await call('/api/connections/youtube/callback?state='+start.state+'&code=abc',{},env)).status,200);
+  env.OAUTH_DB.execute("UPDATE oauth_accounts SET access_expires_at=? WHERE provider='youtube'",Date.now()-1000);
+  for(let i=0;i<3;i++){
+   const response=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+   assert.equal((await response.json()).youtube.connected,false);
+  }
+  assert.equal(refreshes,1);
+  const row=env.OAUTH_DB.query("SELECT refresh_retry_after FROM oauth_accounts WHERE provider='youtube'")[0];
+  assert.ok(row.refresh_retry_after>Date.now());
+ }finally{globalThis.fetch=original;}
+});
+test('token response with unknown lifetime fails closed and does not create a connection',async()=>{
+ const env=makeEnv(),start=await authorize(env);
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>Response.json({access_token:'token-without-expiry'});
+  const callback=await call('/api/connections/facebook/callback?state='+start.state+'&code=abc',{},env);
+  assert.equal(callback.status,502);
+  assert.equal((await callback.json()).error,'invalid_provider_token_lifetime');
+  assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_accounts').length,0);
+ }finally{globalThis.fetch=original;}
+});
