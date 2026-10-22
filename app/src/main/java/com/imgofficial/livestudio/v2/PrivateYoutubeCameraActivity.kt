@@ -185,84 +185,79 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private fun openOperatorSettings(){
   operatorSheet?.dismiss()
   val dialog=android.app.Dialog(this)
-  val panel=LinearLayout(this).apply{
+  val outer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
-   background=rounded(Color.rgb(15,34,30),19)
-   setPadding(dp(14),dp(10),dp(14),dp(12))
+   background=rounded(Color.rgb(18,31,27),17)
+   setPadding(dp(12),dp(8),dp(12),dp(8))
   }
-  val header=LinearLayout(this).apply{
-   orientation=LinearLayout.HORIZONTAL
+  val grip=View(this).apply{background=rounded(Color.rgb(98,128,111),3)}
+  val gripRow=FrameLayout(this)
+  gripRow.addView(grip,FrameLayout.LayoutParams(dp(42),dp(4),Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+  outer.addView(gripRow,LinearLayout.LayoutParams(-1,dp(10)))
+  val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+  header.addView(ink("BROADCAST TOOLS",16f).apply{
    gravity=Gravity.CENTER_VERTICAL
-  }
-  val title=TextView(this).apply{
-   text="BROADCAST SETTINGS";textSize=16f
-   setTextColor(Color.WHITE)
    setTypeface(typeface,android.graphics.Typeface.BOLD)
+  },LinearLayout.LayoutParams(0,dp(35),1f))
+  header.addView(darkButton("✕ CLOSE"){dialog.dismiss()},LinearLayout.LayoutParams(dp(66),dp(33)))
+  outer.addView(header)
+  val scrolling=android.widget.ScrollView(this).apply{
+   isFillViewport=false
+   isVerticalScrollBarEnabled=false
   }
-  header.addView(title,LinearLayout.LayoutParams(0,dp(32),1f))
-  val close=darkButton("✕"){dialog.dismiss()}.apply{contentDescription="Close Settings"}
-  header.addView(close,LinearLayout.LayoutParams(dp(42),dp(32)))
-  panel.addView(header)
-  val help=TextView(this).apply{
-   text="Live controls stay active behind this panel"
-   textSize=11f
-   setTextColor(Color.rgb(168,204,187))
+  val tools=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+  fun heading(label:String){
+   tools.addView(smallLabel(label).apply{gravity=Gravity.CENTER_VERTICAL},
+    LinearLayout.LayoutParams(-1,dp(21)).apply{topMargin=dp(3)})
   }
-  panel.addView(help,LinearLayout.LayoutParams(-1,dp(25)))
-  fun settingsAction(name:String,run:()->Unit):Button=darkButton(name,run).apply{
-   textSize=12f
-   background=rounded(Color.rgb(27,73,58),10)
+  fun tool(name:String,work:()->Unit)=darkButton(name,work).apply{textSize=12f}
+  fun pair(left:Button,right:Button){
+   val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+   line.addView(left,LinearLayout.LayoutParams(0,dp(43),1f))
+   line.addView(right,LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(7)})
+   tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  fun row(left:Button,right:Button){
-   val line=LinearLayout(this).apply{
-    orientation=LinearLayout.HORIZONTAL
-    gravity=Gravity.CENTER_VERTICAL
-   }
-   val p=LinearLayout.LayoutParams(0,dp(44),1f)
-   line.addView(left,p)
-   line.addView(right,LinearLayout.LayoutParams(0,dp(44),1f).apply{leftMargin=dp(7)})
-   panel.addView(line,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(5)})
-  }
-  lateinit var overlayToggle:Button
-  overlayToggle=settingsAction(if(broadcast?.scorecardVisible()==true)"◎ Hide scoreboard" else "◎ Show scoreboard"){
+  heading("CAMERA & ON-AIR GRAPHICS")
+  lateinit var overlayButton:Button
+  overlayButton=tool(if(broadcast?.scorecardVisible()==true)"HIDE SCOREBOARD" else "SHOW SCOREBOARD"){
    val svc=broadcast
    if(svc!=null){
     svc.setScorecardVisible(!svc.scorecardVisible())
-    overlayToggle.text=if(svc.scorecardVisible())"◎ Hide scoreboard" else "◎ Show scoreboard"
+    overlayButton.text=if(svc.scorecardVisible())"HIDE SCOREBOARD" else "SHOW SCOREBOARD"
    }
   }
-  row(overlayToggle,settingsAction("⟳ Switch camera"){
-   broadcast?.flipCamera()
-   refresh()
-  })
-  row(settingsAction("◷ Edit clock"){dialog.dismiss();editClock()},
-   settingsAction("↺ Reset clock"){
-    gameRunning=false;lastTick=0L;gameSeconds=600;updateGameClock()
-   })
-  val replay=settingsAction("Replay · Soon"){}
-  replay.isEnabled=false
-  replay.alpha=.4f
-  val media=settingsAction("Sponsors · Soon"){}
-  media.isEnabled=false
-  media.alpha=.4f
-  row(replay,media)
-  dialog.setContentView(panel)
-  dialog.window?.apply{
-   setBackgroundDrawableResource(android.R.color.transparent)
-   addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-   setDimAmount(.38f)
-   setGravity(Gravity.BOTTOM or Gravity.RIGHT)
+  pair(overlayButton,tool("SWITCH CAMERA"){broadcast?.flipCamera();refresh()})
+  heading("CLOCK & GAME")
+  pair(tool("EDIT GAME CLOCK"){dialog.dismiss();editClock()},
+   tool("RESET TO 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
+  if(intent.getStringExtra("img_sport")!="pickleball"){
+   heading("FOUL CORRECTIONS")
+   pair(tool("HOME FOUL −1"){broadcast?.adjustFoul(0,-1);refreshScoreboard()},
+    tool("AWAY FOUL −1"){broadcast?.adjustFoul(1,-1);refreshScoreboard()})
   }
+  heading("ADVANCED BROADCAST · COMING SOON")
+  val replay=tool("INSTANT REPLAY"){}
+  val sponsors=tool("SPONSOR OVERLAY"){}
+  replay.isEnabled=false;replay.alpha=.48f
+  sponsors.isEnabled=false;sponsors.alpha=.48f
+  pair(replay,sponsors)
+  scrolling.addView(tools)
+  outer.addView(scrolling,LinearLayout.LayoutParams(-1,0,1f))
+  dialog.setContentView(outer)
   dialog.setCanceledOnTouchOutside(true)
   dialog.setOnDismissListener{if(operatorSheet===dialog)operatorSheet=null}
   operatorSheet=dialog
   dialog.show()
   dialog.window?.apply{
    setBackgroundDrawableResource(android.R.color.transparent)
-   setLayout((resources.displayMetrics.widthPixels*.81f).toInt(),ViewGroup.LayoutParams.WRAP_CONTENT)
-   attributes=attributes.apply{gravity=Gravity.BOTTOM or Gravity.RIGHT; x=dp(9);y=dp(6)}
-   decorView.translationY=dp(245).toFloat()
-   decorView.animate().translationY(0f).setDuration(210).start()
+   addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+   setDimAmount(.28f)
+   val maxWidth=resources.displayMetrics.widthPixels
+   val maxHeight=resources.displayMetrics.heightPixels
+   setLayout(minOf((maxWidth*.72f).toInt(),dp(500)),minOf((maxHeight*.83f).toInt(),dp(340)))
+   attributes=attributes.apply{gravity=Gravity.BOTTOM or Gravity.RIGHT;x=dp(6);y=dp(4)}
+   decorView.translationY=dp(200).toFloat()
+   decorView.animate().translationY(0f).setDuration(190).start()
   }
  }
  private fun unavailableFeature(name:String){
