@@ -138,10 +138,12 @@ export default {async fetch(req,env){
     await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
     return json({error:"authorization_declined"},400);
    }
-   if(!code)return json({error:"missing_authorization_code"},400);
+   if(!code){
+    await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
+    return json({error:"missing_authorization_code"},400);
+   }
    if(!/^[A-Za-z0-9_-]{43}$/.test(attempt.session||""))return json({error:"invalid_session"},400);
    if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
-   if(u.searchParams.get("error"))return json({error:"authorization_declined"},400);
    // Exchange codes on the server only. Never return the token to the browser.
    let token;
    if(provider==="youtube"){
