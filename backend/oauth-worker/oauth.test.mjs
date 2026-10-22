@@ -68,3 +68,36 @@ test('session cookie uses secure host-only prefix and strict attributes', () => 
   assert.match(source, /HttpOnly; Secure; SameSite=None; Path=\//);
   assert.doesNotMatch(source, /"img_session="\+session/);
 });
+
+test('pairing cannot be read by another device session', async () => {
+  const pairingCode = 'B'.repeat(43);
+  const session = 'C'.repeat(43);
+  const otherSession = 'D'.repeat(43);
+  const hashBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pairingCode)));
+  const hash = Buffer.from(hashBytes).toString('base64url');
+  const stateStore = new Map([['pair:' + hash, JSON.stringify({session, provider:'facebook', status:'complete'})]]);
+  const sessionStore = new Map([
+    ['session:' + session, '{}'],
+    ['session:' + otherSession, '{}']
+  ]);
+  const env = {
+    ...configured,
+    OAUTH_STATE: {get: async key => stateStore.get(key) ?? null},
+    ACCOUNT_SESSIONS: {get: async key => sessionStore.get(key) ?? null}
+  };
+  const response = await call('/api/connections/facebook/pairing', {
+    method:'POST',
+    headers:{origin:appOrigin,'content-type':'application/json',cookie:'__Host-img_session=' + otherSession},
+    body:JSON.stringify({pairingCode})
+  },env);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).error, 'pairing_session_mismatch');
+});
+test('pairing cannot complete without an authenticated session', async () => {
+  const response = await call('/api/connections/youtube/pairing', {
+    method:'POST',
+    headers:{origin:appOrigin,'content-type':'application/json'},
+    body:JSON.stringify({pairingCode:'B'.repeat(43)})
+  });
+  assert.equal((await response.json()).status,'expired');
+});
