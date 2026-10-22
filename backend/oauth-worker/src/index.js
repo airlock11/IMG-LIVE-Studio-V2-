@@ -45,6 +45,8 @@ const youtubeTestActive=env=>{
 };
 const authEnabled=(env,provider)=>env.OAUTH_ENABLED==="true"||
  (provider==="youtube"&&youtubeTestActive(env));
+// Never permit private draft creation in general production mode.
+const privateDraftsEnabled=env=>env.YOUTUBE_DRAFT_ENABLED==="true"&&youtubeTestActive(env);
 
 const encryptionKey=async env=>{
  const encoded=env.TOKEN_ENCRYPTION_KEY;
@@ -223,8 +225,91 @@ export default {async fetch(req,env){
     reason:"live_api_accessible",
     broadcasts,
     // Stream creation, RTMP handoff, go-live and transitions are NOT implemented.
-    publishingConfigured:false
+    publishingConfigured:false,
+    canCreatePrivateDraft:privateDraftsEnabled(env)
    }),req);
+  }
+
+  // Explicit, rate-limited private draft creation. No stream/RTMP ingestion
+  // credentials are requested or sent to the Android app. Never go live here.
+  if(path==="/api/connections/youtube/private-draft"&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return withCors(json({error:"unsupported_media_type"},415),req);
+   if(!privateDraftsEnabled(env))return withCors(json({error:"private_drafts_disabled"},503),req);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
+   if(Number(req.headers.get("content-length")||0)>4096)return withCors(json({error:"request_too_large"},413),req);
+   const body=await req.json().catch(()=>null);
+   const title=typeof body?.title==="string"?body.title.trim():"";
+   const schedule=body?.scheduledStartTime;
+   const started=typeof schedule==="string"?Date.parse(schedule):NaN;
+   const requestId=body?.requestId;
+   if(body?.operatorConfirmed!==true||typeof body?.madeForKids!=="boolean"||
+      typeof requestId!=="string"||!/^[a-f0-9]{32}$/.test(requestId)||
+      title.length<5||title.length>100||/[\u0000-\u001f\u007f]/.test(title)||
+      typeof schedule!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(schedule)||
+      !Number.isFinite(started)||new Date(started).toISOString()!==schedule||
+      started<now()+10*60000||started>now()+7*86400000)
+    return withCors(json({error:"invalid_private_draft_request"},400),req);
+   const inputHash=await digest(JSON.stringify({title,scheduledStartTime:schedule,madeForKids:body.madeForKids}));
+   // Atomic idempotency claim plus small per-session quota. An unknown result
+   // from YouTube cannot be replayed under the same request ID.
+   const claimed=await env.OAUTH_DB.prepare(
+    "INSERT INTO youtube_private_draft_requests(session_id,request_id,payload_hash,state,title,scheduled_start,created_at) "+
+    "SELECT ?,?,?,'processing',?,?,? WHERE (SELECT COUNT(*) FROM youtube_private_draft_requests WHERE session_id=? AND created_at>?)<3 "+
+    "ON CONFLICT(session_id,request_id) DO NOTHING"
+   ).bind(session,requestId,inputHash,title,schedule,now(),session,now()-86400000).run();
+   if(claimed.meta?.changes!==1){
+    const existing=await env.OAUTH_DB.prepare("SELECT payload_hash,state,broadcast_id,title,scheduled_start FROM youtube_private_draft_requests WHERE session_id=? AND request_id=?")
+     .bind(session,requestId).first();
+    if(!existing)return withCors(json({error:"private_draft_limit_reached"},429),req);
+    if(existing.payload_hash!==inputHash)return withCors(json({error:"request_id_conflict"},409),req);
+    if(existing.state==="complete"&&existing.broadcast_id)
+     return withCors(json({created:true,alreadyCreated:true,privacy:"private",broadcast:{id:existing.broadcast_id,title:existing.title,scheduledStartTime:existing.scheduled_start},publishingConfigured:false}),req);
+    return withCors(json({error:"draft_request_"+existing.state},409),req);
+   }
+   const fail=async(error,status)=>{
+    await env.OAUTH_DB.prepare("UPDATE youtube_private_draft_requests SET state='failed' WHERE session_id=? AND request_id=? AND state='processing'")
+     .bind(session,requestId).run();
+    return withCors(json({error},status),req);
+   };
+   const connected=await status(env,session);
+   if(!connected.youtube.connected)return fail("youtube_not_connected",409);
+   const account=await env.OAUTH_DB.prepare("SELECT encrypted_token,access_expires_at FROM oauth_accounts WHERE session_id=? AND provider='youtube' AND expires_at>?")
+    .bind(session,now()).first();
+   if(!account||account.access_expires_at<now()+30000)return fail("youtube_token_expired",409);
+   let token;
+   try{token=await decryptTokens(env,account.encrypted_token);}catch(_){return fail("youtube_token_invalid",503);}
+   if(typeof token.access_token!=="string"||!token.access_token||
+      typeof token.channel_id!=="string"||!/^[A-Za-z0-9_-]{16,64}$/.test(token.channel_id))
+    return fail("youtube_channel_not_verified",409);
+   let response;
+   try{
+    response=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet%2Cstatus%2CcontentDetails",{
+     method:"POST",redirect:"error",
+     headers:{Authorization:"Bearer "+token.access_token,"Content-Type":"application/json",Accept:"application/json"},
+     body:JSON.stringify({
+      snippet:{title,scheduledStartTime:schedule},
+      status:{privacyStatus:"private",selfDeclaredMadeForKids:body.madeForKids},
+      contentDetails:{enableAutoStart:false,enableAutoStop:false}
+     })
+    });
+   }catch(_){return fail("youtube_draft_creation_unavailable",502);}
+   if(!response.ok){
+    if(response.status===401)return fail("youtube_reauthorization_required",401);
+    if(response.status===403)return fail("youtube_live_permission_denied",403);
+    if(response.status===429)return fail("youtube_rate_limited",429);
+    return fail("youtube_draft_creation_failed",502);
+   }
+   const result=await response.json().catch(()=>null);
+   const id=result?.id;
+   if(typeof id!=="string"||!/^[A-Za-z0-9_-]{8,100}$/.test(id)||
+      result?.status?.privacyStatus!=="private"||
+      result?.snippet?.channelId!==token.channel_id)
+    return fail("youtube_draft_confirmation_invalid",502);
+   const saved=await env.OAUTH_DB.prepare("UPDATE youtube_private_draft_requests SET state='complete',broadcast_id=? WHERE session_id=? AND request_id=? AND state='processing'")
+    .bind(id,session,requestId).run();
+   if(saved.meta?.changes!==1)return withCors(json({error:"draft_session_revoked"},409),req);
+   return withCors(json({created:true,alreadyCreated:false,privacy:"private",broadcast:{id,title,scheduledStartTime:schedule},publishingConfigured:false},201),req);
   }
 
   // Native-only global logout revokes the D1 session and cascades all linked
@@ -408,5 +493,6 @@ export default {async fetch(req,env){
    "DELETE FROM oauth_sessions WHERE expires_at<=?"
   ].map(sql=>env.OAUTH_DB.prepare(sql).bind(cutoff));
   await env.OAUTH_DB.batch(jobs);
+  await env.OAUTH_DB.prepare("DELETE FROM youtube_private_draft_requests WHERE created_at<=?").bind(cutoff-30*86400000).run();
  }
 };
