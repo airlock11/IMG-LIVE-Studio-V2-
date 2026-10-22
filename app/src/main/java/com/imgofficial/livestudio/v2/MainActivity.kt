@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
+import org.json.JSONObject
 import android.webkit.ValueCallback
 import android.webkit.WebSettings
 import androidx.webkit.WebViewCompat
@@ -56,6 +57,13 @@ class MainActivity : Activity() {
    settings.allowFileAccessFromFileURLs = false
    settings.allowUniversalAccessFromFileURLs = false
    webViewClient = object : WebViewClient() {
+    override fun onPageFinished(view: WebView, url: String?) {
+     super.onPageFinished(view, url)
+     if(url == "$origin/assets/connections.html" && BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
+      // Backend origin is injected only by the signed Android build, never from page URLs.
+      view.evaluateJavascript("window.IMGAccounts?.configure(" + JSONObject.quote(BuildConfig.OAUTH_BACKEND_URL) + "); window.IMGAccounts?.refresh().catch(()=>{});", null)
+     }
+    }
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
      return loader.shouldInterceptRequest(request.url)
     }
