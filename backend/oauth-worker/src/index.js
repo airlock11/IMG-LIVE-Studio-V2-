@@ -57,6 +57,7 @@ export default {async fetch(req,env){
   }
   const start=path.match(/^\/api\/connections\/(facebook|youtube)\/authorize$/);
   if(start&&method==="POST"){
+   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
    const provider=start[1];
    const id=provider==="youtube"?env.GOOGLE_CLIENT_ID:env.FACEBOOK_APP_ID;
    if(!id)return withCors(json({error:"provider_not_configured"},503),req,env);
