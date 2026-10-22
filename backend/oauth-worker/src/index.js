@@ -122,7 +122,13 @@ export default {async fetch(req,env){
    await env.OAUTH_STATE.delete(key);
    const attempt=JSON.parse(raw);
    if(attempt.provider!==provider)return json({error:"provider_mismatch"},400);
-   if(attempt.pairingHash){const pair=await env.OAUTH_STATE.get("pair:"+attempt.pairingHash);if(!pair||JSON.parse(pair).status==="cancelled")return json({error:"authorization_cancelled"},400);}
+   if(!attempt.pairingHash)return json({error:"missing_pairing_state"},400);
+   const pairingRecord=await env.OAUTH_STATE.get("pair:"+attempt.pairingHash);
+   if(!pairingRecord)return json({error:"pairing_expired"},400);
+   const pair=JSON.parse(pairingRecord);
+   if(pair.session!==attempt.session||pair.provider!==provider)return json({error:"pairing_mismatch"},403);
+   if(pair.status==="cancelled")return json({error:"authorization_cancelled"},400);
+   if(pair.status!=="pending")return json({error:"invalid_pairing_status"},400);
    if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
    if(u.searchParams.get("error"))return json({error:"authorization_declined"},400);
    // Exchange codes on the server only. Never return the token to the browser.
