@@ -84,7 +84,7 @@ const safeRtmps=(base,name)=>{
   if(url.protocol!=="rtmps:"||url.username||url.password||url.search||url.hash||
      (url.port&&url.port!=="443")||url.pathname!=="/live2"||
      !["a.rtmps.youtube.com","b.rtmps.youtube.com"].includes(url.hostname))return null;
-  return base.replace(/\\/$/,"")+"/"+name;
+  return (base.endsWith("/")?base.slice(0,-1):base)+"/"+name;
  }catch(_){return null;}
 };
 
