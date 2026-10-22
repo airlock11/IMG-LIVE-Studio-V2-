@@ -141,27 +141,89 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     }else android.widget.Toast.makeText(this,"Enter a valid MM:SS",android.widget.Toast.LENGTH_SHORT).show()
    }.setNegativeButton("Cancel",null).show()
  }
+ private var operatorSheet:android.app.Dialog?=null
  private fun openOperatorSettings(){
-  val service=broadcast
-  val choices=arrayOf(
-   if(service?.scorecardVisible()==true)"Hide scoreboard" else "Show scoreboard",
-   "Switch front / rear camera",
-   "Edit game clock",
-   "Reset game clock to 10:00",
-   "Replay (coming soon)",
-   "Sponsor & media (coming soon)"
-  )
-  android.app.AlertDialog.Builder(this).setTitle("IMG broadcast settings")
-   .setItems(choices){_,which->
-    when(which){
-     0->{service?.setScorecardVisible(!(service.scorecardVisible()));refreshScoreboard()}
-     1->{service?.flipCamera();refresh()}
-     2->editClock()
-     3->{gameSeconds=600;gameRunning=false;lastTick=0;updateGameClock()}
-     4->unavailableFeature("Instant replay")
-     5->unavailableFeature("Sponsor & media")
-    }
-   }.setNegativeButton("Close",null).show()
+  operatorSheet?.dismiss()
+  val dialog=android.app.Dialog(this)
+  val panel=LinearLayout(this).apply{
+   orientation=LinearLayout.VERTICAL
+   background=rounded(Color.rgb(15,34,30),19)
+   setPadding(dp(14),dp(10),dp(14),dp(12))
+  }
+  val header=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL
+   gravity=Gravity.CENTER_VERTICAL
+  }
+  val title=TextView(this).apply{
+   text="BROADCAST SETTINGS";textSize=16f
+   setTextColor(Color.WHITE)
+   setTypeface(typeface,android.graphics.Typeface.BOLD)
+  }
+  header.addView(title,LinearLayout.LayoutParams(0,dp(32),1f))
+  val close=darkButton("✕"){dialog.dismiss()}.apply{contentDescription="Close Settings"}
+  header.addView(close,LinearLayout.LayoutParams(dp(42),dp(32)))
+  panel.addView(header)
+  val help=TextView(this).apply{
+   text="Live controls stay active behind this panel"
+   textSize=11f
+   setTextColor(Color.rgb(168,204,187))
+  }
+  panel.addView(help,LinearLayout.LayoutParams(-1,dp(25)))
+  fun settingsAction(name:String,run:()->Unit):Button=darkButton(name,run).apply{
+   textSize=12f
+   background=rounded(Color.rgb(27,73,58),10)
+  }
+  fun row(left:Button,right:Button){
+   val line=LinearLayout(this).apply{
+    orientation=LinearLayout.HORIZONTAL
+    gravity=Gravity.CENTER_VERTICAL
+   }
+   val p=LinearLayout.LayoutParams(0,dp(44),1f)
+   line.addView(left,p)
+   line.addView(right,LinearLayout.LayoutParams(0,dp(44),1f).apply{leftMargin=dp(7)})
+   panel.addView(line,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(5)})
+  }
+  lateinit var overlayToggle:Button
+  overlayToggle=settingsAction(if(broadcast?.scorecardVisible()==true)"◎ Hide scoreboard" else "◎ Show scoreboard"){
+   val svc=broadcast
+   if(svc!=null){
+    svc.setScorecardVisible(!svc.scorecardVisible())
+    overlayToggle.text=if(svc.scorecardVisible())"◎ Hide scoreboard" else "◎ Show scoreboard"
+   }
+  }
+  row(overlayToggle,settingsAction("⟳ Switch camera"){
+   broadcast?.flipCamera()
+   refresh()
+  })
+  row(settingsAction("◷ Edit clock"){dialog.dismiss();editClock()},
+   settingsAction("↺ Reset clock"){
+    gameRunning=false;lastTick=0L;gameSeconds=600;updateGameClock()
+   })
+  val replay=settingsAction("Replay · Soon"){}
+  replay.isEnabled=false
+  replay.alpha=.4f
+  val media=settingsAction("Sponsors · Soon"){}
+  media.isEnabled=false
+  media.alpha=.4f
+  row(replay,media)
+  dialog.setContentView(panel)
+  dialog.window?.apply{
+   setBackgroundDrawableResource(android.R.color.transparent)
+   addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+   setDimAmount(.38f)
+   setGravity(Gravity.BOTTOM or Gravity.RIGHT)
+  }
+  dialog.setCanceledOnTouchOutside(true)
+  dialog.setOnDismissListener{if(operatorSheet===dialog)operatorSheet=null}
+  operatorSheet=dialog
+  dialog.show()
+  dialog.window?.apply{
+   setBackgroundDrawableResource(android.R.color.transparent)
+   setLayout((resources.displayMetrics.widthPixels*.81f).toInt(),ViewGroup.LayoutParams.WRAP_CONTENT)
+   attributes=attributes.apply{gravity=Gravity.BOTTOM or Gravity.RIGHT; x=dp(9);y=dp(6)}
+   decorView.translationY=dp(245).toFloat()
+   decorView.animate().translationY(0f).setDuration(210).start()
+  }
  }
  private fun unavailableFeature(name:String){
   android.app.AlertDialog.Builder(this).setTitle(name)
@@ -255,14 +317,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val row=LinearLayout(this).apply{
     orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
    }
-   row.addView(greenButton("−"){broadcast?.adjustScore(team,-1);refreshScoreboard()},
-    LinearLayout.LayoutParams(dp(33),dp(33)))
+   row.addView(greenButton("−1"){broadcast?.adjustScore(team,-1);refreshScoreboard()},
+    LinearLayout.LayoutParams(dp(42),dp(40)))
    val score=ink("0",22f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
    if(team==0)homeDisplay=score else awayDisplay=score
    row.addView(score,LinearLayout.LayoutParams(0,-1,1f))
    val points=if(intent.getStringExtra("img_sport")=="pickleball") listOf(1) else listOf(1,2,3)
-   for(p in points)row.addView(greenButton("+$p"){broadcast?.adjustScore(team,p);refreshScoreboard()},
-    LinearLayout.LayoutParams(dp(33),dp(33)).apply{leftMargin=dp(3)})
+   for(p in points){
+    val button=greenButton("+$p"){broadcast?.adjustScore(team,p);refreshScoreboard()}
+    // Most frequent +1 gets priority; secondary score actions are compact.
+    button.textSize=if(p==1)15f else 12f
+    if(p==1)button.setTypeface(button.typeface,android.graphics.Typeface.BOLD)
+    row.addView(button,LinearLayout.LayoutParams(dp(if(p==1)55 else 40),dp(40))
+     .apply{leftMargin=dp(5)})
+   }
    c.addView(row,LinearLayout.LayoutParams(-1,0,1f))
    return c
   }
@@ -276,7 +344,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   body.addView(scoreGrid,matchHeight(if(pickleball)0.42f else 0.29f))
   val fouls=LinearLayout(this).apply{
    orientation=LinearLayout.HORIZONTAL
-   setPadding(0,gap,0,0)
+   setPadding(0,dp(3),0,0)
    gravity=Gravity.CENTER_VERTICAL
   }
   if(intent.getStringExtra("img_sport")!="pickleball"){
@@ -430,6 +498,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  override fun onDestroy(){
   timer.removeCallbacks(tick)
+  operatorSheet?.dismiss()
+  operatorSheet=null
   if(bound){
    broadcast?.unregister(this)
    broadcast?.detachPreview()
