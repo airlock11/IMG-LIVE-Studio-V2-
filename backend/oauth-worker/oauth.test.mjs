@@ -6,6 +6,7 @@ import {DatabaseSync} from 'node:sqlite';
 const source=await readFile(new URL('./src/index.js',import.meta.url),'utf8');
 const schema=await readFile(new URL('./migrations/0001_oauth_transactional.sql',import.meta.url),'utf8');
 const schema2=await readFile(new URL('./migrations/0002_access_token_lifecycle.sql',import.meta.url),'utf8');
+const schema3=await readFile(new URL('./migrations/0003_youtube_private_drafts.sql',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const api='https://oauth.example.test';
 const appOrigin='https://appassets.androidplatform.net';
@@ -16,6 +17,7 @@ function memoryD1(){
  db.exec('PRAGMA foreign_keys=ON;');
  db.exec(schema);
  db.exec(schema2);
+ db.exec(schema3);
  const make=(sql,args=[])=>({
   sql,args,
   bind(...values){return make(sql,values)},
@@ -493,4 +495,142 @@ test('YouTube Live readiness is blocked after the temporary OAuth window expires
  const response=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin}},env);
  assert.equal(response.status,503);
  assert.equal((await response.json()).error,'oauth_not_enabled');
+});
+
+async function seedConnectedYoutube(env){
+ const authorization=await authorize(env,'youtube');
+ const session=authorization.cookie.split('=')[1];
+ const key='A'.repeat(43);
+ // AES-GCM encrypted mock OAuth grant exactly as stored by the callback.
+ const bytes=new Uint8Array(32);
+ const cryptoKey=await crypto.subtle.importKey('raw',bytes,'AES-GCM',false,['encrypt']);
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const grant={access_token:'private-test-access',channel_id:'UC1234567890123456789012',expires_at:Date.now()+3600000};
+ const cipher=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},cryptoKey,new TextEncoder().encode(JSON.stringify(grant))));
+ const encode=b=>Buffer.from(b).toString('base64url');
+ const encrypted=JSON.stringify({version:1,iv:encode(iv),ciphertext:encode(cipher)});
+ env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at) VALUES(?,?,?,?,?)',session,'youtube',encrypted,Date.now()+3600000,Date.now()+3600000);
+ return authorization;
+}
+const draftPayload=(id='a'.repeat(32),overrides={})=>({
+ title:'IMG LIVE Studio Private Camera Test',
+ scheduledStartTime:new Date(Date.now()+3600000).toISOString(),
+ madeForKids:false,
+ operatorConfirmed:true,
+ requestId:id,
+ ...overrides
+});
+const activePrivateDraftEnv=()=>makeEnv({
+ OAUTH_ENABLED:'false',
+ YOUTUBE_TEST_ENABLED:'true',
+ YOUTUBE_DRAFT_ENABLED:'true',
+ YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()
+});
+test('YouTube private draft endpoint is disabled without explicit staging gate',async()=>{
+ const env=makeEnv({YOUTUBE_DRAFT_ENABLED:'false'});
+ const res=await call('/api/connections/youtube/private-draft',{method:'POST',headers:ctype,body:JSON.stringify(draftPayload())},env);
+ assert.equal(res.status,503);
+ assert.equal((await res.json()).error,'private_drafts_disabled');
+});
+test('private YouTube draft creation requires Android origin and explicit confirmation',async()=>{
+ const env=activePrivateDraftEnv();
+ const attack=await call('/api/connections/youtube/private-draft',{method:'POST',headers:{...ctype,origin:'https://evil.test'},body:JSON.stringify(draftPayload())},env);
+ assert.equal(attack.status,403);
+ const start=await seedConnectedYoutube(env);
+ for(const changed of [{operatorConfirmed:false},{madeForKids:null},{title:'X'},{requestId:'bad'},{scheduledStartTime:new Date(Date.now()+5000).toISOString()}]){
+  const res=await call('/api/connections/youtube/private-draft',{method:'POST',headers:{...ctype,cookie:start.cookie},body:JSON.stringify(draftPayload('b'.repeat(32),changed))},env);
+  assert.equal(res.status,400);
+ }
+ assert.equal(env.OAUTH_DB.query('SELECT * FROM youtube_private_draft_requests').length,0);
+});
+test('private YouTube broadcast draft is strictly private, idempotent, and token-free',async()=>{
+ const env=activePrivateDraftEnv();
+ const start=await seedConnectedYoutube(env);
+ const body=draftPayload();
+ const original=globalThis.fetch;
+ let created=0;
+ try{
+  globalThis.fetch=async (target,options)=>{
+   if(target!=='https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet%2Cstatus%2CcontentDetails')
+    throw Error('Unexpected YouTube endpoint '+target);
+   created++;
+   assert.equal(options.method,'POST');
+   assert.equal(options.redirect,'error');
+   assert.equal(options.headers.Authorization,'Bearer private-test-access');
+   const payload=JSON.parse(options.body);
+   assert.equal(payload.status.privacyStatus,'private');
+   assert.equal(payload.status.selfDeclaredMadeForKids,false);
+   assert.equal(payload.contentDetails.enableAutoStart,false);
+   assert.ok(!JSON.stringify(payload).includes('streamName'));
+   return Response.json({id:'privateVideo123',snippet:{channelId:'UC1234567890123456789012'},status:{privacyStatus:'private'}});
+  };
+  const headers={...ctype,cookie:start.cookie};
+  const one=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(body)},env);
+  assert.equal(one.status,201);
+  const createdBody=await one.json();
+  assert.equal(createdBody.created,true);
+  assert.equal(createdBody.broadcast.title,body.title);
+  assert.equal(createdBody.privacy,'private');
+  assert.equal(createdBody.publishingConfigured,false);
+  assert.ok(!JSON.stringify(createdBody).includes('private-test-access'));
+  const retry=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(body)},env);
+  assert.equal(retry.status,200);
+  assert.equal((await retry.json()).alreadyCreated,true);
+  assert.equal(created,1);
+  const conflict=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify({...body,title:'Different Title'})},env);
+  assert.equal(conflict.status,409);
+  assert.equal((await conflict.json()).error,'request_id_conflict');
+ }finally{globalThis.fetch=original;}
+});
+test('private YouTube draft creates no duplicates on failed or simultaneous requests',async()=>{
+ const env=activePrivateDraftEnv();
+ const start=await seedConnectedYoutube(env),body=draftPayload();
+ const original=globalThis.fetch;
+ let finish;
+ const gate=new Promise(resolve=>finish=resolve);
+ let calls=0;
+ try{
+  globalThis.fetch=async()=>{calls++;await gate;return Response.json({id:'privateVideo2',snippet:{channelId:'UC1234567890123456789012'},status:{privacyStatus:'private'}})};
+  const headers={...ctype,cookie:start.cookie};
+  const first=call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(body)},env);
+  // Allow the first request to atomically claim the key before another tries.
+  for(let i=0;i<100&&calls===0;i++)await new Promise(resolve=>setTimeout(resolve,1));
+  assert.equal(calls,1);
+  const second=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(body)},env);
+  assert.equal(second.status,409);
+  assert.equal((await second.json()).error,'draft_request_processing');
+  finish();
+  assert.equal((await first).status,201);
+  assert.equal(calls,1);
+ }finally{finish?.();globalThis.fetch=original;}
+});
+test('private draft refuses YouTube responses that are public or belong to another channel',async()=>{
+ const env=activePrivateDraftEnv();
+ const start=await seedConnectedYoutube(env);
+ const original=globalThis.fetch;
+ try{
+  globalThis.fetch=async()=>Response.json({id:'unexpectedVideo',snippet:{channelId:'UCanotherchannel99999'},status:{privacyStatus:'public'}});
+  const result=await call('/api/connections/youtube/private-draft',{method:'POST',headers:{...ctype,cookie:start.cookie},body:JSON.stringify(draftPayload())},env);
+  assert.equal(result.status,502);
+  assert.equal((await result.json()).error,'youtube_draft_confirmation_invalid');
+  assert.equal(env.OAUTH_DB.query("SELECT state FROM youtube_private_draft_requests")[0].state,'failed');
+ }finally{globalThis.fetch=original;}
+});
+test('draft rate limit prevents more than three user initiated private drafts per day',async()=>{
+ const env=activePrivateDraftEnv();
+ const start=await seedConnectedYoutube(env);
+ const original=globalThis.fetch;
+ let sent=0;
+ try{
+  globalThis.fetch=async()=>Response.json({id:'privateVideo'+(++sent),snippet:{channelId:'UC1234567890123456789012'},status:{privacyStatus:'private'}});
+  const headers={...ctype,cookie:start.cookie};
+  for(let i=0;i<3;i++){
+   const r=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(draftPayload(String(i).repeat(32)))},env);
+   assert.equal(r.status,201);
+  }
+  const final=await call('/api/connections/youtube/private-draft',{method:'POST',headers,body:JSON.stringify(draftPayload('f'.repeat(32)))},env);
+  assert.equal(final.status,429);
+  assert.equal((await final.json()).error,'private_draft_limit_reached');
+  assert.equal(sent,3);
+ }finally{globalThis.fetch=original;}
 });
