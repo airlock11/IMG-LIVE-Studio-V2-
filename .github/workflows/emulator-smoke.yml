@@ -11,9 +11,11 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # A new push must not cancel an emulator boot already in progress.
+    # Run checks per commit SHA so each APK can reach a conclusive result.
     concurrency:
-      group: img-v2-emulator
-      cancel-in-progress: true
+      group: img-v2-emulator-${{ github.sha }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
