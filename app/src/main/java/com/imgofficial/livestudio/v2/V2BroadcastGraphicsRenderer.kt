@@ -112,6 +112,66 @@ internal object V2BroadcastGraphicsRenderer {
   shape(c,p,x+3,y+h-5,w-6f,2f,color)
   c.restoreToCount(save)
  }
+ private fun identityTransition(c:Canvas,p:Paint,a:V2Scorecard.Award?,
+  team:Int,x:Float,y:Float,w:Float,h:Float,style:Int,accent:Int,
+  teamColor:Int,name:String,logo:Bitmap?){
+  if(a==null||a.team!=team)return
+  val t=a.progress.coerceIn(0f,1f)
+  if(t>=.89f)return
+  val on=(t/.14f).coerceIn(0f,1f)
+  val off=((.86f-t)/.15f).coerceIn(0f,1f)
+  val reveal=min(on,off)
+  val save=c.save()
+  c.clipRect(x,y,x+w,y+h)
+  // A metal shutter wipes across the SCORING TEAM NAMEPLATE; this is
+  // separate from the +points score-cell takeover and never stops the clock.
+  val rightToLeft=style in listOf(0,3,4,6,8,11)
+  val visible=w*reveal
+  val start=if(rightToLeft)x+w-visible else x
+  c.clipRect(start,y,start+visible,y+h)
+  val tone=if(style in listOf(1,5,9))mix(teamColor,WHITE,.26f) else teamColor
+  bevel(c,p,x,y,w,h,tone,mix(teamColor,INK,.78f),
+   if(style in listOf(2,7))h*.40f else 3f,accent)
+  hardware(c,p,x,y,w,h,WHITE)
+  // Dedicated glowing light stripe tracks the leading edge of the wipe.
+  val edge=if(rightToLeft)start else start+visible
+  p.color=Color.argb((130+95*reveal).roundToInt(),255,244,200)
+  p.strokeWidth=max(4f,h*.075f)
+  c.drawLine(edge,y,edge-h*.22f,y+h,p)
+  val logoX=if(style in listOf(2,5,7))x+w*.42f else x+w*.18f
+  val rad=min(h*.38f,w*.14f)
+  mark(c,p,logoX,y+h*.48f,rad,teamColor,name,logo)
+  label(c,p,name.take(10).uppercase(),x+w*.62f,y+h*.58f,
+   min(h*.42f,w*.115f),WHITE,Paint.Align.CENTER,w*.47f)
+  shape(c,p,x+w*.46f,y+h*.78f,w*.46f,h*.055f,accent,2f)
+  // Distinct choreography / moving light surfaces per graphic family.
+  when(style){
+   0,6->hardware(c,p,x+w*(.1f+t*.67f),y,w*.2f,h,accent)
+   1,8->{
+    for(i in 0..3)shape(c,p,x+w*.13f+i*w*.09f,y+h*.92f,
+     w*.055f,h*.04f,if(i<=t*4)accent else 0xFF283039.toInt(),2f)
+   }
+   2,5->{
+    p.style=Paint.Style.STROKE;p.strokeWidth=max(2f,h*.05f)
+    p.color=Color.argb(145,255,239,201)
+    c.drawCircle(x+w*.42f,y+h*.48f,rad+max(1f,t*28f),p)
+    p.style=Paint.Style.FILL
+   }
+   3,7->{
+    val sl=Path().apply{
+     moveTo(x+w*(t-.05f),y);lineTo(x+w*(t+.14f),y)
+     lineTo(x+w*(t-.02f),y+h);lineTo(x+w*(t-.18f),y+h);close()
+    }
+    p.color=Color.argb(85,255,255,255);c.drawPath(sl,p)
+   }
+   4,10->{
+    p.color=Color.argb(120,255,227,146)
+    c.drawRoundRect(RectF(x+w*.46f,y+h*.13f,x+w*.91f,y+h*.27f),4f,4f,p)
+   }
+   else->{}
+  }
+  c.restoreToCount(save)
+ }
  private fun pointsFlash(c:Canvas,p:Paint,a:V2Scorecard.Award?,team:Int,
   x:Float,y:Float,w:Float,h:Float,accent:Int,style:Int){
   if(a==null||a.team!=team)return
@@ -192,6 +252,7 @@ internal object V2BroadcastGraphicsRenderer {
     c.drawCircle(x+w*.08f+j*w*.052f,y+h*.84f,max(2.2f,h*.027f),p)
    }
   }
+  identityTransition(c,p,award,index,x,y,w*.70f,h,style,accent,color,name,logo)
   pointsFlash(c,p,award,index,x+w*.71f,y+5f,w*.25f,h-10f,accent,style)
  }
  private fun wide(c:Canvas,p:Paint,score:V2Scorecard.State,a:V2Scorecard.Award?,
@@ -250,6 +311,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,x+20f,181f,138f,93f,0xFFE3E9EA.toInt(),0xFF81939C.toInt(),3f,SILVER)
     label(c,p,pts.toString(),x+89f,251f,69f,INK)
     label(c,p,"FOULS: ${foul}",x+89f,306f,22f)
+    identityTransition(c,p,a,i,x,38f,178f,134f,style,accent,color,teamName,logos[i])
     pointsFlash(c,p,a,i,x+20f,181f,138f,93f,accent,style)
    }
    clock(c,p,s,82f,333f,256f,50f,style,accent)
