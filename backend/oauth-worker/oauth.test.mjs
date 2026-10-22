@@ -799,9 +799,49 @@ test('private ingest binds only verified private draft and never transitions liv
   assert.deepEqual(called.map(x=>x.method),['GET','POST','POST']);
   assert.equal(called.some(x=>x.url.includes('transition')),false);
   assert.equal(env.OAUTH_DB.query('SELECT state FROM youtube_private_ingest_attempts')[0].state,'complete');
-  const retry=await call('/api/connections/youtube/private-ingest',opts,env);
-  assert.equal(retry.status,409);
-  assert.equal(called.length,3);
+  // Resumption is deliberately read-only: recover the existing bound feed
+  // from Google without creating/binding additional YouTube resources.
+  globalThis.fetch=async(url,options)=>{
+   called.push({url,method:options.method,redirect:options.redirect});
+   assert.equal(options.method,'GET');
+   assert.equal(options.redirect,'manual');
+   if(url.includes('liveBroadcasts?part='))return Response.json({items:[{
+    id:'privateVideo123',
+    snippet:{channelId:'UC1234567890123456789012'},
+    status:{privacyStatus:'private',lifeCycleStatus:'ready'},
+    contentDetails:{boundStreamId:'youtubeStream1'}
+   }]});
+   if(url.includes('liveStreams?part='))return Response.json({items:[{
+    id:'youtubeStream1',snippet:{channelId:'UC1234567890123456789012'},
+    cdn:{ingestionType:'rtmp',ingestionInfo:{
+     rtmpsIngestionAddress:'rtmps://a.rtmps.youtube.com/live2',streamName:'private_stream_123'
+    }},status:{streamStatus:'inactive'}
+   }]});
+   throw Error('Unexpected resume path');
+  };
+  const resumed=await call('/api/connections/youtube/private-ingest',opts,env);
+  assert.equal(resumed.status,200);
+  const restored=await resumed.json();
+  assert.equal(restored.resumed,true);
+  assert.equal(restored.autoStart,false);
+  assert.equal(restored.privacy,'private');
+  assert.equal(restored.rtmpsUrl,data.rtmpsUrl);
+  assert.deepEqual(called.map(x=>x.method),['GET','POST','POST','GET','GET']);
+  assert.equal(called.some(x=>x.url.includes('transition')),false);
+  assert.equal(env.OAUTH_DB.query('SELECT COUNT(*) AS n FROM youtube_private_ingest_attempts')[0].n,1);
+
+  // If the Google event becomes public, returning its ingest key is forbidden.
+  globalThis.fetch=async(url,options)=>{
+   called.push({url,method:options.method});
+   assert.equal(options.method,'GET');
+   return Response.json({items:[{id:'privateVideo123',
+    snippet:{channelId:'UC1234567890123456789012'},
+    status:{privacyStatus:'public',lifeCycleStatus:'ready'},
+    contentDetails:{boundStreamId:'youtubeStream1'}}]});
+  };
+  const publicEvent=await call('/api/connections/youtube/private-ingest',opts,env);
+  assert.equal(publicEvent.status,409);
+  assert.equal((await publicEvent.json()).error,'private_ingest_resume_not_private_ready');
  }finally{globalThis.fetch=prior}
 });
 
