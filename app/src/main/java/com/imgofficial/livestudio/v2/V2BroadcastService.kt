@@ -22,6 +22,7 @@ import android.view.SurfaceView
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.library.generic.GenericStream
+import com.pedro.encoder.input.gl.render.filters.`object`.ImageFilterRender
 
 /**
  * V2 private broadcast lives in a user-started CAMERA+MICROPHONE foreground
@@ -39,6 +40,9 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val ui=Handler(Looper.getMainLooper())
  private var listeners=mutableSetOf<Listener>()
  private var stream:GenericStream?=null
+ private var scoreboard=V2Scorecard.State()
+ private var scoreFilter:ImageFilterRender?=null
+ private var scoreVisible=true
  private var auth:NativeOAuthClient?=null
  private var preview:SurfaceView?=null
  private var wakeLock:PowerManager.WakeLock?=null
@@ -219,6 +223,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     engine.getStreamClient().setLogs(false)
     stream=engine
     applyFraming()
+    applyScorecard()
     notifyState("Camera and microphone ready. Portrait output • 9:16.")
     true
    }
@@ -280,6 +285,56 @@ class V2BroadcastService:Service(),ConnectChecker {
     stopBroadcast()
    }
   }}
+ }
+ fun configureScorecard(sport:String,home:String,away:String){
+  if(running||connecting)return // configure at game setup only
+  scoreboard=V2Scorecard.State(
+   sport=if(sport=="pickleball")"pickleball" else "basketball",
+   home=home.trim().take(18).ifEmpty{"HOME"},
+   away=away.trim().take(18).ifEmpty{"AWAY"}
+  )
+  updateScorecard()
+ }
+ fun scorecard():V2Scorecard.State=scoreboard.copy()
+ fun scorecardVisible()=scoreVisible
+ fun adjustScore(team:Int,delta:Int){
+  if(team !in 0..1 || delta !in -3..3 || delta==0)return
+  scoreboard=if(team==0)scoreboard.copy(homeScore=(scoreboard.homeScore+delta).coerceIn(0,999))
+   else scoreboard.copy(awayScore=(scoreboard.awayScore+delta).coerceIn(0,999))
+  updateScorecard()
+ }
+ fun addFoul(team:Int){
+  if(scoreboard.sport!="basketball"||team !in 0..1)return
+  scoreboard=if(team==0)scoreboard.copy(homeFouls=(scoreboard.homeFouls+1).coerceAtMost(99))
+   else scoreboard.copy(awayFouls=(scoreboard.awayFouls+1).coerceAtMost(99))
+  updateScorecard()
+ }
+ fun nextPeriod(){
+  scoreboard=scoreboard.copy(period=(scoreboard.period+1).coerceAtMost(9),
+   homeFouls=if(scoreboard.sport=="basketball")0 else scoreboard.homeFouls,
+   awayFouls=if(scoreboard.sport=="basketball")0 else scoreboard.awayFouls)
+  updateScorecard()
+ }
+ fun setScorecardVisible(visible:Boolean){scoreVisible=visible;updateScorecard()}
+ private fun applyScorecard(){
+  val gl=stream?.getGlInterface()?:return
+  try{
+   if(scoreFilter==null){
+    scoreFilter=ImageFilterRender().also{
+     it.setScale(94f,16f)
+     it.setPosition(3f,3.5f)
+     gl.addFilter(it)
+    }
+   }
+   updateScorecard()
+  }catch(_:Exception){notifyState("Video scoreboard overlay unavailable on this phone.")}
+ }
+ private fun updateScorecard(){
+  val filter=scoreFilter?:return
+  try{
+   filter.setImage(if(scoreVisible)V2Scorecard.render(scoreboard) else null)
+   stream?.requestKeyframe()
+  }catch(_:Exception){notifyState("Unable to redraw native video scoreboard.")}
  }
  fun flipCamera(){
   try{
@@ -399,6 +454,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
   stream=null
+  scoreFilter=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
   notifyState("Upload stopped. Your YouTube account remains connected.")
