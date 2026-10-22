@@ -28,7 +28,14 @@
    if(!item) return;
    clearTimeout(item.timeout);
    pending.delete(response.requestId);
-   if(response.ok!==true){item.reject(Error("IMG login service: "+String(response.error||"request failed")));return;}
+   if(response.ok!==true){
+    const code=String(response.error||"request failed");
+    const message=["oauth_not_enabled","service_not_configured","provider_not_configured"].includes(code)
+      ?"Facebook and YouTube login is not available yet. IMG is completing secure setup."
+      :"IMG login service: "+code;
+    item.reject(Error(message));
+    return;
+   }
    item.resolve(response.data);
   };
  }
