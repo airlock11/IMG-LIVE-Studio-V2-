@@ -14,7 +14,7 @@ android {
   versionName = "0.1.0"
   val oauthOrigin = providers.gradleProperty("imgOAuthBackendUrl").orElse("").get()
   require(oauthOrigin.isEmpty() || (oauthOrigin.startsWith("https://") && !oauthOrigin.contains('"') && !oauthOrigin.contains('\\'))) { "Invalid trusted OAuth backend origin" }
-  buildConfigField("String", "OAUTH_BACKEND_URL", "\\\"$oauthOrigin\\\"")
+  buildConfigField("String", "OAUTH_BACKEND_URL", "\"$oauthOrigin\"")
  }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
  kotlinOptions { jvmTarget = "17" }
