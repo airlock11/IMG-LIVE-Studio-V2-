@@ -41,6 +41,18 @@ test('login remains unavailable until native transport is enabled',async()=>{
  await assert.rejects(accounts.connect('facebook'),/not configured/i);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
+test('V2 checks saved YouTube session without displaying a false sign-out',async()=>{
+ const {accounts}=controller(cmd=>{
+  assert.equal(cmd.action,'refresh');
+  return {data:{facebook:{connected:false},youtube:{connected:true}}};
+ });
+ assert.equal(accounts.getStatus().youtube,'verifying');
+ assert.notEqual(accounts.getStatus().youtube,'connected');
+ accounts.enableNative();
+ const result=await accounts.refresh();
+ assert.equal(result.youtube,'connected');
+});
+
 test('refresh only trusts native account verification response',async()=>{
  const {accounts,outbound}=controller(cmd=>{
   assert.equal(cmd.action,'refresh');
