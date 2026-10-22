@@ -67,7 +67,8 @@ class MainActivity : Activity() {
    webViewClient = object : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
      super.onPageFinished(view, url)
-     if(url == "$origin/assets/index.html" || url == "$origin/assets/connections.html") {
+     val localPage=url?.substringBefore('#')?.substringBefore('?')
+     if(localPage == "$origin/assets/index.html" || localPage == "$origin/assets/connections.html") {
       view.evaluateJavascript("document.documentElement.classList.add('img-native-app');", null)
       if(BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
        // Verified YouTube account state is available directly in Broadcast
