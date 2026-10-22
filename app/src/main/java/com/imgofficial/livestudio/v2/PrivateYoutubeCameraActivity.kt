@@ -203,21 +203,94 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    clockToggleButton.text=if(gameRunning)"Ⅱ PAUSE" else "▶ START"
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
  }
- private fun editClock(){
-  val input=android.widget.EditText(this).apply{
-   setSingleLine(true);setText("%02d:%02d".format(gameSeconds/60,gameSeconds%60))
-   inputType=android.text.InputType.TYPE_CLASS_DATETIME
+ // Compact, dark broadcast UI dialogs replace Android's generic gray system dialogs.
+ private fun customSheet(heading:String):Pair<android.app.Dialog,LinearLayout>{
+  val dialog=android.app.Dialog(this)
+  val panel=LinearLayout(this).apply{
+   orientation=LinearLayout.VERTICAL
+   background=rounded(Color.rgb(17,30,27),17)
+   setPadding(dp(15),dp(12),dp(15),dp(14))
   }
-  android.app.AlertDialog.Builder(this).setTitle("Game clock (MM:SS)")
-   .setView(input)
-   .setPositiveButton("Save"){_,_->
-    val p=input.text.toString().trim().split(':')
-    val mm=p.getOrNull(0)?.toIntOrNull()
-    val ss=p.getOrNull(1)?.toIntOrNull()
-    if(p.size==2&&mm!=null&&ss!=null&&mm in 0..99&&ss in 0..59){
-     gameSeconds=mm*60+ss;gameRunning=false;lastTick=0;updateGameClock()
-    }else android.widget.Toast.makeText(this,"Enter a valid MM:SS",android.widget.Toast.LENGTH_SHORT).show()
-   }.setNegativeButton("Cancel",null).show()
+  panel.addView(ink(heading,20f).apply{
+   gravity=Gravity.CENTER_VERTICAL
+   setTypeface(typeface,android.graphics.Typeface.BOLD)
+  },LinearLayout.LayoutParams(-1,dp(38)))
+  dialog.setContentView(panel)
+  dialog.setCanceledOnTouchOutside(true)
+  dialog.show()
+  dialog.window?.apply{
+   setBackgroundDrawableResource(android.R.color.transparent)
+   addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+   setDimAmount(.48f)
+   setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+    WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
+   setLayout(minOf((resources.displayMetrics.widthPixels*.65f).toInt(),dp(640)),-2)
+   attributes=attributes.apply{gravity=Gravity.CENTER}
+  }
+  return dialog to panel
+ }
+ private fun editClock(){
+  val (dialog,panel)=customSheet("EDIT GAME CLOCK")
+  val display=ink("",35f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
+  fun show(){display.text="%02d:%02d".format(gameSeconds/60,gameSeconds%60)}
+  show();panel.addView(display,LinearLayout.LayoutParams(-1,dp(58)))
+  val adjust=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  val quick=listOf(-60,-10,10,60)
+  for((i,seconds) in quick.withIndex()){
+   adjust.addView(darkButton(if(seconds>0)"+${seconds}s" else "${seconds}s"){
+    gameSeconds=(gameSeconds+seconds).coerceIn(0,5999);show()
+   },LinearLayout.LayoutParams(0,dp(47),1f).apply{if(i>0)leftMargin=dp(6)})
+  }
+  panel.addView(adjust)
+  val row=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  val mm=android.widget.EditText(this).apply{
+   inputType=android.text.InputType.TYPE_CLASS_NUMBER
+   setSingleLine(true);setText((gameSeconds/60).toString())
+   textSize=24f;setTextColor(Color.WHITE)
+   gravity=Gravity.CENTER;background=rounded(Color.rgb(34,53,45),10)
+   selectAllOnFocus=true
+  }
+  val ss=android.widget.EditText(this).apply{
+   inputType=android.text.InputType.TYPE_CLASS_NUMBER
+   setSingleLine(true);setText((gameSeconds%60).toString())
+   textSize=24f;setTextColor(Color.WHITE)
+   gravity=Gravity.CENTER;background=rounded(Color.rgb(34,53,45),10)
+   selectAllOnFocus=true
+  }
+  row.addView(mm,LinearLayout.LayoutParams(0,dp(54),1f))
+  row.addView(ink(":",25f),LinearLayout.LayoutParams(dp(20),dp(54)))
+  row.addView(ss,LinearLayout.LayoutParams(0,dp(54),1f))
+  panel.addView(smallLabel("MINUTES                          SECONDS"),
+   LinearLayout.LayoutParams(-1,dp(28)))
+  panel.addView(row)
+  val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  actions.addView(darkButton("CANCEL"){dialog.dismiss()},
+   LinearLayout.LayoutParams(0,dp(48),1f))
+  actions.addView(greenButton("APPLY TIME"){
+   val m=mm.text.toString().toIntOrNull()
+   val sec=ss.text.toString().toIntOrNull()
+   if(m==null||m !in 0..99||sec==null||sec !in 0..59){
+    android.widget.Toast.makeText(this,"Enter valid minutes and seconds",android.widget.Toast.LENGTH_SHORT).show()
+   }else{
+    gameSeconds=m*60+sec;gameRunning=false;lastTick=0L
+    updateGameClock();dialog.dismiss()
+   }
+  },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
+  panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
+ }
+ private fun confirmStopUpload(){
+  val (dialog,panel)=customSheet("END PRIVATE BROADCAST?")
+  panel.addView(ink("The YouTube connection stays saved. Ending stops this video upload only.",13f).apply{
+   gravity=Gravity.CENTER_VERTICAL
+   setSingleLine(false)
+  },LinearLayout.LayoutParams(-1,dp(63)))
+  val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  actions.addView(greenButton("KEEP STREAMING"){dialog.dismiss()},
+   LinearLayout.LayoutParams(0,dp(50),1f))
+  actions.addView(dangerButton("■ END UPLOAD"){
+   dialog.dismiss();broadcast?.stopBroadcast();refresh()
+  },LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
+  panel.addView(actions)
  }
  private var operatorSheet:android.app.Dialog?=null
  private fun openOperatorSettings(){
@@ -530,14 +603,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  stop=dangerButton("■ STOP"){
-   android.app.AlertDialog.Builder(this)
-    .setTitle("Stop this broadcast?")
-    .setMessage("This ends the current upload. Your scores remain visible in the operator until exit.")
-    .setNegativeButton("CANCEL",null)
-    .setPositiveButton("STOP"){_,_->broadcast?.stopBroadcast();refresh()}
-    .show()
-  }
+  stop=dangerButton("■ STOP"){confirmStopUpload()}
   undoButton=darkButton("↶ UNDO"){undoScore()}
   val keys=listOf(start,stop,undoButton,
    darkButton("⚙ TOOLS"){openOperatorSettings()},
