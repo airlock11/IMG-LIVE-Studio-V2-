@@ -99,6 +99,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   val route = when (action) {
    "refresh" -> "/api/connections"
    "youtubeLiveReadiness" -> "/api/connections/youtube/live-readiness"
+   "createYoutubePrivateDraft" -> "/api/connections/youtube/private-draft"
    "signOut" -> "/api/connections/logout"
    "connect" -> if (validProvider(provider)) "/api/connections/$provider/authorize" else null
    "verifyPairing" -> if (validProvider(provider)) "/api/connections/$provider/pairing" else null
@@ -125,8 +126,23 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
     connection.requestMethod = "POST"
     connection.doOutput = true
     connection.setRequestProperty("Content-Type", "application/json")
-    val payload = if (action in setOf("verifyPairing","cancelPending"))
-     JSONObject().put("pairingCode", code).toString() else "{}"
+    val payload = when(action) {
+     "verifyPairing","cancelPending" -> JSONObject().put("pairingCode", code).toString()
+     "createYoutubePrivateDraft" -> {
+      val title=command.optString("title")
+      val scheduled=command.optString("scheduledStartTime")
+      val requestId=command.optString("draftRequestId")
+      val madeForKids=command.opt("madeForKids")
+      if(title.length !in 5..100 || scheduled.length !in 20..35 ||
+         !Regex("^[a-f0-9]{32}$").matches(requestId) || madeForKids !is Boolean ||
+         command.opt("operatorConfirmed") !== true)
+       return JSONObject().put("ok",false).put("error","Invalid private draft fields")
+      JSONObject().put("title",title).put("scheduledStartTime",scheduled)
+       .put("requestId",requestId).put("madeForKids",madeForKids)
+       .put("operatorConfirmed",true).toString()
+     }
+     else -> "{}"
+    }
     connection.outputStream.use { it.write(payload.toByteArray(Charsets.UTF_8)) }
    }
    val status = connection.responseCode
@@ -185,6 +201,26 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
        .put("hasStream",item.opt("hasStream") === true))
      }
      safe.put("broadcasts",safeBroadcasts)
+     safe.put("canCreatePrivateDraft",data.opt("canCreatePrivateDraft") === true)
+    }
+    "createYoutubePrivateDraft" -> {
+     if (data.opt("created") !== true || data.optString("privacy") != "private" ||
+         data.opt("publishingConfigured") !== false)
+      return JSONObject().put("ok",false).put("error","Unverified private YouTube draft")
+     val details=data.optJSONObject("broadcast")
+      ?: return JSONObject().put("ok",false).put("error","Missing private broadcast")
+     val id=details.optString("id")
+     val title=details.optString("title")
+     val scheduled=details.optString("scheduledStartTime")
+     if(!Regex("^[A-Za-z0-9_-]{8,100}$").matches(id) ||
+         title.length !in 5..100 || scheduled.length !in 20..35)
+      return JSONObject().put("ok",false).put("error","Invalid private broadcast confirmation")
+     safe.put("created",true)
+     safe.put("alreadyCreated",data.opt("alreadyCreated") === true)
+     safe.put("privacy","private")
+     safe.put("publishingConfigured",false)
+     safe.put("broadcast",JSONObject().put("title",title)
+      .put("scheduledStartTime",scheduled))
     }
     "connect" -> {
      val pairingCode = data.optString("pairingCode")
