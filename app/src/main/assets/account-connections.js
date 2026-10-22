@@ -24,6 +24,8 @@
     const parsed = new URL(url);
     if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash)
       throw new Error("A trusted HTTPS IMG backend URL is required");
+    if (parsed.pathname !== "/" || parsed.port) throw new Error("IMG backend must be a standard HTTPS origin");
+    if (backend && backend !== parsed.origin) throw new Error("IMG backend is already pinned for this app session");
     backend = parsed.origin;
   }
   function requireBackend() {
