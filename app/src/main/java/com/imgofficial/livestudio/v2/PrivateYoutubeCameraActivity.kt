@@ -42,10 +42,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
-   if(checkPermissions()) {
-    broadcast?.prepareCamera()
-    if(resumed&&monitor.holder.surface.isValid)broadcast?.attachPreview(monitor)
-   }
+   // Rotating the operator screen recreates its Activity. A service that
+   // was preview-only may also be recreated when Android briefly unbinds it.
+   // Restore the selected framing from Intent on the FIRST orientation tap.
+   val portrait=intent.getStringExtra("img_video_mode")!="landscape"
+   if(checkPermissions())broadcast?.prepareCamera()
+   if(broadcast?.isPortrait()!=portrait)broadcast?.changeFraming(portrait)
+   if(checkPermissions()&&resumed&&monitor.holder.surface.isValid)
+    broadcast?.attachPreview(monitor)
    refresh()
   }
   override fun onServiceDisconnected(name:ComponentName?){
@@ -76,7 +80,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val controls=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
   controls.addView(text("IMG LIVE STUDIO • V2",13f))
   controls.addView(text("Private YouTube camera test",if(landscape)17f else 21f))
-  controls.addView(text("Portrait / Landscape LIVE • stable 9:16 video output",12f))
+  controls.addView(text("Live camera framing • transmitted stream stays 9:16",12f))
   val choices=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
   portraitButton=action("Portrait"){changeFraming(true)}
   landscapeButton=action("Landscape"){changeFraming(false)}
@@ -103,14 +107,18 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val area=FrameLayout(this).apply{setBackgroundColor(Color.BLACK)}
   monitor=SurfaceView(this)
   area.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
-  // The entire RTMPS upload is 9:16 for this test. In landscape framing
-  // the camera is letterboxed into that unchanged stream size. No stretching.
+  // The OPERATOR preview uses the phone's selected orientation: full 16:9
+  // in landscape and 9:16 in portrait. This changes display geometry only.
+  // The private RTMPS encoder remains 9:16 to preserve the connection.
   area.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
    val maxW=r-l
    val maxH=b-t
    if(maxW>0&&maxH>0){
-    val w=minOf(maxW,maxH*9/16)
-    val h=w*16/9
+    val landscapeView=intent.getStringExtra("img_video_mode")=="landscape"
+    val ratioW=if(landscapeView)16 else 9
+    val ratioH=if(landscapeView)9 else 16
+    val w=minOf(maxW,maxH*ratioW/ratioH)
+    val h=w*ratioH/ratioW
     val previous=monitor.layoutParams
     if(w>0&&h>0&&(previous.width!=w||previous.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
@@ -118,8 +126,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   monitor.holder.addCallback(this)
   if(landscape){
-   panel.addView(area,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f))
-   panel.addView(controls,LinearLayout.LayoutParams(dp(275),ViewGroup.LayoutParams.MATCH_PARENT))
+   // 75% camera/25% compact controls; never a fixed 275dp sidebar that
+   // crowds the view on phones with a small landscape viewport.
+   panel.addView(area,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,3f))
+   panel.addView(controls,LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.MATCH_PARENT,1f))
   }else{
    panel.addView(controls)
    panel.addView(area,LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
@@ -168,10 +178,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private fun changeFraming(portrait:Boolean){
-  val service=broadcast?:return
-  service.changeFraming(portrait)
   val target=if(portrait)"portrait" else "landscape"
+  // Intent state must be saved BEFORE Android rotates/recreates this view.
+  // The newly bound service also reads this state in onServiceConnected.
   intent.putExtra("img_video_mode",target)
+  broadcast?.changeFraming(portrait)
   val newOrientation=if(portrait)ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
    else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
   if(requestedOrientation!=newOrientation)requestedOrientation=newOrientation
