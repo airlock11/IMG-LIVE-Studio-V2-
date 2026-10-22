@@ -92,3 +92,10 @@ test('verification errors clear previous connected status',async()=>{
  await assert.rejects(accounts.refresh(),/upstream_unavailable/);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
+
+test('disabled staging OAuth reports a clear message without allowing login',async()=>{
+ const {accounts}=controller(cmd=>({ok:false,error:'oauth_not_enabled'}));
+ accounts.enableNative();
+ await assert.rejects(accounts.connect('facebook'),/login is not available yet/i);
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+});
