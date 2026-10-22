@@ -14,6 +14,7 @@
   const listeners = new Set();
   let backend = null;
   let refreshPending = null;
+  const pairingCodes = {};
   function publish() {
     const snapshot = Object.freeze({...state});
     listeners.forEach(fn => { try { fn(snapshot); } catch (_) {} });
@@ -55,6 +56,8 @@
         {method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:"{}"});
       if (!response.ok) throw new Error("Could not start secure authorization");
       const data = await response.json();
+      if (typeof data.pairingCode !== "string" || !/^[-_A-Za-z0-9]{43}$/.test(data.pairingCode)) throw new Error("Missing secure pairing code");
+      pairingCodes[provider] = data.pairingCode;
       const auth = new URL(data.authorizationUrl);
       if (auth.protocol !== "https:" || auth.hostname !== providers[provider] ||
           auth.username || auth.password) throw new Error("Invalid authorization destination");
@@ -69,6 +72,17 @@
       publish();
       throw error;
     }
+  }
+  async function verifyPairing(provider) {
+    if (!Object.prototype.hasOwnProperty.call(providers,provider)) throw new Error("Unsupported platform");
+    const code=pairingCodes[provider];
+    if (!code) return "not_started";
+    const response=await fetch(requireBackend()+"/api/connections/"+provider+"/pairing",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pairingCode:code})});
+    if (!response.ok) throw new Error("Unable to verify account pairing");
+    const result=await response.json();
+    if(result.status==="complete"){delete pairingCodes[provider];await refresh();}
+    if(result.status==="expired"){delete pairingCodes[provider];state[provider]="disconnected";publish();}
+    return result.status;
   }
   async function disconnect(provider) {
     if (!Object.prototype.hasOwnProperty.call(providers, provider)) throw new Error("Unsupported platform");
@@ -89,7 +103,7 @@
   });
   window.addEventListener("pageshow", () => { if (backend) refresh().catch(() => {}); });
   window.IMGAccounts = Object.freeze({
-    configure, refresh, connect, disconnect,
+    configure, refresh, connect, disconnect, verifyPairing,
     getStatus: () => ({...state}),
     subscribe(fn) { listeners.add(fn); fn({...state}); return () => listeners.delete(fn); }
   });
