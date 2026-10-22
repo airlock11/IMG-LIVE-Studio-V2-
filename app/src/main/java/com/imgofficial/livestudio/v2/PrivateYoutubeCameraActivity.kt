@@ -80,6 +80,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var homeFoulsDisplay:TextView
  private lateinit var awayFoulsDisplay:TextView
  private lateinit var clockToggleButton:Button
+ private lateinit var undoButton:Button
+ private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
  private var touchFeedback=true
  private var gameSeconds=600
