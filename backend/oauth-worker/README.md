@@ -17,13 +17,13 @@ The existing IMG website and the original V1 app/Workers are not changed.
 - `OAUTH_ENABLED`: explicitly `false`, checked on all account API endpoints
 - `TOKEN_ENCRYPTION_KEY`: 32 cryptographically random bytes (base64url), installed **only as a Cloudflare Worker secret**, never committed
 - Scheduled D1 cleanup (`0 3 * * *`, UTC): removes expired sessions, authorization states, pairings and provider account records; remains active while OAuth is disabled.
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`: **not configured yet**
+- `GOOGLE_CLIENT_ID`: configured as a public Worker variable; `GOOGLE_CLIENT_SECRET`: configured as a Worker secret. Facebook provider credentials are not configured yet.
 
 The Android build's public `imgOAuthBackendUrl` property pins this service at build time. The Android native OAuth client makes API requests, stores the session cookie encrypted using Android Keystore, and returns only sanitized connection/pairing state to the WebView. No provider access token or IMG session cookie is passed to page JavaScript.
 
 The Account Connections screen now supports **Sign out of all accounts**. Confirmed logout deletes the D1 session (cascading provider connections and outstanding authorization attempts), then erases its encrypted session on Android.
 
-Provider **access-token expiry is tracked separately from the 30-day IMG session**. Facebook connections are not represented as active beyond a known token lifetime. YouTube can automatically exchange an encrypted server-only refresh token for a new access token, using an atomic D1 refresh lease and retry cooldown to prevent parallel refresh storms. Refresh tokens never enter WebView JavaScript. Google and Meta identity validation and full publishing permissions are still pending.
+Provider **access-token expiry is tracked separately from the 30-day IMG session**. Facebook connections are not represented as active beyond a known token lifetime. YouTube can automatically exchange an encrypted server-only refresh token for a new access token, using an atomic D1 refresh lease and retry cooldown to prevent parallel refresh storms. Refresh tokens never enter WebView JavaScript. Google/YouTube channel verification is implemented at OAuth connection time, but Meta identity validation and full publishing permissions are still pending.
 
 ## Expected disabled-stage verification
 
@@ -35,6 +35,19 @@ GitHub Actions workflow `IMG V2 Cloudflare OAuth Deployment Smoke` checks the ac
 - Responses must carry `Cache-Control: no-store`.
 
 The regular Fast OAuth Checks run Worker and native WebView bridge regression tests. APK and emulator workflows verify Android builds.
+## YouTube live readiness (read-only)
+
+The native account screen offers **Check live readiness** after YouTube is verified. Android makes a GET request to `/api/connections/youtube/live-readiness` through its Keystore-protected session transport. The Worker decrypts the channel token **only server-side** and calls YouTube `liveBroadcasts.list` (`mine=true`, `broadcastType=all`) to check API access and retrieve existing active/upcoming broadcasts. UI output is sanitized to basic titles, status, privacy, schedule, and whether a broadcast has a bound stream.
+
+- No user tokens, refresh tokens, CDN ingestion URLs, or stream keys ever leave the Worker.
+- The check cannot create, start, or transition a broadcast.
+- A successful `liveBroadcasts.list` response means Live API access is available, **not** that video encoding, publishing, or actual streaming has been tested.
+- Google `liveStreamingNotEnabled` and `insufficientLivePermissions` responses show actionable but non-sensitive status messages.
+- Requests without a valid native session return 401; unauthorized origins return 403; the expired staging window returns 503.
+- Tests cover encrypted-token isolation, error sanitization, authentication gating, and real Worker smoke checks.
+
+When the User finishes login on Android, open **Settings → Manage connections → YouTube live readiness → Check live readiness**, then report the visible result. The next implementation phase (not part of this read-only milestone) is explicit operator-selected broadcast and safe RTMP/RTMPS streaming provision with secure destination secrets.
+
 
 ## Official provider redirect addresses (for future configuration)
 
