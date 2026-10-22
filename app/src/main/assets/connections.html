@@ -22,6 +22,7 @@ document.getElementById('youtube-readiness-button').addEventListener('click',asy
  const result=document.getElementById('youtube-readiness-result');
  const list=document.getElementById('youtube-broadcast-list');
  button.disabled=true;result.textContent='Checking your YouTube channel…';list.replaceChildren();
+ document.getElementById('youtube-video-test-panel').hidden=true;
  document.getElementById('youtube-draft-panel').hidden=true;
  try{
   const check=await IMGAccounts.checkYoutubeLiveReadiness();
@@ -30,6 +31,11 @@ document.getElementById('youtube-readiness-button').addEventListener('click',asy
    return;
   }
   document.getElementById('youtube-draft-panel').hidden=!(check.liveApiAccessible&&check.canCreatePrivateDraft);
+  const owned=check.privateDrafts||[];
+  if(owned.length){
+   document.getElementById('youtube-video-test-button').dataset.draftId=owned[0].requestId;
+   document.getElementById('youtube-video-test-panel').hidden=false;
+  }
   result.textContent=check.broadcasts.length?
    'YouTube Live API is accessible. These existing broadcasts are ready for inspection; video publishing is not yet configured.':
    'YouTube Live API is accessible. No upcoming or active broadcasts were found. Video publishing is not yet configured.';
