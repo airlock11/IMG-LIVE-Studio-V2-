@@ -99,3 +99,30 @@ test('disabled staging OAuth reports a clear message without allowing login',asy
  await assert.rejects(accounts.connect('facebook'),/login is not available yet/i);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
+
+test('native session sign-out resets all account badges without WebView cookies',async()=>{
+ const {accounts,outbound}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:true},youtube:{connected:true}}};
+  if(cmd.action==='signOut')return {data:{signedOut:true}};
+  throw Error('unexpected native action '+cmd.action);
+ });
+ accounts.enableNative();
+ await accounts.refresh();
+ assert.equal(accounts.getStatus().facebook,'connected');
+ assert.equal(accounts.getStatus().youtube,'connected');
+ assert.equal(await accounts.signOut(),true);
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+ assert.equal(accounts.getStatus().youtube,'disconnected');
+ assert.ok(outbound.some(raw=>raw.includes('"action":"signOut"')));
+});
+test('failed server logout cannot be represented as a successful sign-out',async()=>{
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:true},youtube:{connected:false}}};
+  if(cmd.action==='signOut')return {ok:false,error:'upstream_failure'};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ await accounts.refresh();
+ await assert.rejects(accounts.signOut(),/upstream_failure/);
+ assert.equal(accounts.getStatus().facebook,'connected');
+});
