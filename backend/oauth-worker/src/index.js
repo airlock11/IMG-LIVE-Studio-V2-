@@ -10,6 +10,21 @@ const providers = {
 const bytes = n => crypto.getRandomValues(new Uint8Array(n));
 const b64url = a => btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 const digest = async s => b64url(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s))));
+// AES-GCM envelope for OAuth credentials. TOKEN_ENCRYPTION_KEY is a 32-byte
+// random secret encoded as unpadded base64url. Never expose it to clients.
+const encryptionKey = async env => {
+ const encoded=env.TOKEN_ENCRYPTION_KEY;
+ if(!encoded || !/^[A-Za-z0-9_-]{43}$/.test(encoded))throw Error("Token encryption key is not configured");
+ const raw=Uint8Array.from(atob(encoded.replace(/-/g,"+").replace(/_/g,"/")+"="),c=>c.charCodeAt(0));
+ if(raw.length!==32)throw Error("Invalid token encryption key");
+ return crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
+};
+const encryptTokens=async (env,token)=>{
+ const iv=bytes(12),key=await encryptionKey(env);
+ const payload=new TextEncoder().encode(JSON.stringify(token));
+ const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,payload));
+ return {version:1,iv:b64url(iv),ciphertext:b64url(ciphertext)};
+};
 const cookie = req => Object.fromEntries((req.headers.get("cookie")||"").split(";").map(x=>x.trim().split("=")).filter(x=>x.length===2));
 const cookieAttrs = "HttpOnly; Secure; SameSite=Lax; Path=/";
 const origin = (env) => {
@@ -31,7 +46,7 @@ export default {async fetch(req,env){
   if(method==="OPTIONS")return withCors(new Response(null,{status:204,headers:{"access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type","access-control-max-age":"600"}}),req,env);
   if(path==="/health"&&method==="GET")return json({ok:true,service:"img-oauth"});
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
-  if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS)return json({error:"service_not_configured"},503);
+  if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
   const cookies=cookie(req);
   // Sessions are created server-side; no client-supplied user identifiers.
   let session=cookies.img_session;
@@ -82,7 +97,7 @@ export default {async fetch(req,env){
    if(!token.access_token)return json({error:"missing_provider_token"},502);
    // Tokens remain in server-side KV; production should use encryption at rest with managed key.
    const existing=JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+attempt.session)||"{}");
-   existing[provider]={access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?Date.now()+token.expires_in*1000:null};
+   existing[provider]=await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?Date.now()+token.expires_in*1000:null});
    await env.ACCOUNT_SESSIONS.put("session:"+attempt.session,JSON.stringify(existing),{expirationTtl:86400*30});
    return new Response("<!doctype html><title>IMG LIVE Studio</title><p>Account authorization completed. Return to IMG LIVE Studio and refresh connections.</p>",{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
   }
