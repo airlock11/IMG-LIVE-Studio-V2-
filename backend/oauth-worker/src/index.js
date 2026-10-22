@@ -165,7 +165,7 @@ export default {async fetch(req,env){
     if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
    }
-   if(!token.access_token)return failPairing("missing_provider_token",502);
+   if(!token || typeof token.access_token!=="string" || !token.access_token.trim())return failPairing("missing_provider_token",502);
    if(!token.token_type && provider==="youtube")return failPairing("invalid_provider_token_response",502);
    // Tokens remain in server-side KV; production should use encryption at rest with managed key.
    const existing=JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+attempt.session)||"{}");
