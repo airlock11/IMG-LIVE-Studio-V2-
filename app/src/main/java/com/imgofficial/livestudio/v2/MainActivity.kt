@@ -8,7 +8,10 @@ import android.content.Intent
 import android.net.Uri
 import android.webkit.ValueCallback
 import android.webkit.WebSettings
-import android.webkit.JavascriptInterface
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.JavaScriptReplyProxy
 import android.webkit.PermissionRequest
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -103,7 +106,18 @@ class MainActivity : Activity() {
      }
     }
    }
-   addJavascriptInterface(NativeBridge(), "IMGNative")
+   if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+    WebViewCompat.addWebMessageListener(this, "IMGNativeChannel", setOf(origin),
+     object : WebViewCompat.WebMessageListener {
+      override fun onPostMessage(view: WebView, message: WebMessageCompat,
+       sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
+       if (!isMainFrame || sourceOrigin.toString().removeSuffix("/") != origin) return
+       val action = message.data ?: return
+       if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
+        runOnUiThread { handleNativeAction(action) }
+      }
+     })
+   }
    if(savedInstanceState == null) loadUrl("$origin/assets/index.html")
   }
   if(savedInstanceState != null) browser.restoreState(savedInstanceState)
@@ -161,9 +175,7 @@ class MainActivity : Activity() {
   }
  }
 
- private inner class NativeBridge {
-  @JavascriptInterface fun command(action: String) {
-   runOnUiThread {
+ private fun handleNativeAction(action: String) {
     when(action) {
      "camera" -> {
       if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
@@ -179,8 +191,6 @@ class MainActivity : Activity() {
       Toast.makeText(this@MainActivity,"Native broadcast engine not connected",Toast.LENGTH_LONG).show()
      else -> Toast.makeText(this@MainActivity,"Unsupported command",Toast.LENGTH_SHORT).show()
     }
-   }
-  }
  }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {
@@ -196,7 +206,7 @@ class MainActivity : Activity() {
   pendingFileChooser?.onReceiveValue(null)
   pendingFileChooser = null
   window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-  browser.removeJavascriptInterface("IMGNative")
+  // Origin-scoped WebMessage listener is released when WebView is destroyed.
   browser.destroy()
   super.onDestroy()
  }
