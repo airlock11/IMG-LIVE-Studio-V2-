@@ -19,5 +19,5 @@ dependencies {
  implementation("androidx.core:core-ktx:1.15.0")
  implementation("androidx.activity:activity-ktx:1.9.3")
  implementation("androidx.webkit:webkit:1.12.1")
- implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
+ // RootEncoder 2.8.1 requires newer Kotlin metadata; integration held until toolchain upgrade.
 }
