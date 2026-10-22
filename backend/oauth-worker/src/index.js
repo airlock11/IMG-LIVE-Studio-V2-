@@ -129,6 +129,7 @@ export default {async fetch(req,env){
    if(pair.session!==attempt.session||pair.provider!==provider)return json({error:"pairing_mismatch"},403);
    if(pair.status==="cancelled")return json({error:"authorization_cancelled"},400);
    if(pair.status!=="pending")return json({error:"invalid_pairing_status"},400);
+   if(!/^[A-Za-z0-9_-]{43}$/.test(attempt.session||""))return json({error:"invalid_session"},400);
    if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
    if(u.searchParams.get("error"))return json({error:"authorization_declined"},400);
    // Exchange codes on the server only. Never return the token to the browser.
