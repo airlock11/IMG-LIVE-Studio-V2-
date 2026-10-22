@@ -81,7 +81,7 @@
     if (!response.ok) throw new Error("Unable to verify account pairing");
     const result=await response.json();
     if(result.status==="complete"){delete pairingCodes[provider];await refresh();}
-    if(result.status==="expired"){delete pairingCodes[provider];state[provider]="disconnected";publish();}
+    if(["expired","declined","cancelled"].includes(result.status)){delete pairingCodes[provider];state[provider]="disconnected";publish();}
     return result.status;
   }
   async function cancelPending(provider) {
