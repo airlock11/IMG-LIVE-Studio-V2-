@@ -129,7 +129,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(!::clockDisplay.isInitialized)return
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
-  broadcast?.setClock(value)
+  if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
  }
  private fun editClock(){
   val input=android.widget.EditText(this).apply{
@@ -332,7 +332,21 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    extras.addView(btn,LinearLayout.LayoutParams(0,dp(36),1f).apply{leftMargin=dp(3)})
   footer.addView(extras,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(5)})
   panel.addView(footer,LinearLayout.LayoutParams(-1,-2))
-  setContentView(panel)
+  // Android 15 edge-to-edge must not place scoring controls beneath system bars.
+  androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window,false)
+  val safeRoot=FrameLayout(this).apply{
+   setBackgroundColor(Color.rgb(12,17,24))
+   addView(panel,FrameLayout.LayoutParams(-1,-1))
+  }
+  androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(safeRoot){v,insets->
+   val bars=insets.getInsets(
+    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+    androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+   v.setPadding(bars.left,bars.top,bars.right,bars.bottom)
+   insets
+  }
+  setContentView(safeRoot)
+  androidx.core.view.ViewCompat.requestApplyInsets(safeRoot)
   gameSeconds=savedInstanceState?.getInt("v2_clock_seconds",600)?:600
   gameRunning=savedInstanceState?.getBoolean("v2_clock_running",false)?:false
   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
