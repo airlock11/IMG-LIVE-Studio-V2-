@@ -47,6 +47,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var lastScoreAlpha:Float?=null
  private var scoreTransitionEpoch=0
  private var graphicsStyle=0 // PRIME sports-TV, COURTSIDE metallic broadcast
+ private var scoreEffectsEnabled=true
  private var scoreAward:V2Scorecard.Award?=null
  private var lastRenderedAward:V2Scorecard.Award?=null
  private var scoreAwardEpoch=0
@@ -344,6 +345,11 @@ class V2BroadcastService:Service(),ConnectChecker {
  internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
  fun graphicsStyle()=graphicsStyle
+ fun scoreEffectsEnabled()=scoreEffectsEnabled
+ fun setScoreEffectsEnabled(enabled:Boolean){
+  scoreEffectsEnabled=enabled
+  if(!enabled){scoreAwardEpoch++;scoreAward=null;updateScorecard()}
+ }
  fun setGraphicsStyle(style:Int){
   if(style !in 0..1 || graphicsStyle==style)return
   graphicsStyle=style
@@ -372,7 +378,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreboard=if(team==0)scoreboard.copy(homeScore=(scoreboard.homeScore+delta).coerceIn(0,999))
    else scoreboard.copy(awayScore=(scoreboard.awayScore+delta).coerceIn(0,999))
   val changed=(if(team==0)scoreboard.homeScore else scoreboard.awayScore)-prior
-  if(changed>0 && scoreboard.sport=="basketball"){
+  if(changed>0 && scoreboard.sport=="basketball" && scoreEffectsEnabled){
    startScoreAward(team,changed,prior)
   }else{
    scoreAwardEpoch++
