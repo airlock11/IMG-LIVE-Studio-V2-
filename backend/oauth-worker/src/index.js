@@ -81,7 +81,11 @@ export default {async fetch(req,env){
    const raw=await env.OAUTH_STATE.get(key);
    if(!raw)return withCors(json({cancelled:true}),req,env);
    const attempt=JSON.parse(raw);
-   if(attempt.session!==session||attempt.provider!==cancel[1])return json({error:"pairing_session_mismatch"},403);
+   if(attempt.session!==session||attempt.provider!==cancel[1])return withCors(json({error:"pairing_session_mismatch"},403),req,env);
+   if(attempt.status==="complete")return withCors(json({error:"authorization_already_completed"},409),req,env);
+   if(attempt.status==="declined")return withCors(json({error:"authorization_already_declined"},409),req,env);
+   if(attempt.status==="cancelled")return withCors(json({cancelled:true}),req,env);
+   if(attempt.status!=="pending")return withCors(json({error:"invalid_pairing_status"},409),req,env);
    await env.OAUTH_STATE.put(key,JSON.stringify({...attempt,status:"cancelled"}),{expirationTtl:600});
    return withCors(json({cancelled:true}),req,env);
   }
