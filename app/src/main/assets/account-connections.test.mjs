@@ -1,0 +1,94 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {test} from 'node:test';
+import {runInNewContext} from 'node:vm';
+import {webcrypto} from 'node:crypto';
+
+const source=await readFile(new URL('./account-connections.js',import.meta.url),'utf8');
+function controller(handler) {
+ const outbound=[];
+ const native={
+  onmessage:null,
+  postMessage(raw) {
+   outbound.push(raw);
+   if(raw.startsWith('oauth-open:'))return;
+   const cmd=JSON.parse(raw);
+   const outcome=handler(cmd);
+   queueMicrotask(()=>native.onmessage?.({data:JSON.stringify({
+    requestId:cmd.requestId,ok:outcome.ok!==false,
+    data:outcome.data||{},error:outcome.error
+   })}));
+  }
+ };
+ const window={
+  IMGNativeChannel:native,
+  dispatchEvent(){},
+  addEventListener(){}
+ };
+ const document={addEventListener(){},hidden:false};
+ const context={
+  window,document,crypto:webcrypto,URL,CustomEvent:class {constructor(type,options){this.type=type;this.detail=options?.detail;}},
+  setTimeout,clearTimeout,
+  fetch(){throw Error('WebView fetch must never handle OAuth sessions');}
+ };
+ runInNewContext(source,context);
+ return {accounts:window.IMGAccounts,outbound};
+}
+
+test('login remains unavailable until native transport is enabled',async()=>{
+ const {accounts}=controller(()=>{throw Error('unexpected native request')});
+ await assert.rejects(accounts.connect('facebook'),/not configured/i);
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+});
+test('refresh only trusts native account verification response',async()=>{
+ const {accounts,outbound}=controller(cmd=>{
+  assert.equal(cmd.action,'refresh');
+  return {data:{facebook:{connected:true},youtube:{connected:false}}};
+ });
+ accounts.enableNative();
+ const statuses=await accounts.refresh();
+ assert.equal(statuses.facebook,'connected');
+ assert.equal(statuses.youtube,'disconnected');
+ assert.equal(outbound.length,1);
+});
+test('a successful browser return cannot mark connected without native refresh',async()=>{
+ const pairing='A'.repeat(43);
+ const {accounts,outbound}=controller(cmd=>{
+  if(cmd.action==='connect')return {data:{pairingCode:pairing,authorizationUrl:'https://www.facebook.com/v24.0/dialog/oauth?client_id=x'}};
+  if(cmd.action==='verifyPairing')return {data:{status:'complete'}};
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:false}}};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ await accounts.connect('facebook');
+ assert.equal(accounts.getStatus().facebook,'authorization-pending');
+ assert.ok(outbound.some(x=>x.startsWith('oauth-open:https://www.facebook.com/')));
+ await assert.rejects(accounts.verifyPairing('facebook'),/verification failed/i);
+ assert.notEqual(accounts.getStatus().facebook,'connected');
+});
+test('native-confirmed pairing transitions to connected',async()=>{
+ const pairing='B'.repeat(43);
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='connect')return {data:{pairingCode:pairing,authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?client_id=x'}};
+  if(cmd.action==='verifyPairing')return {data:{status:'complete'}};
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ await accounts.connect('youtube');
+ assert.equal(await accounts.verifyPairing('youtube'),'complete');
+ assert.equal(accounts.getStatus().youtube,'connected');
+});
+test('verification errors clear previous connected status',async()=>{
+ let fail=false;
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='refresh'&&fail)return {ok:false,error:'upstream_unavailable'};
+  return {data:{facebook:{connected:true},youtube:{connected:false}}};
+ });
+ accounts.enableNative();
+ await accounts.refresh();
+ assert.equal(accounts.getStatus().facebook,'connected');
+ fail=true;
+ await assert.rejects(accounts.refresh(),/upstream_unavailable/);
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+});
