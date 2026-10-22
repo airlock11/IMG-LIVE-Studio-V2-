@@ -32,6 +32,34 @@ const withCors=(response,req)=>{
  for(const [key,value] of Object.entries(cors(req)))h.set(key,value);
  return new Response(response.body,{status:response.status,headers:h});
 };
+
+// Return only allowlisted YouTube Live diagnostics. Raw Google response bodies,
+// messages, channels and bearer tokens must never be forwarded to Android.
+const liveUnavailable=(req,reason,enabled=null,status=200)=>withCors(json({
+ liveApiAccessible:false,liveEnabled:enabled,reason,broadcasts:[],
+ publishingConfigured:false,canCreatePrivateDraft:false
+},status),req);
+const classifyLiveFailure=(status,upstream)=>{
+ const reasons=Array.isArray(upstream?.error?.errors)?
+  upstream.error.errors.map(x=>x?.reason).filter(x=>typeof x==="string"):[];
+ const has=key=>reasons.includes(key);
+ if(status===403){
+  if(has("liveStreamingNotEnabled"))return ["live_streaming_not_enabled",false];
+  if(has("livePermissionBlocked"))return ["live_permission_blocked",false];
+  if(has("insufficientLivePermissions")||has("insufficientPermissions"))return ["insufficient_live_permissions",null];
+  if(has("quotaExceeded")||has("dailyLimitExceeded"))return ["youtube_api_quota_exceeded",null];
+  if(has("rateLimitExceeded")||has("userRequestsExceedRateLimit"))return ["youtube_api_rate_limited",null];
+  if(has("accessNotConfigured")||has("accessNotConfiguredInProject"))
+   return ["youtube_api_not_enabled",null];
+  return ["youtube_api_forbidden",null];
+ }
+ if(status===400)return ["youtube_api_bad_request",null];
+ if(status===404)return ["youtube_api_not_found",null];
+ if(status===429)return ["youtube_api_rate_limited",null];
+ if(status>=500)return ["youtube_api_temporarily_unavailable",null];
+ return ["youtube_api_unexpected_response",null];
+};
+
 const appRequest=req=>req.headers.get("origin")==="https://appassets.androidplatform.net";
 const isJson=req=>req.headers.get("content-type")?.split(";")[0]?.trim()==="application/json";
 const codeValid=s=>typeof s==="string"&&/^[A-Za-z0-9_-]{43}$/.test(s);
@@ -193,18 +221,12 @@ export default {async fetch(req,env){
      headers:{Authorization:"Bearer "+token.access_token,Accept:"application/json"},
      redirect:"error"
     });
-   }catch(_){return withCors(json({error:"youtube_live_api_unavailable"},502),req);}
+   }catch(_){return liveUnavailable(req,"youtube_api_network_unavailable");}
    if(!response.ok){
     if(response.status===401)return withCors(json({error:"youtube_reauthorization_required"},401),req);
-    if(response.status===403){
-     const denied=await response.json().catch(()=>null);
-     const reasons=(denied?.error?.errors||[]).map(item=>item?.reason);
-     if(reasons.includes("liveStreamingNotEnabled"))
-      return withCors(json({liveApiAccessible:false,liveEnabled:false,reason:"live_streaming_not_enabled",broadcasts:[]}),req);
-     if(reasons.includes("insufficientLivePermissions")||reasons.includes("insufficientPermissions"))
-      return withCors(json({liveApiAccessible:false,liveEnabled:null,reason:"insufficient_live_permissions",broadcasts:[]}),req);
-    }
-    return withCors(json({error:"youtube_live_api_unavailable"},502),req);
+    const upstream=await response.json().catch(()=>null);
+    const [reason,enabled]=classifyLiveFailure(response.status,upstream);
+    return liveUnavailable(req,reason,enabled);
    }
    const live=await response.json().catch(()=>null);
    if(!live||!Array.isArray(live.items))return withCors(json({error:"invalid_youtube_live_response"},502),req);
