@@ -113,7 +113,9 @@ class MainActivity : Activity() {
        sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
        if (!isMainFrame || sourceOrigin.toString().removeSuffix("/") != origin) return
        val action = message.data ?: return
-       if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
+       if (action.startsWith("oauth-open:")) {
+        runOnUiThread { openOAuthBrowser(action.removePrefix("oauth-open:")) }
+       } else if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
         runOnUiThread { handleNativeAction(action) }
       }
      })
@@ -172,6 +174,21 @@ class MainActivity : Activity() {
    if(grantResults.isNotEmpty() && grantResults.all { it==PackageManager.PERMISSION_GRANTED })
     handleMediaRequest(request)
    else request.deny()
+  }
+ }
+
+ private fun openOAuthBrowser(raw: String) {
+  try {
+   val uri = Uri.parse(raw)
+   val host = uri.host?.lowercase()
+   if(uri.scheme != "https" || host !in setOf("accounts.google.com", "www.facebook.com")
+      || uri.userInfo != null || uri.port != -1 || uri.fragment != null) {
+    Toast.makeText(this,"Untrusted authorization link",Toast.LENGTH_LONG).show()
+    return
+   }
+   startActivity(Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE))
+  } catch (_: Exception) {
+   Toast.makeText(this,"Unable to open account authorization",Toast.LENGTH_LONG).show()
   }
  }
 
