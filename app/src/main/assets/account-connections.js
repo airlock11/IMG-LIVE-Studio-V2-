@@ -117,20 +117,21 @@
  }
  // Only available after a successful native/YouTube readiness check.
  // The UI must explicitly confirm the private event; no live stream starts.
- async function createYoutubePrivateDraft({title,scheduledStartTime,madeForKids,draftRequestId}){
+ async function createYoutubePrivateDraft({title,scheduledStartTime,madeForKids,draftRequestId,startNow=false}){
   if(statuses.youtube!=="connected"||!privateDraftAvailable)
    throw Error("Check YouTube Live readiness before creating a private draft");
   if(typeof title!=="string"||title.trim().length<5||title.trim().length>100)
    throw Error("Enter a broadcast title between 5 and 100 characters");
-  if(typeof scheduledStartTime!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(scheduledStartTime)||
-     !Number.isFinite(Date.parse(scheduledStartTime)))
+  if(!startNow&&(typeof scheduledStartTime!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(scheduledStartTime)||
+     !Number.isFinite(Date.parse(scheduledStartTime))))
    throw Error("Select a valid scheduled start");
   if(typeof madeForKids!=="boolean"||typeof draftRequestId!=="string"||
      !/^[a-f0-9]{32}$/.test(draftRequestId))
    throw Error("Invalid private draft request");
   const revision=sessionRevision;
   const result=await nativeRequest("createYoutubePrivateDraft",undefined,undefined,{
-   title:title.trim(),scheduledStartTime,madeForKids,draftRequestId,operatorConfirmed:true
+   title:title.trim(),scheduledStartTime:startNow?null:scheduledStartTime,startNow:!!startNow,
+   madeForKids,draftRequestId,operatorConfirmed:true
   });
   if(revision!==sessionRevision||statuses.youtube!=="connected")
    throw Error("Account changed while creating the private draft");
