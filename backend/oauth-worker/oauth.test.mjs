@@ -7,6 +7,7 @@ const {default: worker} = await import('data:text/javascript;base64,' + Buffer.f
 const appOrigin = 'https://appassets.androidplatform.net';
 const api = 'https://oauth.example.test';
 const configured = {
+  OAUTH_ENABLED: 'true',
   OAUTH_STATE: {get: async () => null, put: async () => {}, delete: async () => {}},
   ACCOUNT_SESSIONS: {get: async () => null, put: async () => {}, delete: async () => {}},
   TOKEN_ENCRYPTION_KEY: 'A'.repeat(43),
@@ -117,4 +118,20 @@ test('health rejects malformed encryption key', async () => {
   const response = await call('/health', {}, {...configured, TOKEN_ENCRYPTION_KEY:'not-a-valid-key'});
   assert.equal(response.status,503);
   assert.equal((await response.json()).configured,false);
+});
+
+test('new deployments deny OAuth API until explicitly enabled',async()=>{
+  const env={...configured,OAUTH_ENABLED:'false'};
+  const response=await call('/api/connections',{},env);
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,'oauth_not_enabled');
+  const health=await call('/health',{},env);
+  assert.equal(health.status,503);
+  assert.equal((await health.json()).configured,false);
+});
+test('OAuth public origin cannot contain embedded credentials or custom ports',async()=>{
+  for(const url of ['https://user:pass@oauth.example.test','https://oauth.example.test:8443']){
+    const response=await call('/health',{}, {...configured,PUBLIC_ORIGIN:url});
+    assert.equal(response.status,503);
+  }
 });
