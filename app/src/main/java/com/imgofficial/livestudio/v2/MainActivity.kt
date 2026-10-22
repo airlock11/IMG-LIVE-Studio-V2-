@@ -49,7 +49,8 @@ class MainActivity : Activity() {
    settings.domStorageEnabled = true
    settings.setSupportMultipleWindows(false)
    settings.javaScriptCanOpenWindowsAutomatically = false
-   CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+   // OAuth API is on a separate HTTPS origin; allow its HttpOnly session cookie.
+   CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
    settings.allowFileAccess = false
    settings.allowContentAccess = false
    settings.allowFileAccessFromFileURLs = false
