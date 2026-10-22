@@ -196,7 +196,7 @@ function youtubeDestination(){
   state==="connecting"?"Connecting…":"Not connected";
  return '<div class="broadcast-destination" id="youtube-destination">'+
   '<button type="button" class="broadcast-destination-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'" aria-controls="youtube-destination-body">'+
-  '<span class="destination-name"><strong>YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+'</small></span>'+
+  '<span class="destination-name"><strong>YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+(data.options.yt?' · Selected':'')+'</small></span>'+
   '<span class="broadcast-destination-indicator"><span class="toggle '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span>'+ic(youtubeExpanded?'up':'chevron',18)+'</span></button>'+
   '<div class="broadcast-destination-body" id="youtube-destination-body" '+(youtubeExpanded?'':'hidden')+'>'+
   (connected?'<p class="helper">Ready to prepare a private YouTube upload. Your account stays connected when you close V2.</p>'+
@@ -204,7 +204,8 @@ function youtubeDestination(){
    '<option value="" '+(!youtubeAudience?'selected':'')+'>Select audience</option>'+
    '<option value="no" '+(youtubeAudience==='no'?'selected':'')+'>Not made for kids</option>'+
    '<option value="yes" '+(youtubeAudience==='yes'?'selected':'')+'>Made for kids</option></select></label>'+
-   '<button class="outline-btn" type="button" data-action="youtube-disconnect">Disconnect account</button>':
+   '<button class="outline-btn" type="button" data-action="youtube-remove">Remove from this broadcast</button>'+
+   '<button class="text-link" type="button" data-action="youtube-disconnect">Disconnect Google account</button>':
    state==="authorization-pending"?
     '<p class="helper">Complete the Google sign-in in your browser. Return here to verify the account automatically.</p><button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
     '<button class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect YouTube</button>')+
@@ -1019,7 +1020,17 @@ if(name==='toggle-facebook-panel'){
  if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false;fbExpanded=false;fbMessage='';fbFeedbackState='idle';return render(true)}
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
-if(name==='destination-yt'){youtubeExpanded=!youtubeExpanded;o.yt=youtubeExpanded;persist();return render(true)}
+if(name==='destination-yt'){
+ // Choosing YouTube and collapsing its details are separate operations.
+ // Once selected, closing its dropdown must NOT silently revert to Record.
+ if(!o.yt){o.yt=true;youtubeExpanded=true}
+ else youtubeExpanded=!youtubeExpanded;
+ persist();return render(true)
+}
+if(name==='youtube-remove'){
+ o.yt=false;youtubeExpanded=false;youtubeFeedback='';
+ persist();return render(true)
+}
 if(name==='youtube-connect'){
  youtubeFeedback='Connecting securely…';
  return window.IMGAccounts?.connect('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
