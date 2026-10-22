@@ -55,6 +55,14 @@ jobs:
             if grep -E 'FATAL EXCEPTION|Process: com.imgofficial.livestudio.v2' img-v2-logcat.txt; then exit 1; fi
             adb shell screencap -p /sdcard/img-v2.png
             adb pull /sdcard/img-v2.png img-v2-emulator.png
+            # Best-effort operator screenshot. Does NOT start YouTube or RTMPS:
+            # the Activity is launched without a signed draft request.
+            adb shell am start -n com.imgofficial.livestudio.v2/.PrivateYoutubeCameraActivity \
+              -e img_sport basketball -e img_home HOME -e img_away AWAY \
+              --ez img_autostart false > img-v2-operator-start.txt 2>&1 || true
+            sleep 3
+            adb shell screencap -p /sdcard/img-v2-operator.png || true
+            adb pull /sdcard/img-v2-operator.png img-v2-operator.png || true
             # UI hierarchy capture can be OOM-killed (exit 137) on hosted emulators.
             # Keep app launch/crash checks mandatory; make optional evidence best-effort.
             timeout 20s adb shell uiautomator dump /sdcard/img-v2-ui.xml || true
@@ -66,5 +74,7 @@ jobs:
           name: IMG-V2-Actual-Emulator
           path: |
             img-v2-emulator.png
+            img-v2-operator.png
+            img-v2-operator-start.txt
             img-v2-ui.xml
             img-v2-logcat.txt
