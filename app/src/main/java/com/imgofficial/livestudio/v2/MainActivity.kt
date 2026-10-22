@@ -146,6 +146,18 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if (action.startsWith("native-private-video-start:")) {
+        val draftId=action.removePrefix("native-private-video-start:")
+        if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
+           BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
+         // Explicit user action in Broadcast Settings. Native Android still
+         // validates that the draft is private/session-owned before RTMPS.
+         runOnUiThread {
+          startActivity(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+           .putExtra("draftRequestId",draftId)
+           .putExtra("img_autostart",true))
+         }
+        }
        } else if (action.startsWith("native-private-video:")) {
         val draftId=action.removePrefix("native-private-video:")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
