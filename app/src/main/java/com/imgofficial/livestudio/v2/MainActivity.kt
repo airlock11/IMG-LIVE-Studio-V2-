@@ -146,6 +146,15 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action == "img-orientation:landscape" || action == "img-orientation:portrait") {
+        // Only fixed, origin-checked orientation values are accepted. Avoid
+        // WebView fullscreen tricks: native system bars remain real/visible.
+        runOnUiThread {
+         val requested=if(action.endsWith("landscape"))
+          android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+         else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+         if(requestedOrientation!=requested)requestedOrientation=requested
+        }
        } else if (action.startsWith("native-private-video-start:")) {
         val draftId=action.removePrefix("native-private-video-start:")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
