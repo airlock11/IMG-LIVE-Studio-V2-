@@ -31,9 +31,14 @@ internal object V2Scorecard {
  private const val pale=0xFFE9FFF3.toInt()
  private const val muted=0xFFADC2B9.toInt()
  private fun name(value:String)=value.trim().take(18).ifEmpty{"TEAM"}
- fun render(score:State):Bitmap {
+ fun render(score:State, opacity:Float=1f):Bitmap {
   val image=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
   val canvas=Canvas(image)
+  // The image filter always receives an RGBA bitmap. Hiding the board
+  // renders transparent pixels rather than a null (black) texture.
+  val alpha=(opacity.coerceIn(0f,1f)*255).toInt()
+  if(alpha==0)return image
+  val layer=canvas.saveLayerAlpha(0f,0f,W.toFloat(),H.toFloat(),alpha)
   val paint=Paint(Paint.ANTI_ALIAS_FLAG)
   paint.color=ink
   canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),H.toFloat()),21f,21f,paint)
@@ -76,6 +81,7 @@ internal object V2Scorecard {
    canvas.drawText("FOULS ${score.homeFouls.coerceIn(0,99)}",192f,134f,paint)
    canvas.drawText("FOULS ${score.awayFouls.coerceIn(0,99)}",768f,134f,paint)
   }
+  canvas.restoreToCount(layer)
   return image
  }
 }
