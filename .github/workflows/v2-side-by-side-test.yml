@@ -1,0 +1,70 @@
+name: IMG V2 Side-by-Side Test APK
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/v2-side-by-side-test.yml'
+
+jobs:
+  side-by-side:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Check OAuth and WebView source
+        run: |
+          node --check backend/oauth-worker/src/index.js
+          node --check app/src/main/assets/account-connections.js
+      - name: Build isolated V2 phone test with pinned HTTPS server
+        run: |
+          gradle :app:assembleDebug \
+            -PimgSideBySideTest=true \
+            -PimgOAuthBackendUrl=https://img-live-studio-oauth.magsipocarnie.workers.dev \
+            --stacktrace
+      - name: Check that APK cannot overwrite the existing V2 app
+        run: |
+          set -euo pipefail
+          AAPT="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          "$AAPT" dump badging "$APK" | grep -E "^package: name='com.imgofficial.livestudio.v2.test'"
+          "$AAPT" dump badging "$APK" | grep -F "application-label:'IMG LIVE Studio V2 Test'"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "$APKSIGNER" verify --print-certs "$APK" | grep 'Signer #1 certificate SHA-256 digest'
+          echo "NOTE: test APK is separately signed. It must not replace com.imgofficial.livestudio.v2."
+      - name: Package clear install instructions
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk IMG-LIVE-Studio-V2-Test-SideBySide.apk
+          cat > README-TEST-APK.txt <<'TEXT'
+          IMG LIVE Studio V2 - Isolated Android Device Test
+          ---------------------------------------------------
+          This is a SEPARATE .test app; it does NOT overwrite your working V2.
+          Install alongside the original. DO NOT uninstall the original app.
+          Test app package: com.imgofficial.livestudio.v2.test
+          Existing app package: com.imgofficial.livestudio.v2
+          The test app has its own secure account session. Signing keys of
+          different CI debug builds are NOT guaranteed to match.
+          YouTube/private streaming requires the existing HTTPS OAuth Worker
+          to be enabled and the staging private test window to be active.
+          The V2 device-test stream is not proof of production readiness.
+          Android foreground service behaviour through phone lock and network
+          handoff must be tested on an actual physical device.
+          Live Portrait/Landscape changes the camera framing within a fixed
+          9:16 stream; this does not dynamically renegotiate a 16:9 output.
+          TEXT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: IMG-V2-SideBySide-Test-APK
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            IMG-LIVE-Studio-V2-Test-SideBySide.apk
+            README-TEST-APK.txt
