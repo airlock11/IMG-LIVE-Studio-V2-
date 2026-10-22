@@ -295,7 +295,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   )
   updateScorecard()
  }
- fun scorecard():V2Scorecard.State=scoreboard.copy()
+ internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
  fun adjustScore(team:Int,delta:Int){
   if(team !in 0..1 || delta !in -3..3 || delta==0)return
