@@ -21,7 +21,7 @@ jobs:
       IMG_V2_STORE_PASSWORD: ${{ secrets.IMG_V2_STORE_PASSWORD }}
       IMG_V2_KEY_ALIAS: ${{ secrets.IMG_V2_KEY_ALIAS }}
       IMG_V2_KEY_PASSWORD: ${{ secrets.IMG_V2_KEY_PASSWORD }}
-      IMG_V2_KEYSTORE_PATH: ${{ runner.temp }}/img-v2-stable-signing.jks
+      IMG_V2_KEYSTORE_PATH: /tmp/img-v2-stable-signing.jks
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
