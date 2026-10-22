@@ -253,7 +253,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    val engine=GenericStream(this,this)
    // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
    // Streetball portrait uses a future separate mode/profile.
-   if(!engine.prepareVideo(960,540,1250000,24,2,0)||
+   if(!engine.prepareVideo(960,540,videoBitrate,24,2,0)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     notifyState("This phone cannot prepare the video/audio codec.")
