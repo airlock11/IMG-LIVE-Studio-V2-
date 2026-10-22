@@ -26,7 +26,7 @@ const encryptTokens=async (env,token)=>{
  return {version:1,iv:b64url(iv),ciphertext:b64url(ciphertext)};
 };
 const cookie = req => Object.fromEntries((req.headers.get("cookie")||"").split(";").map(x=>x.trim().split("=")).filter(x=>x.length===2));
-const cookieAttrs = "HttpOnly; Secure; SameSite=Lax; Path=/";
+const cookieAttrs = "HttpOnly; Secure; SameSite=None; Path=/";
 const origin = (env) => {
  const u=new URL(env.PUBLIC_ORIGIN);
  if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash)throw Error("Invalid PUBLIC_ORIGIN");
