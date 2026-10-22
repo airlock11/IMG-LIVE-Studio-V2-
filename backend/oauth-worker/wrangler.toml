@@ -3,14 +3,12 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
-# Isolated V2 namespaces, provisioned in IMG's Cloudflare account.
-[[kv_namespaces]]
-binding = "OAUTH_STATE"
-id = "45df67c75e1e45b797cce463a4dd89bc"
-
-[[kv_namespaces]]
-binding = "ACCOUNT_SESSIONS"
-id = "793b2b0979d84c6e95ea315219fabb70"
+# Transactional OAuth store (single-use state and pairing CAS, account sessions).
+[[d1_databases]]
+binding = "OAUTH_DB"
+database_name = "img-live-studio-v2-oauth"
+database_id = "26e32778-1dac-48a7-bcbf-8f21e48fa059"
+migrations_dir = "migrations"
 
 [vars]
 PUBLIC_ORIGIN = "https://img-live-studio-oauth.magsipocarnie.workers.dev"
