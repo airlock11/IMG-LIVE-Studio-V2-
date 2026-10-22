@@ -62,6 +62,8 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var congestedSamples=0
  private var healthySamples=0
  private var previousDropped=0L
+ private var previousUploadedBytes=0L
+ private var stalledUploadSamples=0
  private var qualityPolling=false
  private val qualityTick=object:Runnable {
   override fun run(){
@@ -316,6 +318,21 @@ class V2BroadcastService:Service(),ConnectChecker {
   val dropped=client.getDroppedVideoFrames()
   val increase=(dropped-previousDropped).coerceAtLeast(0L)
   previousDropped=dropped
+  // Transport can stall during Wi-Fi -> mobile-data handover without
+  // immediately invoking onConnectionFailed. Detect stalled real uploads
+  // (not just low signal strength) before attempting the same RTMPS URL.
+  val uploadedBytes=client.getBytesSend()
+  if(networkReady && uploadedBytes<=previousUploadedBytes)stalledUploadSamples++
+  else stalledUploadSamples=0
+  previousUploadedBytes=uploadedBytes
+  if(stalledUploadSamples>=3){
+   running=false;connecting=true
+   ui.removeCallbacks(qualityTick)
+   qualityPolling=false
+   notifyState("Video upload stalled • recovering same private feed")
+   scheduleRecovery()
+   return
+  }
   val congested=client.hasCongestion(35f)||increase>=3
   if(!networkReady || congested){
    congestedSamples++
@@ -400,6 +417,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   recoveryQueued=false
   healthySamples=0;congestedSamples=0
   previousDropped=stream?.getStreamClient()?.getDroppedVideoFrames()?:0L
+  previousUploadedBytes=stream?.getStreamClient()?.getBytesSend()?:0L
+  stalledUploadSamples=0
   pollQuality()
   notifyState("RTMPS accepted • check YouTube Studio Stream health")
  }}
