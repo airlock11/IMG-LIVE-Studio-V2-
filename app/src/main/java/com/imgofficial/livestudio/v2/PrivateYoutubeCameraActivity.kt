@@ -104,6 +104,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   shape=android.graphics.drawable.GradientDrawable.RECTANGLE
   setColor(color);cornerRadius=dp(radius).toFloat()
  }
+ private fun touchSurface(color:Int,radius:Int)=android.graphics.drawable.RippleDrawable(
+  android.content.res.ColorStateList.valueOf(Color.argb(60,255,255,255)),
+  rounded(color,radius),null
+ )
  private fun ink(value:String,size:Float=14f)=TextView(this).apply{
   text=value;textSize=size;setTextColor(Color.rgb(238,250,243))
   gravity=Gravity.CENTER
@@ -138,7 +142,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   refreshScoreboard()
  }
  private fun greenButton(value:String,run:()->Unit):Button = action(value,run).apply{
-  background=rounded(Color.rgb(30,220,130),11)
+  background=touchSurface(Color.rgb(30,220,130),11)
   setTextColor(Color.rgb(7,36,27))
   textSize=14f
   setTypeface(typeface,android.graphics.Typeface.BOLD)
@@ -146,13 +150,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   setPadding(dp(3),0,dp(3),0)
  }
  private fun darkButton(value:String,run:()->Unit):Button=action(value,run).apply{
-  background=rounded(Color.rgb(39,67,57),11)
+  background=touchSurface(Color.rgb(39,67,57),11)
   setTextColor(Color.rgb(231,247,237));textSize=12f
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
   setPadding(dp(2),0,dp(2),0)
  }
  private fun dangerButton(value:String,run:()->Unit):Button=darkButton(value,run).apply{
-  background=rounded(Color.rgb(127,42,49),11)
+  background=touchSurface(Color.rgb(127,42,49),11)
   setTextColor(Color.WHITE)
  }
  private fun card():LinearLayout=LinearLayout(this).apply{
@@ -558,7 +562,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   for((index,button) in periodQuickButtons.withIndex()){
    val active=index+1==score.period
-   button.background=rounded(if(active)Color.rgb(35,189,117) else Color.rgb(39,67,57),9)
+   button.background=touchSurface(if(active)Color.rgb(35,189,117) else Color.rgb(39,67,57),9)
    button.setTextColor(if(active)Color.rgb(8,35,27) else Color.rgb(231,247,237))
   }
   if(::undoButton.isInitialized)undoButton.isEnabled=lastScoreChange!=null
