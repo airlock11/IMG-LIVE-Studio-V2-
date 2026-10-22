@@ -257,7 +257,15 @@ export default {async fetch(req,env){
      scheduledStartTime:typeof item.snippet?.scheduledStartTime==="string"?item.snippet.scheduledStartTime.slice(0,40):null,
      hasStream:!!item.contentDetails?.boundStreamId
     }));
+   const owned=await env.OAUTH_DB.prepare(
+    "SELECT request_id,title,scheduled_start FROM youtube_private_draft_requests WHERE session_id=? AND state='complete' ORDER BY created_at DESC LIMIT 3")
+    .bind(session).all();
+   const privateDrafts=(owned.results||[]).filter(x=>/^[a-f0-9]{32}$/.test(x.request_id)).map(x=>({
+    requestId:x.request_id,title:String(x.title).slice(0,100),
+    scheduledStartTime:String(x.scheduled_start).slice(0,40)
+   }));
    return withCors(json({
+    privateDrafts,
     liveApiAccessible:true,
     liveEnabled:true,
     reason:"live_api_accessible",
