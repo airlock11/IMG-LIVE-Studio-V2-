@@ -19,9 +19,14 @@ PUBLIC_ORIGIN = "https://img-live-studio-oauth.magsipocarnie.workers.dev"
 # Safety gate: OAuth cannot start until provider credentials and a final
 # production security review are complete.
 OAUTH_ENABLED = "false"
+# YouTube-only testing is enabled temporarily in Cloudflare, never by default
+# from source control. Both flags remain disabled here for safe redeploys.
+YOUTUBE_TEST_ENABLED = "false"
+YOUTUBE_TEST_EXPIRES_AT = ""
+GOOGLE_CLIENT_ID = "860935049821-bgdenrs7svu1923kagci6vtmc71ahmeh.apps.googleusercontent.com"
 
 # Provision the following as Cloudflare Worker *secrets* (not in GitHub):
-# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+# GOOGLE_CLIENT_SECRET,
 # FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, TOKEN_ENCRYPTION_KEY.
 # Change OAUTH_ENABLED only after provider redirects, backend session storage,
 # replay protection and native Android end-to-end tests are verified.
