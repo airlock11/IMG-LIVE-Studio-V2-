@@ -70,13 +70,26 @@
       throw error;
     }
   }
+  async function disconnect(provider) {
+    if (!Object.prototype.hasOwnProperty.call(providers, provider)) throw new Error("Unsupported platform");
+    const origin = requireBackend();
+    const response = await fetch(origin + "/api/connections/" + provider + "/disconnect", {
+      method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:"{}"
+    });
+    if (!response.ok) throw new Error("Could not disconnect account");
+    const result = await response.json();
+    if (result.disconnected !== true || result.provider !== provider) throw new Error("Unverified disconnect");
+    state[provider] = "disconnected";
+    publish();
+    return true;
+  }
   // Reconcile only with the backend; returning from the external browser is not proof of login.
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden && backend) refresh().catch(() => {});
   });
   window.addEventListener("pageshow", () => { if (backend) refresh().catch(() => {}); });
   window.IMGAccounts = Object.freeze({
-    configure, refresh, connect,
+    configure, refresh, connect, disconnect,
     getStatus: () => ({...state}),
     subscribe(fn) { listeners.add(fn); fn({...state}); return () => listeners.delete(fn); }
   });
