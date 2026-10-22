@@ -219,9 +219,13 @@ export default {async fetch(req,env){
     response=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id%2Csnippet%2Cstatus%2CcontentDetails&mine=true&broadcastType=all&maxResults=20",{
      method:"GET",
      headers:{Authorization:"Bearer "+token.access_token,Accept:"application/json"},
-     redirect:"error"
+     // workerd does not support redirect:"error"; manual denies redirects
+     // without risking an automatic Authorization-header forward.
+     redirect:"manual"
     });
    }catch(_){return liveUnavailable(req,"youtube_api_network_unavailable");}
+   if(response.status>=300&&response.status<400)
+    return liveUnavailable(req,"youtube_api_redirect_rejected");
    if(!response.ok){
     if(response.status===401)return withCors(json({error:"youtube_reauthorization_required"},401),req);
     const upstream=await response.json().catch(()=>null);
@@ -307,7 +311,7 @@ export default {async fetch(req,env){
    let response;
    try{
     response=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet%2Cstatus%2CcontentDetails",{
-     method:"POST",redirect:"error",
+     method:"POST",redirect:"manual",
      headers:{Authorization:"Bearer "+token.access_token,"Content-Type":"application/json",Accept:"application/json"},
      body:JSON.stringify({
       snippet:{title,scheduledStartTime:schedule},
@@ -316,6 +320,9 @@ export default {async fetch(req,env){
      })
     });
    }catch(_){return fail("youtube_draft_creation_unavailable",502);}
+   // Reject 3xx without following, logging, or exposing the Location header.
+   if(response.status>=300&&response.status<400)
+    return fail("youtube_draft_redirect_rejected",502);
    if(!response.ok){
     if(response.status===401)return fail("youtube_reauthorization_required",401);
     if(response.status===403)return fail("youtube_live_permission_denied",403);
