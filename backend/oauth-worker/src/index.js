@@ -258,7 +258,9 @@ export default {async fetch(req,env){
      hasStream:!!item.contentDetails?.boundStreamId
     }));
    const owned=await env.OAUTH_DB.prepare(
-    "SELECT request_id,title,scheduled_start FROM youtube_private_draft_requests WHERE session_id=? AND state='complete' ORDER BY created_at DESC LIMIT 3")
+    "SELECT d.request_id,d.title,d.scheduled_start FROM youtube_private_draft_requests d "+
+    "LEFT JOIN youtube_private_ingest_attempts i ON i.session_id=d.session_id AND i.draft_request_id=d.request_id "+
+    "WHERE d.session_id=? AND d.state='complete' AND i.session_id IS NULL ORDER BY d.created_at DESC LIMIT 3")
     .bind(session).all();
    const privateDrafts=(owned.results||[]).filter(x=>/^[a-f0-9]{32}$/.test(x.request_id)).map(x=>({
     requestId:x.request_id,title:String(x.title).slice(0,100),
@@ -401,9 +403,12 @@ export default {async fetch(req,env){
     .bind(session,draftId,draft.broadcast_id,now()).run();
    if(claim.meta?.changes!==1)return withCors(json({error:"private_ingest_already_attempted"},409),req);
    const fail=async(error,http)=>{
+    // Store ONLY a fixed, non-secret stage code. Never store Google error
+    // bodies, access tokens, RTMPS URLs or streaming keys.
     await env.OAUTH_DB.prepare(
-     "UPDATE youtube_private_ingest_attempts SET state='failed' WHERE session_id=? AND draft_request_id=? AND state='processing'")
-     .bind(session,draftId).run();
+     "UPDATE youtube_private_ingest_attempts SET state='failed',failure_code=? "+
+     "WHERE session_id=? AND draft_request_id=? AND state='processing'")
+     .bind(error,session,draftId).run();
     return withCors(json({error},http),req);
    };
    const headers={Authorization:"Bearer "+token.access_token,Accept:"application/json"};
@@ -421,7 +426,7 @@ export default {async fetch(req,env){
     return fail("private_draft_not_ready_for_ingest",409);
    let created;
    try{
-    created=await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=id%2Ccdn%2Csnippet",{
+    created=await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=id%2Ccdn%2Csnippet%2CcontentDetails",{
      method:"POST",redirect:"manual",headers:{...headers,"content-type":"application/json"},
      body:JSON.stringify({snippet:{title:"IMG LIVE Studio private test feed"},
       cdn:{frameRate:"30fps",ingestionType:"rtmp",resolution:"720p"},
