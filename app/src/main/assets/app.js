@@ -256,7 +256,13 @@ async function startPrivateYouTubeFromStudio(){
   // MediaStream tracks before Android Camera2 prepares the native RTMPS feed.
   // This action NEVER ends an existing native foreground upload.
   window.IMGMedia?.stopCamera?.();
-  window.IMGNativeChannel.postMessage('native-private-video-start:'+owned);
+  const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
+  // Only bounded, non-secret game labels cross the local origin-checked
+  // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
+  const game=encodeURIComponent(JSON.stringify({
+   sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24)
+  }));
+  window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
   youtubeFeedback=String(error?.message||'YouTube could not prepare the private upload.').slice(0,200);
   toast(youtubeFeedback);
