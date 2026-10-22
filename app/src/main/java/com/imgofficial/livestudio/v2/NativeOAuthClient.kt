@@ -172,7 +172,12 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
      val enabled = data.opt("liveEnabled")
      val publishingConfigured = data.opt("publishingConfigured")
      val reason = data.optString("reason")
-     val allowedReasons = setOf("live_api_accessible", "live_streaming_not_enabled", "insufficient_live_permissions")
+     val allowedReasons = setOf(
+      "live_api_accessible","live_streaming_not_enabled","live_permission_blocked",
+      "insufficient_live_permissions","youtube_api_quota_exceeded","youtube_api_rate_limited",
+      "youtube_api_not_enabled","youtube_api_forbidden","youtube_api_bad_request",
+      "youtube_api_not_found","youtube_api_temporarily_unavailable",
+      "youtube_api_unexpected_response","youtube_api_network_unavailable")
      if (accessible !is Boolean ||
         !(enabled is Boolean || enabled == JSONObject.NULL) ||
         publishingConfigured !== false || reason !in allowedReasons)
@@ -201,7 +206,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
        .put("hasStream",item.opt("hasStream") === true))
      }
      safe.put("broadcasts",safeBroadcasts)
-     safe.put("canCreatePrivateDraft",data.opt("canCreatePrivateDraft") === true)
+     safe.put("canCreatePrivateDraft",accessible === true && data.opt("canCreatePrivateDraft") === true)
     }
     "createYoutubePrivateDraft" -> {
      if (data.opt("created") !== true || data.optString("privacy") != "private" ||
