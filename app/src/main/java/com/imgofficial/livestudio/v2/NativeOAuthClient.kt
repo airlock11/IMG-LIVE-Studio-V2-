@@ -66,6 +66,13 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   sessionCookie = value
  }
 
+ // The cookie stays inside this native client; a successful server logout
+ // permanently clears the encrypted device copy as well.
+ private fun clearSession() {
+  prefs.edit().remove("session").commit()
+  sessionCookie = null
+ }
+
  private fun validProvider(provider: String?) = provider == "facebook" || provider == "youtube"
 
  /**
@@ -91,6 +98,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   val code = command.optString("pairingCode")
   val route = when (action) {
    "refresh" -> "/api/connections"
+   "signOut" -> "/api/connections/logout"
    "connect" -> if (validProvider(provider)) "/api/connections/$provider/authorize" else null
    "verifyPairing" -> if (validProvider(provider)) "/api/connections/$provider/pairing" else null
    "cancelPending" -> if (validProvider(provider)) "/api/connections/$provider/cancel" else null
@@ -159,6 +167,12 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
     "disconnect" -> {
      safe.put("disconnected",data.opt("disconnected") === true)
      safe.put("provider",data.optString("provider"))
+    }
+    "signOut" -> {
+     if (data.opt("signedOut") !== true)
+      return JSONObject().put("ok",false).put("error","Unverified session logout")
+     clearSession()
+     safe.put("signedOut",true)
     }
    }
    return JSONObject().put("ok",true).put("data",safe)
