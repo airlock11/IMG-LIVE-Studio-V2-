@@ -202,3 +202,38 @@ test('Meta client secret never appears in token request URL',()=>{
  assert.match(source,/fetch\("https:\/\/graph\.facebook\.com\/v24\.0\/oauth\/access_token",\{method:"POST"/);
  assert.doesNotMatch(source,/endpoint\.search\s*=\s*new URLSearchParams/);
 });
+
+test('global logout revokes session, provider tokens and all pending OAuth states atomically',async()=>{
+ const env=makeEnv();
+ const facebook=await authorize(env,'facebook');
+ const youtube=await authorize(env,'youtube',facebook.cookie);
+ const id=facebook.cookie.split('=')[1];
+ for(const provider of ['facebook','youtube']){
+  env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) VALUES(?,?,?,?)',id,provider,'{}',Date.now()+600000);
+ }
+ const logout=await call('/api/connections/logout',{method:'POST',headers:{...ctype,cookie:facebook.cookie},body:'{}'},env);
+ assert.equal(logout.status,200);
+ assert.equal((await logout.json()).signedOut,true);
+ assert.match(logout.headers.get('set-cookie'),/^__Host-img_session=;/);
+ assert.match(logout.headers.get('set-cookie'),/Max-Age=0/);
+ for(const table of ['oauth_sessions','oauth_accounts','oauth_pairings','oauth_states'])
+  assert.equal(env.OAUTH_DB.query('SELECT * FROM '+table).length,0,table+' should be empty');
+ const after=await call('/api/connections',{headers:{...ctype,cookie:facebook.cookie}},env);
+ assert.deepEqual(await after.json(),{facebook:{connected:false},youtube:{connected:false}});
+ for(const state of [facebook.state,youtube.state]){
+  const denied=await call('/api/connections/facebook/callback?state='+state+'&code=invalid',{},env);
+  assert.equal(denied.status,400);
+ }
+ const denied=await call('/api/connections/youtube/cancel',{method:'POST',headers:{...ctype,cookie:facebook.cookie},body:JSON.stringify({pairingCode:youtube.pairingCode})},env);
+ assert.equal(denied.status,401);
+});
+test('logout rejects forged origin and wrong media type, and is idempotent',async()=>{
+ const env=makeEnv();
+ const forged=await call('/api/connections/logout',{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'},env);
+ assert.equal(forged.status,403);
+ const wrongType=await call('/api/connections/logout',{method:'POST',headers:{origin:appOrigin,'content-type':'text/plain'},body:'{}'},env);
+ assert.equal(wrongType.status,415);
+ const empty=await call('/api/connections/logout',{method:'POST',headers:ctype,body:'{}'},env);
+ assert.equal(empty.status,200);
+ assert.equal((await empty.json()).signedOut,true);
+});
