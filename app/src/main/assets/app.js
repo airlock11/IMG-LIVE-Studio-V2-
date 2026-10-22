@@ -244,6 +244,10 @@ async function startPrivateYouTubeFromStudio(){
   }
   if(!/^[a-f0-9]{32}$/.test(owned))throw Error('No valid private YouTube event is available.');
   youtubeFeedback='';
+  // The WebView camera may already own the same physical lens. Release its
+  // MediaStream tracks before Android Camera2 prepares the native RTMPS feed.
+  // This action NEVER ends an existing native foreground upload.
+  window.IMGMedia?.stopCamera?.();
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned);
  }catch(error){
   youtubeFeedback=String(error?.message||'YouTube could not prepare the private upload.').slice(0,200);
