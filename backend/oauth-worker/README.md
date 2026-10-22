@@ -11,7 +11,7 @@ The existing IMG website and the original V1 app/Workers are not changed.
 
 ## Provisioned Cloudflare configuration
 
-- `OAUTH_DB`: dedicated V2 D1 database `img-live-studio-v2-oauth`, schemas `migrations/0001_oauth_transactional.sql` and `migrations/0002_access_token_lifecycle.sql`
+- `OAUTH_DB`: dedicated V2 D1 database `img-live-studio-v2-oauth`, schemas `migrations/0001_oauth_transactional.sql`, `migrations/0002_access_token_lifecycle.sql`, and `migrations/0003_youtube_private_drafts.sql`
 - `oauth_sessions`, `oauth_accounts`, `oauth_pairings`, and `oauth_states` use D1 for reliable transactional writes and atomic state claims
 - `PUBLIC_ORIGIN`: the HTTPS Worker URL above
 - `OAUTH_ENABLED`: explicitly `false`, checked on all account API endpoints
@@ -46,8 +46,18 @@ The native account screen offers **Check live readiness** after YouTube is verif
 - Requests without a valid native session return 401; unauthorized origins return 403; the expired staging window returns 503.
 - Tests cover encrypted-token isolation, error sanitization, authentication gating, and real Worker smoke checks.
 
-When the User finishes login on Android, open **Settings → Manage connections → YouTube live readiness → Check live readiness**, then report the visible result. The next implementation phase (not part of this read-only milestone) is explicit operator-selected broadcast and safe RTMP/RTMPS streaming provision with secure destination secrets.
+When the User finishes login on Android, open **Settings → Manage connections → YouTube live readiness → Check live readiness**, then report the visible result. The operator-confirmed **private draft creation** stage is now implemented, but binding RTMPS ingestion credentials, a native broadcast encoder, stream transmission, and Go Live remain separate future stages.
 
+
+## Private YouTube broadcast draft creation (test-only)
+
+- Available only when **both** the temporary, expiring YouTube OAuth test mode and separate `YOUTUBE_DRAFT_ENABLED` are active. Both switches are `false` in `wrangler.toml` by default. Full production `OAUTH_ENABLED` remains `false`.
+- Operator must sign in to a verified YouTube channel, select **Check live readiness**, then use the **Private broadcast draft** form. The operator explicitly enters a title, local start time (at least 10 minutes ahead, at most 7 days), and made-for-kids audience classification, then confirms the action.
+- The Worker invokes only YouTube `liveBroadcasts.insert` with `privacyStatus: private` and `enableAutoStart: false`. It does **not** call `liveStreams.insert`, retrieve ingestion keys, bind a stream, start video, change privacy, or transition a broadcast to live. A draft is real content in the linked user's YouTube account, even though it is private.
+- D1 table `youtube_private_draft_requests` enforces a session-owned idempotency key and at most **three** draft requests per session per rolling 24 hours. A completed retry returns the original draft; failed or in-progress keys cannot create a duplicate. Daily cleanup purges draft request logs after 30 days.
+- No OAuth access or refresh token, Google channel ID, RTMP key, or CDN ingestion URL is returned to Android JavaScript. The Android client independently validates `privacy: private` in the response.
+- GitHub tests mock all Google write operations; no real draft is created automatically by CI. The separate Cloudflare deployment smoke checks reject unauthenticated and cross-origin attempts without creating a broadcast.
+- On the live Worker the temporary operator test window ends **October 23, 2026 at 11:27 UTC**. The private-draft capability closes at that time even if its feature flag remains set. Do not extend for public release without completing the remaining security reviews.
 
 ## Official provider redirect addresses (for future configuration)
 
