@@ -7,6 +7,7 @@ const source=await readFile(new URL('./src/index.js',import.meta.url),'utf8');
 const schema=await readFile(new URL('./migrations/0001_oauth_transactional.sql',import.meta.url),'utf8');
 const schema2=await readFile(new URL('./migrations/0002_access_token_lifecycle.sql',import.meta.url),'utf8');
 const schema3=await readFile(new URL('./migrations/0003_youtube_private_drafts.sql',import.meta.url),'utf8');
+const schema5=await readFile(new URL('./migrations/0005_youtube_private_ingest.sql',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const api='https://oauth.example.test';
 const appOrigin='https://appassets.androidplatform.net';
@@ -18,6 +19,7 @@ function memoryD1(){
  db.exec(schema);
  db.exec(schema2);
  db.exec(schema3);
+ db.exec(schema5);
  const make=(sql,args=[])=>({
   sql,args,
   bind(...values){return make(sql,values)},
@@ -713,4 +715,90 @@ test('Private draft creation refuses redirects and never forwards the access tok
   assert.equal(env.OAUTH_DB.query('SELECT state FROM youtube_private_draft_requests')[0].state,'failed');
   assert.equal(calls,1);
  }finally{globalThis.fetch=original;}
+});
+
+test('private ingest fails closed, never automatically enabled by working OAuth and drafts',async()=>{
+ const env=activePrivateDraftEnv();
+ const authorization=await seedConnectedYoutube(env);
+ let googleCalls=0;
+ const old=globalThis.fetch;
+ try {
+  globalThis.fetch=async()=>{googleCalls++;throw Error('Google must never be called')};
+  const payload={draftRequestId:'a'.repeat(32),operatorConfirmed:true};
+  const response=await call('/api/connections/youtube/private-ingest',{
+   method:'POST',headers:{...ctype,cookie:authorization.cookie},body:JSON.stringify(payload)
+  },env);
+  assert.equal(response.status,503);
+  assert.deepEqual(await response.json(),{error:'youtube_private_ingest_disabled'});
+  assert.equal(googleCalls,0);
+  assert.equal(env.OAUTH_DB.query('SELECT * FROM youtube_private_ingest_attempts').length,0);
+ }finally{globalThis.fetch=old}
+});
+
+test('private ingest demands native origin, explicit confirmation, and session-owned draft',async()=>{
+ const env=activePrivateDraftEnv();
+ env.YOUTUBE_INGEST_TEST_ENABLED='true';
+ const authorization=await seedConnectedYoutube(env);
+ const valid={draftRequestId:'a'.repeat(32),operatorConfirmed:true};
+ const noOrigin=await call('/api/connections/youtube/private-ingest',{
+  method:'POST',headers:{...ctype,origin:'https://other.example',cookie:authorization.cookie},
+  body:JSON.stringify(valid)},env);
+ assert.equal(noOrigin.status,403);
+ const noConfirm=await call('/api/connections/youtube/private-ingest',{
+  method:'POST',headers:{...ctype,cookie:authorization.cookie},
+  body:JSON.stringify({...valid,operatorConfirmed:false})},env);
+ assert.equal(noConfirm.status,400);
+ const notOwned=await call('/api/connections/youtube/private-ingest',{
+  method:'POST',headers:{...ctype,cookie:authorization.cookie},
+  body:JSON.stringify(valid)},env);
+ assert.equal(notOwned.status,404);
+ assert.equal((await notOwned.json()).error,'private_draft_not_owned');
+ assert.equal(env.OAUTH_DB.query('SELECT * FROM youtube_private_ingest_attempts').length,0);
+});
+
+test('private ingest binds only verified private draft and never transitions live',async()=>{
+ const env=activePrivateDraftEnv();
+ env.YOUTUBE_INGEST_TEST_ENABLED='true';
+ const authorized=await seedConnectedYoutube(env);
+ const session=authorized.cookie.split('=')[1];
+ env.OAUTH_DB.execute("INSERT INTO youtube_private_draft_requests(session_id,request_id,payload_hash,state,broadcast_id,title,scheduled_start,created_at) VALUES(?,?,?,'complete',?,?,?,?)",
+  session,'a'.repeat(32),'hash','privateVideo123','Practice',new Date(Date.now()+3600000).toISOString(),Date.now());
+ const prior=globalThis.fetch;
+ const called=[];
+ try{
+  globalThis.fetch=async (url,options)=>{
+   called.push({url,method:options.method,redirect:options.redirect,body:options.body});
+   assert.equal(options.redirect,'manual');
+   assert.equal(options.headers.Authorization,'Bearer private-test-access');
+   if(url.includes('liveBroadcasts?part=')){
+    return Response.json({items:[{id:'privateVideo123',snippet:{channelId:'UC1234567890123456789012'},
+     status:{privacyStatus:'private',lifeCycleStatus:'created'},contentDetails:{}}]});
+   }
+   if(url.includes('/liveStreams?part=')){
+    const data=JSON.parse(options.body);
+    assert.equal(data.cdn.ingestionType,'rtmp');
+    return Response.json({id:'youtubeStream1',cdn:{ingestionInfo:{
+     rtmpsIngestionAddress:'rtmps://a.rtmps.youtube.com/live2',streamName:'private_stream_123'
+    }}});
+   }
+   if(url.includes('liveBroadcasts/bind?')){
+    return Response.json({id:'privateVideo123',contentDetails:{boundStreamId:'youtubeStream1'}});
+   }
+   throw Error('Unexpected YouTube route');
+  };
+  const body=JSON.stringify({draftRequestId:'a'.repeat(32),operatorConfirmed:true});
+  const opts={method:'POST',headers:{...ctype,cookie:authorized.cookie},body};
+  const response=await call('/api/connections/youtube/private-ingest',opts,env);
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.privacy,'private');
+  assert.equal(data.autoStart,false);
+  assert.equal(data.rtmpsUrl,'rtmps://a.rtmps.youtube.com/live2/private_stream_123');
+  assert.deepEqual(called.map(x=>x.method),['GET','POST','POST']);
+  assert.equal(called.some(x=>x.url.includes('transition')),false);
+  assert.equal(env.OAUTH_DB.query('SELECT state FROM youtube_private_ingest_attempts')[0].state,'complete');
+  const retry=await call('/api/connections/youtube/private-ingest',opts,env);
+  assert.equal(retry.status,409);
+  assert.equal(called.length,3);
+ }finally{globalThis.fetch=prior}
 });
