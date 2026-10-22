@@ -16,12 +16,17 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.CookieManager
+import android.view.View
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.webkit.WebViewAssetLoader
 
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
  private lateinit var browser: WebView
+ private lateinit var root: FrameLayout
+ private var fullscreenView: View? = null
+ private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
  private var pendingMediaRequest: PermissionRequest? = null
  private var pendingFileChooser: ValueCallback<Array<Uri>>? = null
  private val fileChooserRequest = 502
@@ -62,6 +67,21 @@ class MainActivity : Activity() {
     }
    }
    webChromeClient = object : WebChromeClient() {
+    override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+     if(fullscreenView != null) { callback.onCustomViewHidden(); return }
+     fullscreenView = view
+     fullscreenCallback = callback
+     root.addView(view, FrameLayout.LayoutParams(-1,-1))
+     browser.visibility = View.GONE
+    }
+    override fun onHideCustomView() {
+     val view = fullscreenView ?: return
+     root.removeView(view)
+     fullscreenView = null
+     browser.visibility = View.VISIBLE
+     fullscreenCallback?.onCustomViewHidden()
+     fullscreenCallback = null
+    }
     override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams): Boolean {
      pendingFileChooser?.onReceiveValue(null)
      pendingFileChooser = callback
@@ -87,7 +107,9 @@ class MainActivity : Activity() {
    if(savedInstanceState == null) loadUrl("$origin/assets/index.html")
   }
   if(savedInstanceState != null) browser.restoreState(savedInstanceState)
-  setContentView(browser)
+  root = FrameLayout(this)
+  root.addView(browser, FrameLayout.LayoutParams(-1,-1))
+  setContentView(root)
   window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
  }
 
@@ -162,7 +184,8 @@ class MainActivity : Activity() {
  }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {
-  if(browser.canGoBack()) browser.goBack() else super.onBackPressed()
+  if(fullscreenView != null) browser.webChromeClient?.onHideCustomView()
+  else if(browser.canGoBack()) browser.goBack() else super.onBackPressed()
  }
  override fun onSaveInstanceState(outState: Bundle) {
   browser.saveState(outState)
