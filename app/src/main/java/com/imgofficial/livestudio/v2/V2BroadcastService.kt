@@ -106,10 +106,27 @@ class V2BroadcastService:Service(),ConnectChecker {
    .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,
     "Stop Upload",stop).build()).build()
  }
- fun activateForeground() {
-  if(foreground)return
-  androidx.core.content.ContextCompat.startForegroundService(this,
-   Intent(this,V2BroadcastService::class.java).setAction(actionActivate))
+ fun activateForeground():Boolean {
+  if(foreground)return true
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED||
+     checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
+  return try{
+   // The button is pressed while V2 is visible; launch a started service so
+   // it survives unbinding, then promote immediately before network work.
+   androidx.core.content.ContextCompat.startForegroundService(this,
+    Intent(this,V2BroadcastService::class.java).setAction(actionActivate))
+   if(!foreground){
+    val n=notification()
+    if(Build.VERSION.SDK_INT>=29)startForeground(notificationId,n,
+     ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+    else startForeground(notificationId,n)
+    foreground=true
+   }
+   true
+  }catch(_:Exception){
+   notifyState("Android could not start background camera service.")
+   false
+  }
  }
 
  fun prepareCamera():Boolean {
