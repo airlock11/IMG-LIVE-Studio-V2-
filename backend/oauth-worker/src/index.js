@@ -77,6 +77,7 @@ export default {async fetch(req,env){
    await env.OAUTH_STATE.delete(key);
    const attempt=JSON.parse(raw);
    if(attempt.provider!==provider)return json({error:"provider_mismatch"},400);
+   if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
    if(u.searchParams.get("error"))return json({error:"authorization_declined"},400);
    // Exchange codes on the server only. Never return the token to the browser.
    let token;
