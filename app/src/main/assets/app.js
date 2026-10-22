@@ -261,7 +261,7 @@ async function startPrivateYouTubeFromStudio(){
   // so the NATIVE compositor displays the real badges without downloading
   // remote resources or passing source files to the RTMPS service.
   async function compactBadge(raw){
-   if(typeof raw!=='string'||!/^data:image\\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
    try{
     const photo=new Image();
     await new Promise((resolve,reject)=>{photo.onload=resolve;photo.onerror=reject;photo.src=raw;});
