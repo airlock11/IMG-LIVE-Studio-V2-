@@ -200,7 +200,7 @@ internal object V2BroadcastGraphicsRenderer {
   p.setShadowLayer(19f,1f,9f,0xB8000000.toInt())
   shape(c,p,7f,7f,946f,126f,0xFF06080C.toInt(),if(id==2||id==7)60f else 12f)
   p.clearShadowLayer()
-  val left=if(id in listOf(0,6))24f:18f
+  val left=if(id in listOf(0,6))24f else 18f
   val teamW=if(id==2||id==5)334f else if(id==7)349f else 338f
   if(id==2||id==7){
    bevel(c,p,14f,13f,930f,112f,0xFFBFCBCE.toInt(),0xFF3F4C55.toInt(),59f,SILVER)
