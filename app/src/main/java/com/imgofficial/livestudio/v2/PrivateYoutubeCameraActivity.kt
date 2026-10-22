@@ -30,6 +30,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var broadcast:V2BroadcastService?=null
  private var bound=false
  private var resumed=false
+ // Only a fresh, user-initiated main-screen action can auto-start upload.
+ private var autoLaunchAllowed=false
  private lateinit var monitor:SurfaceView
  private lateinit var status:TextView
  private lateinit var start:Button
@@ -51,6 +53,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(checkPermissions()&&resumed&&monitor.holder.surface.isValid)
     broadcast?.attachPreview(monitor)
    refresh()
+   maybeStartPrivateUpload()
   }
   override fun onServiceDisconnected(name:ComponentName?){
    broadcast=null;status.text="Broadcast service disconnected."
@@ -68,6 +71,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
+  autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
+  window.statusBarColor=Color.rgb(16,23,27)
+  window.navigationBarColor=Color.rgb(16,23,27)
   val landscape=intent.getStringExtra("img_video_mode")=="landscape"
   requestedOrientation=if(landscape)ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
    else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -79,7 +85,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   val controls=LinearLayout(this).apply {orientation=LinearLayout.VERTICAL}
   controls.addView(text("IMG LIVE STUDIO • V2",13f))
-  controls.addView(text("Private YouTube camera test",if(landscape)17f else 21f))
+  controls.addView(text("YouTube video upload",if(landscape)17f else 21f))
   controls.addView(text("Live camera framing • transmitted stream stays 9:16",12f))
   val choices=LinearLayout(this).apply {orientation=LinearLayout.HORIZONTAL}
   portraitButton=action("Portrait"){changeFraming(true)}
@@ -157,9 +163,22 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(checkPermissions()){
     broadcast?.prepareCamera()
     if(resumed&&monitor.holder.surface.isValid)broadcast?.attachPreview(monitor)
-   }else status.text="Allow camera and microphone access to start your PRIVATE test."
+   }else status.text="Allow camera and microphone to broadcast privately."
    refresh()
+   maybeStartPrivateUpload()
   }
+ }
+ private fun maybeStartPrivateUpload(){
+  if(!autoLaunchAllowed||!checkPermissions())return
+  val service=broadcast?:return
+  if(service.isActive()||service.isEnded()){autoLaunchAllowed=false;return}
+  autoLaunchAllowed=false
+  if(!service.activateForeground()){
+   status.text="Android could not start private video upload."
+   return
+  }
+  service.startPrivateUpload(draftId)
+  refresh()
  }
  private fun refresh(){
   val service=broadcast
