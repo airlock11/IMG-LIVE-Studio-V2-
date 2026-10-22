@@ -11,6 +11,10 @@ jobs:
      with:
       distribution: temurin
       java-version: '17'
+   - name: Validate OAuth backend and account UI JavaScript
+     run: |
+       node --check backend/oauth-worker/src/index.js
+       node --check app/src/main/assets/account-connections.js
    - name: Verify preinstalled Android SDK
      run: test -d "$ANDROID_HOME/platforms" && test -d "$ANDROID_HOME/build-tools"
    - name: Install Gradle
