@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.IBinder
 import android.view.Gravity
+import android.view.View
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.ViewGroup
@@ -80,6 +81,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var awayFoulsDisplay:TextView
  private lateinit var clockToggleButton:Button
  private var lastScoreChange:Pair<Int,Int>?=null
+ private var touchFeedback=true
  private var gameSeconds=600
  private var gameRunning=false
  private var lastTick=0L
@@ -119,6 +121,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   updateGameClock()
  }
  private fun changeTeamScore(team:Int,delta:Int){
+  if(touchFeedback)try{window.decorView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)}catch(_:Exception){}
   val service=broadcast?:return
   val before=service.scorecard()
   val old=if(team==0)before.homeScore else before.awayScore
@@ -218,15 +221,29 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
   heading("CAMERA & ON-AIR GRAPHICS")
-  lateinit var overlayButton:Button
-  overlayButton=tool(if(broadcast?.scorecardVisible()==true)"HIDE SCOREBOARD" else "SHOW SCOREBOARD"){
-   val svc=broadcast
-   if(svc!=null){
-    svc.setScorecardVisible(!svc.scorecardVisible())
-    overlayButton.text=if(svc.scorecardVisible())"HIDE SCOREBOARD" else "SHOW SCOREBOARD"
+  fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
+   return android.widget.Switch(this).apply{
+    text=name
+    textSize=13f
+    setTextColor(Color.rgb(230,249,235))
+    setPadding(dp(8),0,dp(12),0)
+    isChecked=value
+    thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(236,252,240))
+    trackTintList=android.content.res.ColorStateList(
+     arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
+     intArrayOf(Color.rgb(25,171,102),Color.rgb(70,91,79))
+    )
+    setOnCheckedChangeListener{_,checked->onToggle(checked)}
    }
   }
-  pair(overlayButton,tool("SWITCH CAMERA"){broadcast?.flipCamera();refresh()})
+  tools.addView(settingsToggle("Show scoreboard",broadcast?.scorecardVisible()==true){
+   broadcast?.setScorecardVisible(it)
+  },LinearLayout.LayoutParams(-1,dp(42)))
+  tools.addView(settingsToggle("Touch feedback",touchFeedback){
+   touchFeedback=it
+  },LinearLayout.LayoutParams(-1,dp(42)))
+  pair(tool("SWITCH CAMERA"){broadcast?.flipCamera();refresh()},
+   tool("UNDO LAST SCORE"){undoScore()})
   heading("CLOCK & GAME")
   pair(tool("EDIT GAME CLOCK"){dialog.dismiss();editClock()},
    tool("RESET TO 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
