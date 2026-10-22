@@ -75,6 +75,18 @@ const authEnabled=(env,provider)=>env.OAUTH_ENABLED==="true"||
  (provider==="youtube"&&youtubeTestActive(env));
 // Never permit private draft creation in general production mode.
 const privateDraftsEnabled=env=>env.YOUTUBE_DRAFT_ENABLED==="true"&&youtubeTestActive(env);
+// Publishing preparation is a separate, default-off switch during private testing.
+const privateIngestEnabled=env=>env.YOUTUBE_INGEST_TEST_ENABLED==="true"&&privateDraftsEnabled(env);
+const safeRtmps=(base,name)=>{
+ if(typeof base!=="string"||typeof name!=="string"||!/^[A-Za-z0-9_-]{8,512}$/.test(name))return null;
+ try {
+  const url=new URL(base);
+  if(url.protocol!=="rtmps:"||url.username||url.password||url.search||url.hash||
+     (url.port&&url.port!=="443")||url.pathname!=="/live2"||
+     !["a.rtmps.youtube.com","b.rtmps.youtube.com"].includes(url.hostname))return null;
+  return base.replace(/\\/$/,"")+"/"+name;
+ }catch(_){return null;}
+};
 
 const encryptionKey=async env=>{
  const encoded=env.TOKEN_ENCRYPTION_KEY;
@@ -339,6 +351,97 @@ export default {async fetch(req,env){
     .bind(id,session,requestId).run();
    if(saved.meta?.changes!==1)return withCors(json({error:"draft_session_revoked"},409),req);
    return withCors(json({created:true,alreadyCreated:false,privacy:"private",broadcast:{id,title,scheduledStartTime:schedule},publishingConfigured:false},201),req);
+  }
+
+  // V2: only the Keystore-backed native client consumes this secret-bearing
+  // response. The HTML/JS message bridge never exposes the ingest URL.
+  // The test flag is OFF by default, separate from OAuth and draft creation.
+  if(path==="/api/connections/youtube/private-ingest"&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return withCors(json({error:"unsupported_media_type"},415),req);
+   if(!privateIngestEnabled(env))return withCors(json({error:"youtube_private_ingest_disabled"},503),req);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
+   if(Number(req.headers.get("content-length")||0)>1024)return withCors(json({error:"request_too_large"},413),req);
+   const body=await req.json().catch(()=>null);
+   const draftId=body?.draftRequestId;
+   if(body?.operatorConfirmed!==true||typeof draftId!=="string"||!/^[a-f0-9]{32}$/.test(draftId))
+    return withCors(json({error:"invalid_private_ingest_request"},400),req);
+   const draft=await env.OAUTH_DB.prepare(
+    "SELECT broadcast_id,title FROM youtube_private_draft_requests WHERE session_id=? AND request_id=? AND state='complete'")
+    .bind(session,draftId).first();
+   if(!draft||typeof draft.broadcast_id!=="string"||!/^[A-Za-z0-9_-]{8,100}$/.test(draft.broadcast_id))
+    return withCors(json({error:"private_draft_not_owned"},404),req);
+   if(!(await status(env,session)).youtube.connected)
+    return withCors(json({error:"youtube_not_connected"},409),req);
+   const account=await env.OAUTH_DB.prepare(
+    "SELECT encrypted_token,access_expires_at FROM oauth_accounts WHERE session_id=? AND provider='youtube' AND expires_at>?")
+    .bind(session,now()).first();
+   if(!account||account.access_expires_at<now()+30000)
+    return withCors(json({error:"youtube_token_expired"},409),req);
+   let token;
+   try{token=await decryptTokens(env,account.encrypted_token);}catch(_){
+    return withCors(json({error:"youtube_token_invalid"},503),req);
+   }
+   if(typeof token.access_token!=="string"||!token.access_token||
+      typeof token.channel_id!=="string"||!/^[A-Za-z0-9_-]{16,64}$/.test(token.channel_id))
+    return withCors(json({error:"youtube_channel_not_verified"},409),req);
+   // D1 claim precedes external writes: failed/ambiguous attempts cannot be
+   // replayed into accidental duplicate Google streams.
+   const claim=await env.OAUTH_DB.prepare(
+    "INSERT INTO youtube_private_ingest_attempts(session_id,draft_request_id,broadcast_id,state,created_at) "+
+    "VALUES(?,?,?,'processing',?) ON CONFLICT(session_id,draft_request_id) DO NOTHING")
+    .bind(session,draftId,draft.broadcast_id,now()).run();
+   if(claim.meta?.changes!==1)return withCors(json({error:"private_ingest_already_attempted"},409),req);
+   const fail=async(error,http)=>{
+    await env.OAUTH_DB.prepare(
+     "UPDATE youtube_private_ingest_attempts SET state='failed' WHERE session_id=? AND draft_request_id=? AND state='processing'")
+     .bind(session,draftId).run();
+    return withCors(json({error},http),req);
+   };
+   const headers={Authorization:"Bearer "+token.access_token,Accept:"application/json"};
+   let verify;
+   try{
+    verify=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id%2Cstatus%2Csnippet%2CcontentDetails&id="+encodeURIComponent(draft.broadcast_id),
+     {method:"GET",headers,redirect:"manual"});
+   }catch(_){return fail("youtube_private_broadcast_check_unavailable",502);}
+   if(!verify.ok)return fail(verify.status>=300&&verify.status<400?"youtube_api_redirect_rejected":"youtube_private_broadcast_check_failed",502);
+   const events=(await verify.json().catch(()=>null))?.items;
+   const event=Array.isArray(events)&&events.length===1?events[0]:null;
+   if(event?.id!==draft.broadcast_id||event?.snippet?.channelId!==token.channel_id||
+      event?.status?.privacyStatus!=="private"||!["created","ready"].includes(event?.status?.lifeCycleStatus)||
+      event?.contentDetails?.boundStreamId)
+    return fail("private_draft_not_ready_for_ingest",409);
+   let created;
+   try{
+    created=await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=id%2Ccdn%2Csnippet",{
+     method:"POST",redirect:"manual",headers:{...headers,"content-type":"application/json"},
+     body:JSON.stringify({snippet:{title:"IMG LIVE Studio private test feed"},
+      cdn:{frameRate:"30fps",ingestionType:"rtmp",resolution:"720p"},
+      contentDetails:{isReusable:false}})
+    });
+   }catch(_){return fail("youtube_ingest_creation_unavailable",502);}
+   if(!created.ok)return fail(created.status>=300&&created.status<400?"youtube_api_redirect_rejected":"youtube_ingest_creation_failed",502);
+   const feed=await created.json().catch(()=>null);
+   const streamId=feed?.id,info=feed?.cdn?.ingestionInfo;
+   const rtmpsUrl=safeRtmps(info?.rtmpsIngestionAddress,info?.streamName);
+   if(typeof streamId!=="string"||!/^[A-Za-z0-9_-]{8,100}$/.test(streamId)||!rtmpsUrl)
+    return fail("invalid_youtube_ingest_destination",502);
+   let bound;
+   try{
+    bound=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts/bind?part=id%2CcontentDetails&id="+
+      encodeURIComponent(draft.broadcast_id)+"&streamId="+encodeURIComponent(streamId),
+      {method:"POST",redirect:"manual",headers});
+   }catch(_){return fail("youtube_stream_binding_unavailable",502);}
+   if(!bound.ok)return fail(bound.status>=300&&bound.status<400?"youtube_api_redirect_rejected":"youtube_stream_binding_failed",502);
+   const verified=await bound.json().catch(()=>null);
+   if(verified?.id!==draft.broadcast_id||verified?.contentDetails?.boundStreamId!==streamId)
+    return fail("youtube_stream_binding_unverified",502);
+   const saved=await env.OAUTH_DB.prepare(
+    "UPDATE youtube_private_ingest_attempts SET state='complete',stream_id=? WHERE session_id=? AND draft_request_id=? AND state='processing'")
+    .bind(streamId,session,draftId).run();
+   if(saved.meta?.changes!==1)return withCors(json({error:"private_ingest_session_revoked"},409),req);
+   return withCors(json({prepared:true,privacy:"private",broadcastTitle:draft.title,
+    rtmpsUrl,streamId,autoStart:false}),req);
   }
 
   // Native-only global logout revokes the D1 session and cascades all linked
