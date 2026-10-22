@@ -55,7 +55,7 @@ export default {async fetch(req,env){
   if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
   const cookies=cookie(req);
   // Sessions are created server-side; no client-supplied user identifiers.
-  let session=cookies.img_session;
+  let session=cookies["__Host-img_session"];
   if(!session||!/^[A-Za-z0-9_-]{43}$/.test(session)||!await env.ACCOUNT_SESSIONS.get("session:"+session))session=null;
   if(path==="/api/connections"&&method==="GET"){
    const record=session?JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+session)):null;
@@ -122,7 +122,7 @@ export default {async fetch(req,env){
    await env.OAUTH_STATE.put("state:"+state,JSON.stringify({provider,session,verifier,pairingHash:await digest(pairingCode)}),{expirationTtl:600});
    const p=new URLSearchParams({client_id:id,redirect_uri:redirectUri(env,provider),response_type:"code",state,scope:providers[provider].scope});
    if(provider==="youtube"){p.set("access_type","offline");p.set("code_challenge_method","S256");p.set("code_challenge",await digest(verifier));p.set("prompt","consent")}
-   const headers={"set-cookie":"img_session="+session+"; "+cookieAttrs+"; Max-Age=2592000"};
+   const headers={"set-cookie":"__Host-img_session="+session+"; "+cookieAttrs+"; Max-Age=2592000"};
    return withCors(json({authorizationUrl:providers[provider].auth+"?"+p,pairingCode},200,headers),req,env);
   }
   const callback=path.match(/^\/api\/connections\/(facebook|youtube)\/callback$/);
