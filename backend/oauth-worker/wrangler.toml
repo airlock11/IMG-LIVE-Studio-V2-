@@ -3,6 +3,10 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
+# Purge expired sessions and 10-minute OAuth pairing/state material each day.
+[triggers]
+crons = ["0 3 * * *"]
+
 # Transactional OAuth store (single-use state and pairing CAS, account sessions).
 [[d1_databases]]
 binding = "OAUTH_DB"
