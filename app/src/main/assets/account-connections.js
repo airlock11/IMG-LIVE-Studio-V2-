@@ -12,6 +12,7 @@
  let ready = false;
  let refreshPending = null;
  let sessionRevision = 0;
+ let privateDraftAvailable = false;
  const hasProvider = name => Object.prototype.hasOwnProperty.call(providers,name);
  function publish() {
   const snapshot=Object.freeze({...statuses});
@@ -40,7 +41,7 @@
    item.resolve(response.data);
   };
  }
- function nativeRequest(action,provider,pairingCode) {
+ function nativeRequest(action,provider,pairingCode,details) {
   if(!ready||!window.IMGNativeChannel?.postMessage)
    return Promise.reject(Error("Account login is not configured. IMG must deploy its secure Android login service first."));
   const bytes=new Uint8Array(12);
@@ -52,12 +53,13 @@
     reject(Error("Secure account service timed out"));
    },25000);
    pending.set(requestId,{resolve,reject,timeout});
-   try {window.IMGNativeChannel.postMessage(JSON.stringify({type:"oauth-api",requestId,action,provider,pairingCode}));}
+   try {window.IMGNativeChannel.postMessage(JSON.stringify({type:"oauth-api",requestId,action,provider,pairingCode,...(details||{})}));}
    catch(e){clearTimeout(timeout);pending.delete(requestId);reject(e);}
   });
  }
  function failClosed(error) {
   for(const p of Object.keys(providers)) statuses[p]="disconnected";
+  privateDraftAvailable=false;
   publish();
   throw error;
  }
@@ -91,11 +93,13 @@
      data.publishingConfigured!==false||!Array.isArray(data.broadcasts)||
      data.broadcasts.length>12)
     throw Error("Invalid live readiness response");
+  privateDraftAvailable=data.canCreatePrivateDraft===true && data.liveApiAccessible===true;
   return {
    liveApiAccessible:data.liveApiAccessible,
    liveEnabled:data.liveEnabled,
    reason:String(data.reason||""),
    publishingConfigured:false,
+   canCreatePrivateDraft:data.canCreatePrivateDraft===true,
    broadcasts:data.broadcasts.map(item=>({
     title:String(item.title||"Untitled broadcast").slice(0,150),
     status:String(item.status||""),
@@ -104,6 +108,32 @@
     hasStream:item.hasStream===true
    }))
   };
+ }
+ // Only available after a successful native/YouTube readiness check.
+ // The UI must explicitly confirm the private event; no live stream starts.
+ async function createYoutubePrivateDraft({title,scheduledStartTime,madeForKids,draftRequestId}){
+  if(statuses.youtube!=="connected"||!privateDraftAvailable)
+   throw Error("Check YouTube Live readiness before creating a private draft");
+  if(typeof title!=="string"||title.trim().length<5||title.trim().length>100)
+   throw Error("Enter a broadcast title between 5 and 100 characters");
+  if(typeof scheduledStartTime!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(scheduledStartTime)||
+     !Number.isFinite(Date.parse(scheduledStartTime)))
+   throw Error("Select a valid scheduled start");
+  if(typeof madeForKids!=="boolean"||typeof draftRequestId!=="string"||
+     !/^[a-f0-9]{32}$/.test(draftRequestId))
+   throw Error("Invalid private draft request");
+  const revision=sessionRevision;
+  const result=await nativeRequest("createYoutubePrivateDraft",undefined,undefined,{
+   title:title.trim(),scheduledStartTime,madeForKids,draftRequestId,operatorConfirmed:true
+  });
+  if(revision!==sessionRevision||statuses.youtube!=="connected")
+   throw Error("Account changed while creating the private draft");
+  if(result?.created!==true||result?.privacy!=="private"||result?.publishingConfigured!==false||
+     typeof result.broadcast?.title!=="string")
+   throw Error("Private draft was not confirmed by YouTube");
+  return {created:true,alreadyCreated:result.alreadyCreated===true,privacy:"private",
+   title:result.broadcast.title,scheduledStartTime:result.broadcast.scheduledStartTime,
+   publishingConfigured:false};
  }
  async function connect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
@@ -157,6 +187,7 @@
   const result=await nativeRequest("signOut");
   if(result?.signedOut!==true)throw Error("Unable to verify secure sign out");
   sessionRevision++;
+  privateDraftAvailable=false;
   for(const p of Object.keys(providers)){
    delete pairingCodes[p];
    statuses[p]="disconnected";
@@ -171,7 +202,7 @@
   if(revision!==sessionRevision)return false;
   if(result?.disconnected!==true||result.provider!==provider)
    throw Error("Unverified disconnect");
-  delete pairingCodes[provider];statuses[provider]="disconnected";publish();
+  delete pairingCodes[provider];statuses[provider]="disconnected";if(provider==="youtube")privateDraftAvailable=false;publish();
   return true;
  }
  document.addEventListener("visibilitychange",()=>{
@@ -179,7 +210,7 @@
  });
  window.addEventListener("pageshow",()=>{if(ready)refresh().catch(()=>{});});
  window.IMGAccounts=Object.freeze({
-  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,checkYoutubeLiveReadiness,
+  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,checkYoutubeLiveReadiness,createYoutubePrivateDraft,
   getStatus:()=>({...statuses}),
   subscribe(fn){listeners.add(fn);fn({...statuses});return()=>listeners.delete(fn);}
  });
