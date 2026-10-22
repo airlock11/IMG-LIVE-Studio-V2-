@@ -44,6 +44,12 @@ class MainActivity : Activity() {
 
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  // Real system clock, signal and battery; keep usable Android navigation.
+  // Let Android fit the content to safe system-bar insets.
+  window.statusBarColor = android.graphics.Color.rgb(16,23,27)
+  window.navigationBarColor = android.graphics.Color.rgb(16,23,27)
+  window.decorView.systemUiVisibility = 0
+  androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
   if (BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) oauthClient = NativeOAuthClient(this, BuildConfig.OAUTH_BACKEND_URL)
   browser = WebView(this).apply {
    settings.javaScriptEnabled = true
@@ -61,9 +67,13 @@ class MainActivity : Activity() {
    webViewClient = object : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
      super.onPageFinished(view, url)
-     if(url == "$origin/assets/connections.html" && BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
-      // Native transport is enabled only for signed builds with a pinned HTTPS backend.
-      view.evaluateJavascript("window.IMGAccounts?.enableNative(); window.IMGAccounts?.refresh().catch(()=>{});", null)
+     if(url == "$origin/assets/index.html" || url == "$origin/assets/connections.html") {
+      view.evaluateJavascript("document.documentElement.classList.add('img-native-app');", null)
+      if(BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+       // Verified YouTube account state is available directly in Broadcast
+       // Settings, without navigating to a separate diagnostics page.
+       view.evaluateJavascript("window.IMGAccounts?.enableNative(); window.IMGAccounts?.refresh().catch(()=>{});",null)
+      }
      }
     }
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -246,7 +256,7 @@ class MainActivity : Activity() {
  // the connection badge still changes only after confirmed backend status.
  override fun onResume() {
   super.onResume()
-  if(::browser.isInitialized && browser.url == "$origin/assets/connections.html")
+  if(::browser.isInitialized && browser.url?.startsWith("$origin/assets/")==true)
    browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
  }
  @Deprecated("Deprecated in Java")
