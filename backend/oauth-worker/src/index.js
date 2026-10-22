@@ -165,9 +165,9 @@ export default {async fetch(req,env){
     token=await result.json();
    } else {
     if(!env.FACEBOOK_APP_SECRET)return failPairing("provider_not_configured",503);
-    const endpoint=new URL("https://graph.facebook.com/v24.0/oauth/access_token");
-    endpoint.search=new URLSearchParams({client_id:env.FACEBOOK_APP_ID,client_secret:env.FACEBOOK_APP_SECRET,redirect_uri:redirectUri(env,provider),code}).toString();
-    const result=await fetch(endpoint);
+    // Keep Meta app secrets out of request URLs and intermediary URL logs.
+    const form=new URLSearchParams({client_id:env.FACEBOOK_APP_ID,client_secret:env.FACEBOOK_APP_SECRET,redirect_uri:redirectUri(env,provider),code});
+    const result=await fetch("https://graph.facebook.com/v24.0/oauth/access_token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:form});
     if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
    }
