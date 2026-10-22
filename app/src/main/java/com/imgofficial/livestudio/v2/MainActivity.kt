@@ -163,17 +163,28 @@ class MainActivity : Activity() {
          if(requestedOrientation!=requested)requestedOrientation=requested
         }
        } else if (action.startsWith("native-private-video-start:")) {
-        val draftId=action.removePrefix("native-private-video-start:")
+        val payload=action.removePrefix("native-private-video-start:")
+        val draftId=payload.substringBefore(':')
+        val encodedGame=payload.substringAfter(':',"")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
-           BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
-         // Explicit user action in Broadcast Settings. Native Android still
-         // validates that the draft is private/session-owned before RTMPS.
+           encodedGame.length<=1800&&BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+         // Safely bounded team names/sport are NON-SECRET game metadata.
+         // The Worker still checks private event ownership before RTMPS.
+         val game=try{JSONObject(Uri.decode(encodedGame))}catch(_:Exception){JSONObject()}
+         fun team(key:String):String=game.optString(key).trim().take(18).ifEmpty{
+          if(key=="home")"HOME" else "AWAY"
+         }
+         val sport=if(game.optString("sport")=="pickleball")"pickleball" else "basketball"
          runOnUiThread {
           startActivity(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
            .putExtra("draftRequestId",draftId)
-           .putExtra("img_autostart",true))
+           .putExtra("img_autostart",true)
+           .putExtra("img_sport",sport)
+           .putExtra("img_home",team("home"))
+           .putExtra("img_away",team("away")))
          }
         }
+       }
        } else if (action.startsWith("native-private-video:")) {
         val draftId=action.removePrefix("native-private-video:")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
