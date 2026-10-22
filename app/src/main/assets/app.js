@@ -789,10 +789,23 @@ function resetForNewBroadcast(){
  const d=defaults();
  const previous=data.options;
  const fresh=d.options;
- // Sport and appearance are app-wide choices, not per-broadcast settings.
+ // Preserve operator preferences and the selected verified destination
+ // across games; never make the operator reconfigure all controls to start.
  fresh.sport=previous.sport;
  fresh.appearance=previous.appearance;
  fresh.appOrientation=previous.appOrientation;
+ fresh.orientation=previous.orientation;
+ fresh.regularOrientation=previous.regularOrientation;
+ fresh.quality=previous.quality;
+ fresh.fps=previous.fps;
+ fresh.yt=Boolean(previous.yt);
+ fresh.overlay=previous.overlay;
+ fresh.overlaySize=previous.overlaySize;
+ fresh.overlayOpacity=previous.overlayOpacity;
+ fresh.overlayColor=previous.overlayColor;
+ fresh.shotVisible=previous.shotVisible;
+ fresh.mic=previous.mic;
+ youtubeExpanded=Boolean(previous.yt);
  fresh.streetPlayers=fresh.streetPlayers.map(side=>side.map(player=>({...player,name:'',photo:''})));
  data.options=fresh;
  data.live={...d.live,remoteSetupId:uid()};
