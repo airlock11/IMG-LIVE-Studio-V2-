@@ -3,7 +3,10 @@ package com.imgofficial.livestudio.v2
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.graphics.Color
+import android.view.Gravity
+import android.widget.FrameLayout
 import android.os.Bundle
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -33,10 +36,17 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  // A background/permission transition must not consume the one-time private upload.
  private var uploadEnded=false
  private var uploadGeneration=0
+ // RootEncoder's rotation=90 turns the 1280x720 source into a 720x1280
+ // portrait H.264 stream. Match the physical preview to that 9:16 frame.
+ private val portraitWidth=720
+ private val portraitHeight=1280
  private val draftId by lazy { intent.getStringExtra("draftRequestId").orEmpty() }
 
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
+  // Only this isolated TEST Activity is portrait-locked. The hybrid V2
+  // studio, other sports modes and navigation remain unchanged.
+  requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
   window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
   val bg=Color.rgb(12,17,24)
   val panel=LinearLayout(this).apply {
@@ -50,10 +60,28 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
   }
   panel.addView(note("IMG LIVE STUDIO • V2",14f))
   panel.addView(note("Private YouTube camera test",22f))
+  panel.addView(note("Portrait video • 9:16 • 720×1280",13f))
   panel.addView(note("This is an isolated video-upload test. Only camera and microphone will be sent. Your existing V2 screens are unchanged. Uploading does not automatically make the YouTube event live.",13f))
-  monitor=SurfaceView(this)
-  panel.addView(monitor,LinearLayout.LayoutParams(
+  // Keep the preview a true 9:16 rectangle, centered inside its available
+  // space. A MATCH_PARENT weighted SurfaceView can stretch the camera when
+  // the parent aspect does not match the encoded video.
+  val previewArea=FrameLayout(this).apply {setBackgroundColor(Color.BLACK)}
+  panel.addView(previewArea,LinearLayout.LayoutParams(
    ViewGroup.LayoutParams.MATCH_PARENT,0,1f))
+  monitor=SurfaceView(this)
+  previewArea.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
+  previewArea.addOnLayoutChangeListener{_,left,top,right,bottom,_,_,_,_->
+   val availableWidth=right-left
+   val availableHeight=bottom-top
+   if(availableWidth>0&&availableHeight>0){
+    val targetWidth=minOf(availableWidth,availableHeight*portraitWidth/portraitHeight)
+    val targetHeight=targetWidth*portraitHeight/portraitWidth
+    val previous=monitor.layoutParams
+    if(targetWidth>0&&targetHeight>0&&(previous.width!=targetWidth||previous.height!=targetHeight)){
+     monitor.layoutParams=FrameLayout.LayoutParams(targetWidth,targetHeight,Gravity.CENTER)
+    }
+   }
+  }
   monitor.holder.addCallback(this)
   status=note("Camera permission required",14f)
   panel.addView(status)
@@ -98,7 +126,10 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
   if(ready)return
   try {
    val engine=GenericStream(this,this)
-   if(!engine.prepareVideo(1280,720,2300000,30,2,0)||
+   // RootEncoder 2.8.1 encodes 720x1280 when the 1280x720 camera frame
+   // is prepared with rotation=90. Rotation 0 produces landscape 1280x720
+   // even while the phone itself is held vertically.
+   if(!engine.prepareVideo(1280,720,2300000,30,2,90)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     status.text="This device cannot initialize the camera/audio encoder."
@@ -192,7 +223,10 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  override fun surfaceCreated(holder:SurfaceHolder){
   if(ready)try{publisher?.startPreview(monitor)}catch(_:Exception){}
  }
- override fun surfaceChanged(holder:SurfaceHolder,format:Int,width:Int,height:Int){}
+ override fun surfaceChanged(holder:SurfaceHolder,format:Int,width:Int,height:Int){
+  if(ready&&width>0&&height>0)
+   try{publisher?.getGlInterface()?.setPreviewResolution(width,height)}catch(_:Exception){}
+ }
  override fun surfaceDestroyed(holder:SurfaceHolder){
   try{if(publisher?.isOnPreview==true)publisher?.stopPreview()}catch(_:Exception){}
  }
