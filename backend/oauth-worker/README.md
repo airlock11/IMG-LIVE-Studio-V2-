@@ -1,32 +1,47 @@
-# IMG LIVE Studio — OAuth backend (development scaffold)
+# IMG LIVE Studio V2 — Cloudflare OAuth service
 
-This is **not deployed or production ready**. The Android client is still a prototype. Facebook and YouTube client credentials and app reviews are required.
+**Deployment:** A separate Cloudflare Worker named `img-live-studio-oauth` is deployed at
+`https://img-live-studio-oauth.magsipocarnie.workers.dev`.
 
-## Cloudflare bindings
+**Access state:** `OAUTH_ENABLED = "false"`. This is an intentionally **disabled staging deployment**, not a production account-login service. `/health` and account API endpoints return HTTP 503 while disabled. Do not switch it on simply because the Worker is reachable.
 
-- KV namespace `OAUTH_STATE` (10-minute, single-use authorization state).
-- KV namespace `ACCOUNT_SESSIONS` (session metadata; currently includes provider tokens).
-- Secret `GOOGLE_CLIENT_SECRET`.
-- Secret `FACEBOOK_APP_SECRET`.
-- Secret `TOKEN_ENCRYPTION_KEY` (32 cryptographically random bytes encoded as unpadded base64url; store only in Cloudflare secrets).
-- Variables `GOOGLE_CLIENT_ID`, `FACEBOOK_APP_ID`, `PUBLIC_ORIGIN` (HTTPS base origin, ending in /).
+The existing IMG website and the original V1 app/Workers are not changed.
 
-Register callback URLs:
-- `https://YOUR-OAUTH-DOMAIN/api/connections/youtube/callback`
-- `https://YOUR-OAUTH-DOMAIN/api/connections/facebook/callback`
+## Provisioned Cloudflare configuration
 
-Do **not** deploy with real users until:
-1. A trusted Android app-to-backend authentication/session design is implemented. The current cookie approach is not reliable with Android WebView's disabled third-party cookies and cross-site SameSite restrictions.
-2. AES-GCM encryption is now implemented for new tokens, but requires `TOKEN_ENCRYPTION_KEY`. Implement key rotation, token refresh, and revocation before production. Previously stored plaintext tokens must be deleted or migrated securely.
-3. Replace the browser-only callback completion with verified Android App Links and an authenticated state reconciliation endpoint.
-4. Add CSRF defenses for connection actions, rate limiting, session expiration/logout, audit logging, and provider-specific error handling.
-5. Configure and review the Meta/Google applications and permissions. Facebook user login alone does not guarantee access to Live Video publishing.
-6. Implement YouTube liveBroadcasts/liveStreams provisioning, account destination selection, and a native RTMP publisher. No automatic Go Live is implemented yet.
+- `OAUTH_STATE`: dedicated V2 Workers KV namespace
+- `ACCOUNT_SESSIONS`: dedicated V2 Workers KV namespace
+- `PUBLIC_ORIGIN`: the HTTPS Worker URL above
+- `OAUTH_ENABLED`: explicitly `false`, checked on all account API endpoints
+- `TOKEN_ENCRYPTION_KEY`: 32 cryptographically random bytes (base64url), installed **only as a Cloudflare Worker secret**, never committed
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`: **not configured yet**
 
-## Implemented API surface
-- `GET /health`
-- `GET /api/connections` (connection booleans)
-- `POST /api/connections/:provider/authorize` (creates state, returns official login URL)
-- `GET /api/connections/:provider/callback` (exchanges authorization code server-side)
+The Android build's public `imgOAuthBackendUrl` property pins this service at build time. The Android native OAuth client makes API requests, stores the session cookie encrypted using Android Keystore, and returns only sanitized connection/pairing state to the WebView. No provider access token or IMG session cookie is passed to page JavaScript.
 
-The Android UI is under Settings → Manage connections. It intentionally shows disconnected unless the backend verifies the connection.
+## Expected disabled-stage verification
+
+GitHub Actions workflow `IMG V2 Cloudflare OAuth Deployment Smoke` checks the actual public Worker endpoint:
+
+- `GET /health` → 503, `{"ok":false,"configured":false,...}`
+- `GET /api/connections` → 503, `{"error":"oauth_not_enabled"}`
+- Responses must carry `Cache-Control: no-store`.
+
+The regular Fast OAuth Checks run Worker and native WebView bridge regression tests. APK and emulator workflows verify Android builds.
+
+## Official provider redirect addresses (for future configuration)
+
+- Google / YouTube: `https://img-live-studio-oauth.magsipocarnie.workers.dev/api/connections/youtube/callback`
+- Meta / Facebook: `https://img-live-studio-oauth.magsipocarnie.workers.dev/api/connections/facebook/callback`
+
+Only the operator of the legitimate Meta/Google developer applications can supply, authorize, and review these credentials and redirect URIs. Never commit app secrets, OAuth session cookies, user tokens, or stream keys.
+
+## Production blockers — do not enable OAuth yet
+
+1. **Atomic OAuth state and cancellation:** KV read/delete and read/modify/write are not atomic or strongly consistent. Migrate single-use OAuth state and pairing/session mutations to D1 transactions or Durable Objects, and test cross-region concurrent callbacks, cancel races, and replay attacks.
+2. **Session hardening:** Implement app-bound identity and session renewal/revocation, rotation of at-rest secrets, robust logout, rate limiting, abuse monitoring and recovery.
+3. **OAuth correctness:** Handle refresh tokens, expiry, provider failures, app authorization denial, and account identity verification; ensure accurate provider scopes and approvals.
+4. **App return and verification:** Finish production-verified Android App Links or secure browser return handling and end-to-end Android pairing tests on a real device.
+5. **Authorized provider setup:** Configure Google and Meta applications, approved scopes, the exact redirects above, and production OAuth client credentials in Cloudflare secrets.
+6. **Publishing:** Facebook Login or Google/YouTube sign-in does **not** by itself enable broadcasting. Live publishing permissions, video destinations, account selection, a native encoder and actual RTMP publishing require independent integration and testing.
+
+Only after these checks should `OAUTH_ENABLED` be set to `true` and actual Facebook/YouTube accounts be used for E2E validation.
