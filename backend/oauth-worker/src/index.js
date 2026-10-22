@@ -55,6 +55,17 @@ export default {async fetch(req,env){
    const record=session?JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+session)):null;
    return withCors(json({facebook:{connected:!!record?.facebook},youtube:{connected:!!record?.youtube}}),req,env);
   }
+  const disconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
+  if(disconnect&&method==="POST"){
+   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")
+    return json({error:"forbidden_origin"},403);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
+   const key="session:"+session;
+   const record=JSON.parse(await env.ACCOUNT_SESSIONS.get(key)||"{}");
+   delete record[disconnect[1]];
+   await env.ACCOUNT_SESSIONS.put(key,JSON.stringify(record),{expirationTtl:86400*30});
+   return withCors(json({disconnected:true,provider:disconnect[1]}),req,env);
+  }
   const start=path.match(/^\/api\/connections\/(facebook|youtube)\/authorize$/);
   if(start&&method==="POST"){
    if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
