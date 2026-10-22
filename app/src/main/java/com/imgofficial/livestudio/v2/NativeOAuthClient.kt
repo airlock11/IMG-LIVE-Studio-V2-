@@ -99,7 +99,6 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   val route = when (action) {
    "refresh" -> "/api/connections"
    "youtubeLiveReadiness" -> "/api/connections/youtube/live-readiness"
-   "youtubeLiveReadiness" -> "/api/connections/youtube/live-readiness"
    "signOut" -> "/api/connections/logout"
    "connect" -> if (validProvider(provider)) "/api/connections/$provider/authorize" else null
    "verifyPairing" -> if (validProvider(provider)) "/api/connections/$provider/pairing" else null
@@ -186,31 +185,6 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
        .put("hasStream",item.opt("hasStream") === true))
      }
      safe.put("broadcasts",safeBroadcasts)
-    }
-    "youtubeLiveReadiness" -> {
-     if (data.opt("liveApiAccessible") !is Boolean || data.opt("publishingConfigured") !== false)
-      return JSONObject().put("ok",false).put("error","Invalid YouTube readiness response")
-     safe.put("liveApiAccessible",data.getBoolean("liveApiAccessible"))
-     safe.put("liveEnabled",when(data.opt("liveEnabled")){
-      true -> true
-      false -> false
-      else -> JSONObject.NULL
-     })
-     safe.put("publishingConfigured",false)
-     safe.put("reason",data.optString("reason").take(80))
-     val source = data.optJSONArray("broadcasts") ?: org.json.JSONArray()
-     val broadcasts = org.json.JSONArray()
-     for (i in 0 until minOf(source.length(),12)) {
-      val item = source.optJSONObject(i) ?: continue
-      val id = item.optString("id")
-      if (!Regex("^[A-Za-z0-9_-]{8,100}$").matches(id)) continue
-      broadcasts.put(JSONObject().put("id",id)
-       .put("title",item.optString("title").take(150))
-       .put("status",item.optString("status").take(40))
-       .put("privacy",item.optString("privacy").take(24))
-       .put("hasStream",item.opt("hasStream") === true))
-     }
-     safe.put("broadcasts",broadcasts)
     }
     "connect" -> {
      val pairingCode = data.optString("pairingCode")
