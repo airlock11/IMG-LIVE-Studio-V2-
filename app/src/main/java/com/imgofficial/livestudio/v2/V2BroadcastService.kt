@@ -303,16 +303,25 @@ class V2BroadcastService:Service(),ConnectChecker {
    else scoreboard.copy(awayScore=(scoreboard.awayScore+delta).coerceIn(0,999))
   updateScorecard()
  }
- fun addFoul(team:Int){
+ fun addFoul(team:Int){adjustFoul(team,1)}
+ fun adjustFoul(team:Int,delta:Int){
   if(scoreboard.sport!="basketball"||team !in 0..1)return
-  scoreboard=if(team==0)scoreboard.copy(homeFouls=(scoreboard.homeFouls+1).coerceAtMost(99))
-   else scoreboard.copy(awayFouls=(scoreboard.awayFouls+1).coerceAtMost(99))
+  scoreboard=if(team==0)scoreboard.copy(homeFouls=(scoreboard.homeFouls+delta).coerceIn(0,99))
+   else scoreboard.copy(awayFouls=(scoreboard.awayFouls+delta).coerceIn(0,99))
   updateScorecard()
  }
- fun nextPeriod(){
-  scoreboard=scoreboard.copy(period=(scoreboard.period+1).coerceAtMost(9),
-   homeFouls=if(scoreboard.sport=="basketball")0 else scoreboard.homeFouls,
-   awayFouls=if(scoreboard.sport=="basketball")0 else scoreboard.awayFouls)
+ fun nextPeriod(){adjustPeriod(1)}
+ fun adjustPeriod(delta:Int){
+  val previous=scoreboard.period
+  val updated=(previous+delta).coerceIn(1,9)
+  scoreboard=scoreboard.copy(period=updated,
+   homeFouls=if(updated!=previous&&delta>0&&scoreboard.sport=="basketball")0 else scoreboard.homeFouls,
+   awayFouls=if(updated!=previous&&delta>0&&scoreboard.sport=="basketball")0 else scoreboard.awayFouls)
+  updateScorecard()
+ }
+ fun setClock(value:String){
+  if(value.isNotBlank() && !Regex("^\\d{1,2}:\\d{2}$").matches(value))return
+  scoreboard=scoreboard.copy(clock=value.take(5))
   updateScorecard()
  }
  fun setScorecardVisible(visible:Boolean){scoreVisible=visible;updateScorecard()}
