@@ -3,15 +3,23 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 workers_dev = true
 
-# Create two KV namespaces and insert their IDs before deployment.
-# [[kv_namespaces]]
-# binding = "OAUTH_STATE"
-# id = "REPLACE_WITH_STATE_KV_NAMESPACE_ID"
-#
-# [[kv_namespaces]]
-# binding = "ACCOUNT_SESSIONS"
-# id = "REPLACE_WITH_SESSION_KV_NAMESPACE_ID"
+# Isolated V2 namespaces, provisioned in IMG's Cloudflare account.
+[[kv_namespaces]]
+binding = "OAUTH_STATE"
+id = "45df67c75e1e45b797cce463a4dd89bc"
 
-# Add PUBLIC_ORIGIN, GOOGLE_CLIENT_ID, and FACEBOOK_APP_ID as environment
-# variables. Store GOOGLE_CLIENT_SECRET and FACEBOOK_APP_SECRET as secrets.
-# Do not deploy until the security checklist in README.md is completed.
+[[kv_namespaces]]
+binding = "ACCOUNT_SESSIONS"
+id = "793b2b0979d84c6e95ea315219fabb70"
+
+[vars]
+PUBLIC_ORIGIN = "https://img-live-studio-oauth.magsipocarnie.workers.dev"
+# Safety gate: OAuth cannot start until provider credentials and a final
+# production security review are complete.
+OAUTH_ENABLED = "false"
+
+# Provision the following as Cloudflare Worker *secrets* (not in GitHub):
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+# FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, TOKEN_ENCRYPTION_KEY.
+# Change OAUTH_ENABLED only after provider redirects, backend session storage,
+# replay protection and native Android end-to-end tests are verified.
