@@ -304,13 +304,30 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
    val payload=JSONObject().put("draftRequestId",draftId).put("operatorConfirmed",true)
    connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
    val code=connection.responseCode
-   if(code !in 200..299) return Pair(null,when(code) {
-    503 -> "Private camera upload is not enabled on the test server"
-    401 -> "Your YouTube connection needs authorization"
-    404 -> "The private draft is not found in this YouTube session"
-    409 -> "This private feed was already prepared or is not eligible"
-    else -> "YouTube private feed preparation was rejected"
-   })
+   if(code !in 200..299) {
+    // A missing Worker route and a missing session-owned draft can both
+    // return HTTP 404. Read only a bounded, allowlisted error code; never
+    // display arbitrary server text, tokens or streaming destinations.
+    val upstream=try {
+     val raw=connection.errorStream?.bufferedReader()?.use{it.readText().take(256)}?:"{}"
+     JSONObject(raw).optString("error").take(80)
+    }catch(_:Exception){""}
+    val explanation=when {
+     code==404&&upstream=="not_found" ->
+      "IMG private video backend is not deployed yet. The YouTube draft is not missing."
+     code==404&&upstream=="private_draft_not_owned" ->
+      "This private YouTube draft belongs to a different or expired V2 login session."
+     code==503&&upstream=="youtube_private_ingest_disabled" ->
+      "Private video uploading is disabled on the IMG test server."
+     code==401 -> "Your YouTube session needs authorization."
+     code==409&&upstream=="private_ingest_already_attempted" ->
+      "Private video preparation was already attempted for this draft."
+     code==409 -> "This private feed cannot be prepared in its current state."
+     code==503 -> "IMG private video service is unavailable."
+     else -> "Private YouTube video preparation failed. No video was uploaded."
+    }
+    return Pair(null,explanation)
+   }
    val body=connection.inputStream.bufferedReader().use { it.readText().take(2048) }
    val data=JSONObject(body)
    if(data.opt("prepared")!==true || data.optString("privacy")!="private" ||
