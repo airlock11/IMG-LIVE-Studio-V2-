@@ -216,3 +216,54 @@ test('read-only live panel is gated by verified YouTube login and does not displ
  assert.ok(html.includes('checkYoutubeLiveReadiness()'));
  assert.ok(!html.includes('youtube-start-live-button'));
 });
+
+test('private YouTube draft requires a verified connected channel and live-readiness gate',async()=>{
+ const {accounts,outbound}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
+  if(cmd.action==='youtubeLiveReadiness')return {data:{liveApiAccessible:true,liveEnabled:true,reason:'live_api_accessible',publishingConfigured:false,canCreatePrivateDraft:true,broadcasts:[]}};
+  if(cmd.action==='createYoutubePrivateDraft')return {data:{created:true,alreadyCreated:false,privacy:'private',publishingConfigured:false,broadcast:{title:cmd.title,scheduledStartTime:cmd.scheduledStartTime}}};
+  throw Error('unexpected action '+cmd.action);
+ });
+ accounts.enableNative();
+ const details={title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'a'.repeat(32)};
+ await assert.rejects(accounts.createYoutubePrivateDraft(details),/Check YouTube Live readiness/);
+ await accounts.refresh();
+ await assert.rejects(accounts.createYoutubePrivateDraft(details),/Check YouTube Live readiness/);
+ const check=await accounts.checkYoutubeLiveReadiness();
+ assert.equal(check.canCreatePrivateDraft,true);
+ const draft=await accounts.createYoutubePrivateDraft(details);
+ assert.equal(draft.privacy,'private');
+ assert.equal(draft.publishingConfigured,false);
+ const encoded=outbound.filter(s=>s.startsWith('{')).map(s=>JSON.parse(s));
+ const command=encoded.find(x=>x.action==='createYoutubePrivateDraft');
+ assert.equal(command.operatorConfirmed,true);
+ assert.equal(command.madeForKids,false);
+ assert.equal(command.draftRequestId,'a'.repeat(32));
+ assert.ok(!JSON.stringify(command).includes('access_token'));
+ assert.ok(!JSON.stringify(command).includes('streamName'));
+});
+test('private draft cannot be created after signed-out session even with late readiness',async()=>{
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
+  if(cmd.action==='youtubeLiveReadiness')return {data:{liveApiAccessible:true,liveEnabled:true,reason:'live_api_accessible',publishingConfigured:false,canCreatePrivateDraft:true,broadcasts:[]}};
+  if(cmd.action==='signOut')return {data:{signedOut:true}};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ await accounts.refresh();
+ await accounts.checkYoutubeLiveReadiness();
+ await accounts.signOut();
+ await assert.rejects(accounts.createYoutubePrivateDraft({title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'b'.repeat(32)}),/Check YouTube Live readiness/);
+});
+test('private-draft panel requires separate YouTube readiness result and explicit confirmation',async()=>{
+ const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
+ assert.ok(html.includes('id="youtube-draft-panel" hidden'));
+ assert.ok(html.includes('id="youtube-draft-form"'));
+ assert.ok(html.includes('id="youtube-draft-kids"'));
+ assert.ok(html.includes('canCreatePrivateDraft'));
+ assert.ok(html.includes("confirm('Create a PRIVATE YouTube broadcast draft"));
+ assert.ok(!html.includes('youtube-start-live-button'));
+ const start=html.indexOf('<script>');
+ const end=html.indexOf('</script>',start);
+ assert.doesNotThrow(()=>new Script(html.slice(start+8,end)));
+});
