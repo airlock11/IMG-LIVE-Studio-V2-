@@ -11,6 +11,7 @@
  const pending = new Map();
  let ready = false;
  let refreshPending = null;
+ let sessionRevision = 0;
  const hasProvider = name => Object.prototype.hasOwnProperty.call(providers,name);
  function publish() {
   const snapshot=Object.freeze({...statuses});
@@ -62,10 +63,12 @@
  }
  async function refresh(){
   if(refreshPending)return refreshPending;
+  const revision=sessionRevision;
   refreshPending=(async()=>{
    let data;
    try {data=await nativeRequest("refresh");}
-   catch(e){return failClosed(e);}
+   catch(e){if(revision===sessionRevision)return failClosed(e);throw e;}
+   if(revision!==sessionRevision)return {...statuses};
    if(!data||Object.keys(providers).some(p=>typeof data[p]?.connected!=="boolean"))
     return failClosed(Error("Invalid secure account verification response"));
    for(const p of Object.keys(providers)) {
@@ -118,6 +121,19 @@
   delete pairingCodes[provider];statuses[provider]="disconnected";publish();
   return true;
  }
+ // Server revokes the entire native session; Android then erases its
+ // Keystore-encrypted local copy before returning success to JavaScript.
+ async function signOut(){
+  const result=await nativeRequest("signOut");
+  if(result?.signedOut!==true)throw Error("Unable to verify secure sign out");
+  sessionRevision++;
+  for(const p of Object.keys(providers)){
+   delete pairingCodes[p];
+   statuses[p]="disconnected";
+  }
+  publish();
+  return true;
+ }
  async function disconnect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
   const result=await nativeRequest("disconnect",provider);
@@ -131,7 +147,7 @@
  });
  window.addEventListener("pageshow",()=>{if(ready)refresh().catch(()=>{});});
  window.IMGAccounts=Object.freeze({
-  enableNative,refresh,connect,disconnect,verifyPairing,cancelPending,
+  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,
   getStatus:()=>({...statuses}),
   subscribe(fn){listeners.add(fn);fn({...statuses});return()=>listeners.delete(fn);}
  });
