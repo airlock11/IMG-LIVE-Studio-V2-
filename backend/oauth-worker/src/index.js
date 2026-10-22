@@ -53,6 +53,8 @@ export default {async fetch(req,env){
   }
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
   if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
+  // Never allow an unconfigured or malformed deployment origin to begin OAuth.
+  try { origin(env); } catch (_) { return json({error:"invalid_service_origin"},503); }
   const cookies=cookie(req);
   // Sessions are created server-side; no client-supplied user identifiers.
   let session=cookies["__Host-img_session"];
