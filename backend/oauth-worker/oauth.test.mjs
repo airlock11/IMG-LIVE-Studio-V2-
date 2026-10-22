@@ -178,6 +178,7 @@ test('simultaneous different-provider callbacks preserve both accounts',async()=
  const fetchOriginal=globalThis.fetch;
  try{
   globalThis.fetch=async target=>{
+   if(target==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true')return Response.json({items:[{id:'UC1234567890123456789012'}]});
    if(target==='https://oauth2.googleapis.com/token')return Response.json({access_token:'youtube-token',refresh_token:'youtube-refresh-token',token_type:'Bearer',expires_in:3600});
    if(target==='https://graph.facebook.com/v24.0/oauth/access_token')return Response.json({access_token:'facebook-token',expires_in:3600});
    throw Error('unexpected target');
@@ -259,6 +260,10 @@ test('expired YouTube access token refreshes server-side without exposing creden
  let refreshes=0;
  try{
   globalThis.fetch=async(target,options)=>{
+   if(target==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true') {
+    assert.equal(options.headers.Authorization,'Bearer '+(refreshes?'initial-access':'old-youtube-access'));
+    return Response.json({items:[{id:'UC1234567890123456789012'}]});
+   }
    assert.equal(target,'https://oauth2.googleapis.com/token');
    if(options.body.get('grant_type')==='authorization_code')
     return Response.json({access_token:'old-youtube-access',refresh_token:'private-youtube-refresh',token_type:'Bearer',expires_in:3600});
@@ -290,6 +295,10 @@ test('failed YouTube refresh is disconnected and cooldown prevents repeated toke
  let refreshes=0;
  try{
   globalThis.fetch=async(target,options)=>{
+   if(target==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true'){
+    assert.equal(options.headers.Authorization,'Bearer initial-access');
+    return Response.json({items:[{id:'UC1234567890123456789012'}]});
+   }
    assert.equal(target,'https://oauth2.googleapis.com/token');
    if(options.body.get('grant_type')==='authorization_code')
     return Response.json({access_token:'initial-access',refresh_token:'initial-refresh',token_type:'Bearer',expires_in:3600});
@@ -338,4 +347,67 @@ test('daily scheduled D1 cleanup removes expired records and preserves live sess
  assert.equal(env.OAUTH_DB.query('SELECT session_id FROM oauth_accounts')[0].session_id,'active-device');
  await worker.scheduled({scheduledTime:Date.now()},env,{});
  assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_sessions').length,1,'cleanup is idempotent');
+});
+
+test('YouTube-only test window blocks Facebook without enabling full production OAuth',async()=>{
+ const env=makeEnv({
+  OAUTH_ENABLED:'false',
+  FACEBOOK_APP_ID:undefined,
+  FACEBOOK_APP_SECRET:undefined,
+  YOUTUBE_TEST_ENABLED:'true',
+  YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()
+ });
+ const health=await call('/health',{},env);
+ assert.equal(health.status,200);
+ const h=await health.json();
+ assert.equal(h.mode,'youtube_testing');
+ assert.deepEqual(h.providers,{youtube:true,facebook:false});
+ const denied=await call('/api/connections/facebook/authorize',{method:'POST',headers:ctype,body:'{}'},env);
+ assert.equal(denied.status,503);
+ assert.equal((await denied.json()).error,'provider_not_enabled');
+ assert.equal((await call('/api/connections/facebook/callback?state='+('X'.repeat(43))+'&code=fake',{},env)).status,503);
+ const start=await authorize(env,'youtube');
+ const statuses=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+ assert.deepEqual(await statuses.json(),{facebook:{connected:false},youtube:{connected:false}});
+});
+test('expired YouTube test window always closes and rejects authorization',async()=>{
+ for(const exp of ['invalid',new Date(Date.now()-120000).toISOString(),new Date(Date.now()+72*3600000).toISOString()]){
+  const env=makeEnv({OAUTH_ENABLED:'false',YOUTUBE_TEST_ENABLED:'true',YOUTUBE_TEST_EXPIRES_AT:exp});
+  assert.equal((await call('/health',{},env)).status,503);
+  const response=await call('/api/connections/youtube/authorize',{method:'POST',headers:ctype,body:'{}'},env);
+  assert.equal(response.status,503);
+  assert.equal((await response.json()).error,'oauth_not_enabled');
+ }
+});
+test('YouTube test callback verifies real YouTube channel before storing provider token',async()=>{
+ const env=makeEnv({OAUTH_ENABLED:'false',FACEBOOK_APP_ID:undefined,FACEBOOK_APP_SECRET:undefined,YOUTUBE_TEST_ENABLED:'true',YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()});
+ const start=await authorize(env,'youtube');
+ const previous=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>{
+   if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'test-access',token_type:'Bearer',expires_in:3600});
+   if(url==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true')return Response.json({items:[{id:'UC1234567890123456789012'}]});
+   throw Error('Unexpected provider call');
+  };
+  const response=await call('/api/connections/youtube/callback?state='+start.state+'&code=abc',{},env);
+  assert.equal(response.status,200);
+  const status=await call('/api/connections',{headers:{...ctype,cookie:start.cookie}},env);
+  assert.equal((await status.json()).youtube.connected,true);
+ }finally{globalThis.fetch=previous;}
+});
+test('Google token for account without YouTube channel is never considered connected',async()=>{
+ const env=makeEnv({OAUTH_ENABLED:'false',YOUTUBE_TEST_ENABLED:'true',YOUTUBE_TEST_EXPIRES_AT:new Date(Date.now()+3600000).toISOString()});
+ const start=await authorize(env,'youtube');
+ const previous=globalThis.fetch;
+ try{
+  globalThis.fetch=async url=>{
+   if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'google-no-channel',token_type:'Bearer',expires_in:3600});
+   if(url==='https://www.googleapis.com/youtube/v3/channels?part=id&mine=true')return Response.json({items:[]});
+   throw Error('Unexpected provider call');
+  };
+  const response=await call('/api/connections/youtube/callback?state='+start.state+'&code=abc',{},env);
+  assert.equal(response.status,403);
+  assert.equal((await response.json()).error,'youtube_channel_not_found');
+  assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_accounts').length,0);
+ }finally{globalThis.fetch=previous;}
 });
