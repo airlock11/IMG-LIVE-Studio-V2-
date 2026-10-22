@@ -80,6 +80,31 @@
   })();
   try{return await refreshPending;}finally{refreshPending=null;}
  }
+ async function checkYoutubeLiveReadiness(){
+  if(statuses.youtube!=="connected")throw Error("Connect your YouTube account first");
+  const revision=sessionRevision;
+  const data=await nativeRequest("youtubeLiveReadiness");
+  if(revision!==sessionRevision||statuses.youtube!=="connected")
+   throw Error("Account connection changed during readiness check");
+  if(!data||typeof data.liveApiAccessible!=="boolean"||
+     !(typeof data.liveEnabled==="boolean"||data.liveEnabled===null)||
+     data.publishingConfigured!==false||!Array.isArray(data.broadcasts)||
+     data.broadcasts.length>12)
+    throw Error("Invalid live readiness response");
+  return {
+   liveApiAccessible:data.liveApiAccessible,
+   liveEnabled:data.liveEnabled,
+   reason:String(data.reason||""),
+   publishingConfigured:false,
+   broadcasts:data.broadcasts.map(item=>({
+    title:String(item.title||"Untitled broadcast").slice(0,150),
+    status:String(item.status||""),
+    privacy:String(item.privacy||""),
+    scheduledStartTime:String(item.scheduledStartTime||""),
+    hasStream:item.hasStream===true
+   }))
+  };
+ }
  async function connect(provider){
   if(!hasProvider(provider))throw Error("Unsupported platform");
   const revision=sessionRevision;
@@ -154,7 +179,7 @@
  });
  window.addEventListener("pageshow",()=>{if(ready)refresh().catch(()=>{});});
  window.IMGAccounts=Object.freeze({
-  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,
+  enableNative,refresh,connect,disconnect,signOut,verifyPairing,cancelPending,checkYoutubeLiveReadiness,
   getStatus:()=>({...statuses}),
   subscribe(fn){listeners.add(fn);fn({...statuses});return()=>listeners.delete(fn);}
  });
