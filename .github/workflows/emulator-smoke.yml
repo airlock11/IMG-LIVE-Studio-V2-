@@ -23,6 +23,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Validate OAuth backend and account UI JavaScript
+        run: |
+          node --check backend/oauth-worker/src/index.js
+          node --check app/src/main/assets/account-connections.js
       - name: Assemble debug APK
         run: gradle :app:assembleDebug
       - name: Enable KVM acceleration
