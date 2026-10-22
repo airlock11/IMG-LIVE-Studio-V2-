@@ -30,6 +30,9 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  private var ready=false
  private var connecting=false
  private var streaming=false
+ // A background/permission transition must not consume the one-time private upload.
+ private var uploadEnded=false
+ private var uploadGeneration=0
  private val draftId by lazy { intent.getStringExtra("draftRequestId").orEmpty() }
 
  override fun onCreate(savedInstanceState:Bundle?) {
@@ -114,18 +117,23 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  }
 
  private fun startPrivateUpload() {
-  if(!ready||connecting||streaming)return
+  if(!ready||connecting||streaming||uploadEnded)return
   val client=oauth?:return
+  val request=++uploadGeneration
   connecting=true
   start.isEnabled=false
+  stop.isEnabled=true // allow cancellation while the secure destination is prepared
   status.text="Preparing secure PRIVATE ingest with YouTube…"
   // The URL is handed directly to GenericStream and NEVER to JS, logs,
   // saved preferences, Intent extras, or a visible text field.
   client.preparePrivateIngest(draftId){url,error->
    runOnUiThread {
-    if(isFinishing||isDestroyed)return@runOnUiThread
+    // Invalidate delayed responses after STOP, navigation or backgrounding.
+    // They must never start video transmission without the operator's presence.
+    if(request!=uploadGeneration||uploadEnded||isFinishing||isDestroyed)return@runOnUiThread
     if(url==null){
      connecting=false
+     stop.isEnabled=false
      start.isEnabled=ready
      status.text=error?:"Private ingest preparation failed."
      return@runOnUiThread
@@ -134,8 +142,7 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
      status.text="Connecting encrypted camera/video upload…"
      publisher?.startStream(url)
     }catch(_:Exception){
-     connecting=false
-     start.isEnabled=ready
+     stopUpload()
      status.text="Could not start RTMPS upload on this device."
     }
    }
@@ -143,18 +150,26 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
  }
 
  private fun stopUpload() {
+  uploadGeneration++
+  uploadEnded=true // a stopped/uncertain session must not reuse single-use ingest
   try{if(publisher?.isStreaming==true)publisher?.stopStream()}catch(_:Exception){}
   connecting=false;streaming=false
   stop.isEnabled=false
-  start.isEnabled=false // single-use test; never reissue the same draft ingest
+  start.isEnabled=false
   status.text="Video upload stopped. Verify the private event in YouTube Studio."
  }
 
  override fun onConnectionStarted(url:String) {
-  runOnUiThread{status.text="Connecting secure RTMPS upload…"}
+  runOnUiThread {
+   if(!uploadEnded&&connecting)status.text="Connecting secure RTMPS upload…"
+  }
  }
  override fun onConnectionSuccess() {
   runOnUiThread {
+   if(uploadEnded||isFinishing||isDestroyed) {
+    try{if(publisher?.isStreaming==true)publisher?.stopStream()}catch(_:Exception){}
+    return@runOnUiThread
+   }
    connecting=false;streaming=true
    stop.isEnabled=true
    start.isEnabled=false
@@ -182,8 +197,24 @@ class PrivateYoutubeCameraActivity : Activity(), ConnectChecker, SurfaceHolder.C
   try{if(publisher?.isOnPreview==true)publisher?.stopPreview()}catch(_:Exception){}
  }
 
+ override fun onResume(){
+  super.onResume()
+  // Permission sheets and ordinary app switching can invoke onStop before any
+  // upload has begun. Keep the camera preview and Start control usable.
+  if(ready&&!connecting&&!streaming&&!uploadEnded){
+   start.isEnabled=true
+   if(monitor.holder.surface.isValid && publisher?.isOnPreview!=true){
+    try{publisher?.startPreview(monitor)}catch(_:Exception){
+     status.text="Camera preview unavailable on this phone."
+    }
+   }
+  }
+ }
+
  override fun onStop(){
-  stopUpload()
+  // Only stop/consume a single-use ingest if an upload is actually underway.
+  // Never label an idle, working camera preview as 'Video upload stopped'.
+  if(connecting||streaming||publisher?.isStreaming==true)stopUpload()
   try{if(publisher?.isOnPreview==true)publisher?.stopPreview()}catch(_:Exception){}
   super.onStop()
  }
