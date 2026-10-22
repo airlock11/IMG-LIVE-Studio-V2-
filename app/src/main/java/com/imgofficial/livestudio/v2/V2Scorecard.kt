@@ -3,13 +3,20 @@ package com.imgofficial.livestudio.v2
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 
-/** Native scoreboard artwork. This bitmap is used by RootEncoder's GL
- * ImageFilterRender: it appears in both preview and the encoded RTMPS frames.
- * No WebView, HTML screenshot, fake video layer or network call is involved.
+/**
+ * IMG Broadcast Graphics. Every frame is a transparent native Bitmap fed
+ * into RootEncoder's shared GL compositor: monitor AND encoded RTMPS output.
+ *
+ * The score-award visual follows the sports-TV movement in the reference:
+ * graphic panel wipe -> moving team identity -> +2/+3 award -> score reveal.
+ * Original IMG artwork; no official league logos or broadcast assets.
  */
 internal object V2Scorecard {
  data class State(
@@ -23,65 +30,157 @@ internal object V2Scorecard {
   val period:Int=1,
   val clock:String=""
  )
- // Slim 20:3 aspect bar: rendered proportionally in landscape GL frames.
+ data class Award(val team:Int,val points:Int,val progress:Float,val previousScore:Int)
  private const val W=960
  private const val H=144
- private const val ink=0xFF0D1B21.toInt()
- private const val green=0xFF8DE7BB.toInt()
- private const val pale=0xFFE9FFF3.toInt()
- private const val muted=0xFFADC2B9.toInt()
- private fun name(value:String)=value.trim().take(18).ifEmpty{"TEAM"}
- fun render(score:State, opacity:Float=1f):Bitmap {
+ private const val I=0xFF11191C.toInt()
+ private const val WHITE=0xFFF5FBF8.toInt()
+ private const val GREY=0xFFB0C2BA.toInt()
+ private const val GREEN=0xFF32D997.toInt()
+ private const val GOLD=0xFFFFD77C.toInt()
+ private fun rect(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,col:Int,r:Float=0f){
+  p.shader=null;p.style=Paint.Style.FILL;p.color=col
+  if(r>0f)c.drawRoundRect(RectF(x,y,x+w,y+h),r,r,p)
+  else c.drawRect(x,y,x+w,y+h,p)
+ }
+ private fun gradient(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,a:Int,b:Int){
+  p.style=Paint.Style.FILL;p.color=Color.WHITE
+  p.shader=LinearGradient(x,y,x+w,y+h,a,b,Shader.TileMode.CLAMP)
+  c.drawRect(x,y,x+w,y+h,p);p.shader=null
+ }
+ private fun stroke(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,col:Int){
+  p.style=Paint.Style.STROKE;p.strokeWidth=1.8f;p.color=col
+  c.drawRect(x,y,x+w,y+h,p);p.style=Paint.Style.FILL
+ }
+ private fun words(c:Canvas,p:Paint,v:String,x:Float,y:Float,size:Float,col:Int,
+  bold:Boolean=false,align:Paint.Align=Paint.Align.CENTER){
+  p.shader=null;p.color=col;p.textAlign=align
+  p.typeface=Typeface.create(if(bold)"sans-serif-condensed" else "sans-serif-medium",
+   if(bold)Typeface.BOLD else Typeface.NORMAL)
+  p.textSize=size
+  c.drawText(v,x,y,p)
+ }
+ private fun short(value:String)=value.trim().uppercase().take(17).ifEmpty{"TEAM"}
+ private fun initials(value:String)=short(value).split(' ','-').filter{it.isNotEmpty()}
+  .take(3).map{it.first()}.joinToString("")
+ private fun streaks(c:Canvas,p:Paint,left:Float,top:Float,width:Float,height:Float,
+  col:Int,shift:Float=0f){
+  val save=c.save();c.clipRect(left,top,left+width,top+height)
+  p.style=Paint.Style.STROKE;p.strokeWidth=2.7f
+  p.color=col
+  var i=-3
+  while(i<24){
+   val x=left+i*43f+shift
+   c.drawLine(x,top+height,x+height*.68f,top,p);i++
+  }
+  p.style=Paint.Style.FILL;c.restoreToCount(save)
+ }
+ private fun awardMotion(c:Canvas,p:Paint,a:Award,row:Int,accent:Int,name:String,
+  teamLeft:Float,teamWidth:Float,scoreLeft:Float,scoreWidth:Float,rowY:Float,rowH:Float){
+  if(a.team!=row)return
+  val t=a.progress.coerceIn(0f,1f)
+  if(t>=.93f)return
+  val panelX=teamLeft;val right=panelX+teamWidth
+  val clip=c.save()
+  c.clipRect(panelX,rowY,right,rowY+rowH)
+  // First 12% wipes INTO the logo/identity artwork. During the middle
+  // hold, diagonal energy and oversized team lettering travel across row.
+  val reveal=(t/.16f).coerceIn(0f,1f)
+  val retreat=((.88f-t)/.16f).coerceIn(0f,1f)
+  val visible=minOf(reveal,retreat)
+  val left=panelX+(1f-visible)*teamWidth
+  gradient(c,p,left,rowY,teamWidth*visible,rowH,
+   Color.rgb(17,34,37),Color.rgb(36,78,66))
+  streaks(c,p,panelX,rowY,teamWidth,rowH,accent,180f*t)
+  val slant=Path().apply{
+   moveTo(left+teamWidth*visible*.6f,rowY)
+   lineTo(left+teamWidth*visible*.6f+40f,rowY)
+   lineTo(left+teamWidth*visible*.6f,rowY+rowH)
+   lineTo(left+teamWidth*visible*.6f-40f,rowY+rowH)
+   close()
+  }
+  p.color=0x66FFFFFF;p.style=Paint.Style.FILL;c.drawPath(slant,p)
+  if(visible>.55f){
+   words(c,p,initials(name),panelX+teamWidth*.53f+18f*(.5f-t),
+    rowY+rowH*.76f,43f,WHITE,true)
+  }
+  c.restoreToCount(clip)
+  if(t>.13f && t<.76f){
+   // Score cell briefly becomes the point award, not an ordinary score pulse.
+   gradient(c,p,scoreLeft,rowY,scoreWidth,rowH,Color.rgb(18,27,30),Color.rgb(8,12,16))
+   val pulse=if(t<.26f)(t-.13f)/.13f else 1f
+   words(c,p,"+${a.points}",scoreLeft+scoreWidth/2,rowY+rowH*.77f,
+    40f+4f*pulse,accent,true)
+   stroke(c,p,scoreLeft,rowY,scoreWidth,rowH,0x88FFFFFF.toInt())
+  }else if(t>=.76f&&t<.94f){
+   val sweep=((t-.76f)/.18f).coerceIn(0f,1f)
+   gradient(c,p,scoreLeft,rowY,scoreWidth,rowH,
+    0xFFF7FEFA.toInt(),0xFFCEE6D9.toInt())
+   rect(c,p,scoreLeft+scoreWidth*sweep-11f,rowY,13f,rowH,accent)
+  }
+ }
+ fun render(score:State,opacity:Float=1f,award:Award?=null,style:Int=0):Bitmap{
   val image=Bitmap.createBitmap(W,H,Bitmap.Config.ARGB_8888)
-  val canvas=Canvas(image)
-  // The image filter always receives an RGBA bitmap. Hiding the board
-  // renders transparent pixels rather than a null (black) texture.
-  val alpha=(opacity.coerceIn(0f,1f)*255).toInt()
+  val alpha=(opacity.coerceIn(0f,1f)*255f).toInt()
   if(alpha==0)return image
-  val layer=canvas.saveLayerAlpha(0f,0f,W.toFloat(),H.toFloat(),alpha)
-  val paint=Paint(Paint.ANTI_ALIAS_FLAG)
-  paint.color=ink
-  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),H.toFloat()),21f,21f,paint)
-  paint.color=green
-  canvas.drawRoundRect(RectF(0f,0f,W.toFloat(),6f),3f,3f,paint)
-  paint.typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
-  paint.textAlign=Paint.Align.CENTER
-
-  val left=name(score.home).uppercase()
-  val right=name(score.away).uppercase()
+  val c=Canvas(image);val p=Paint(Paint.ANTI_ALIAS_FLAG)
+  val layer=c.saveLayerAlpha(0f,0f,W.toFloat(),H.toFloat(),alpha)
+  val court=style==1
+  val accent=if(court)GOLD else GREEN
   val isPickle=score.sport=="pickleball"
-  val period=if(isPickle)"GAME ${score.period.coerceIn(1,9)}" else
-   "Q${score.period.coerceIn(1,9)}"
-  val leftName=if(left.length>12)left.take(12) else left
-  val rightName=if(right.length>12)right.take(12) else right
 
-  paint.color=pale
-  paint.textSize=27f
-  canvas.drawText(leftName,192f,39f,paint)
-  canvas.drawText(rightName,768f,39f,paint)
-  paint.color=green
-  paint.textSize=67f
-  canvas.drawText(score.homeScore.coerceIn(0,999).toString(),196f,108f,paint)
-  canvas.drawText(score.awayScore.coerceIn(0,999).toString(),764f,108f,paint)
+  // Two original sports-TV broadcast treatments. Both have non-flat
+  // metallic gradient material, layered panels, grillwork, and wipe motion.
+  rect(c,p,1f,1f,958f,142f,I,14f)
+  stroke(c,p,2f,2f,956f,140f,0xFF6D897D.toInt())
+  gradient(c,p,0f,0f,163f,144f,
+   if(court)0xFF28241E.toInt() else 0xFF0B2A24.toInt(),
+   0xFF0B1013.toInt())
+  streaks(c,p,0f,0f,163f,144f,0x225DEDB7,5f)
+  words(c,p,"IMG",83f,57f,54f,WHITE,true)
+  rect(c,p,33f,67f,100f,3f,accent,1f)
+  words(c,p,"BROADCAST",83f,97f,20f,accent,true)
+  words(c,p,"GRAPHICS",83f,116f,17f,GREY)
 
-  paint.color=muted
-  paint.textSize=21f
-  canvas.drawText("IMG • "+if(isPickle)"PICKLEBALL" else "BASKETBALL",480f,31f,paint)
-  paint.color=pale
-  paint.textSize=25f
-  canvas.drawText(period,480f,98f,paint)
-  if(score.clock.isNotBlank()){
-   paint.color=green
-   paint.textSize=26f
-   canvas.drawText(score.clock.take(5),480f,66f,paint)
+  val names=listOf(short(score.home),short(score.away))
+  val scores=listOf(score.homeScore,score.awayScore)
+  val fouls=listOf(score.homeFouls,score.awayFouls)
+  for(team in 0..1){
+   val y=8f+team*64f
+   val top=if(court)0xFFE4C787.toInt() else 0xFF204D42.toInt()
+   val bottom=if(court)0xFFAA8650.toInt() else 0xFF102C29.toInt()
+   gradient(c,p,167f,y,405f,60f,top,bottom)
+   streaks(c,p,167f,y,405f,60f,if(court)0x339C3C13 else 0x3352B89A)
+   rect(c,p,176f,y+51f,83f,4f,if(team==0)accent:0xFFD3E0DB.toInt(),1f)
+   rect(c,p,269f,y+51f,46f,4f,0x885A675F.toInt(),1f)
+   rect(c,p,326f,y+51f,53f,4f,0x885A675F.toInt(),1f)
+   val labelSize=if(names[team].length>12)26f else 31f
+   words(c,p,names[team],367f,y+38f,labelSize,
+    if(court)0xFF161714.toInt() else WHITE,true)
+   gradient(c,p,573f,y,126f,60f,WHITE,0xFFCBD7D0.toInt())
+   words(c,p,scores[team].coerceIn(0,999).toString(),634f,y+44f,46f,
+    0xFF11171A.toInt(),true)
+   if(!isPickle){
+    words(c,p,"F ${fouls[team].coerceIn(0,99)}",704f,y+55f,13f,GREY,true,
+     Paint.Align.LEFT)
+   }
+   stroke(c,p,166f,y,533f,60f,0x995E806B.toInt())
   }
-  if(!isPickle){
-   paint.color=muted
-   paint.textSize=21f
-   canvas.drawText("FOULS ${score.homeFouls.coerceIn(0,99)}",192f,134f,paint)
-   canvas.drawText("FOULS ${score.awayFouls.coerceIn(0,99)}",768f,134f,paint)
+  gradient(c,p,704f,7f,251f,67f,0xFF29373D.toInt(),0xFF0A1115.toInt())
+  words(c,p,score.clock.ifBlank{"--:--"},832f,55f,51f,WHITE,true)
+  gradient(c,p,704f,75f,251f,61f,0xFF18272C.toInt(),0xFF070A0C.toInt())
+  val quarter=if(isPickle)"GAME ${score.period}" else if(score.period<=4)"Q${score.period}"
+   else "OT${score.period-4}"
+  words(c,p,quarter,782f,118f,29f,WHITE,true)
+  words(c,p,if(isPickle)"PICKLEBALL" else "BASKETBALL",892f,118f,18f,accent,true)
+  rect(c,p,704f,71f,251f,3f,accent)
+  rect(c,p,160f,135f,797f,7f,accent)
+
+  if(award!=null && !isPickle){
+   awardMotion(c,p,award,0,accent,names[0],167f,405f,573f,126f,8f,60f)
+   awardMotion(c,p,award,1,accent,names[1],167f,405f,573f,126f,72f,60f)
   }
-  canvas.restoreToCount(layer)
+  c.restoreToCount(layer)
   return image
  }
 }
