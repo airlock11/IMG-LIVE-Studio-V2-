@@ -29,7 +29,7 @@ const cookie = req => Object.fromEntries((req.headers.get("cookie")||"").split("
 const cookieAttrs = "HttpOnly; Secure; SameSite=None; Path=/";
 const origin = (env) => {
  const u=new URL(env.PUBLIC_ORIGIN);
- if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash)throw Error("Invalid PUBLIC_ORIGIN");
+ if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash||u.username||u.password||u.port)throw Error("Invalid PUBLIC_ORIGIN");
  return u.origin;
 };
 const redirectUri=(env,provider)=>origin(env)+"/api/connections/"+provider+"/callback";
@@ -51,10 +51,12 @@ export default {async fetch(req,env){
    let validOrigin=false;
    try { validOrigin=!!origin(env); } catch (_) { validOrigin=false; }
    const validKey=typeof env.TOKEN_ENCRYPTION_KEY==="string" && /^[A-Za-z0-9_-]{43}$/.test(env.TOKEN_ENCRYPTION_KEY);
-   const ready=!!(env.OAUTH_STATE&&env.ACCOUNT_SESSIONS&&validKey&&validOrigin&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
+   const ready=!!(env.OAUTH_ENABLED==="true"&&env.OAUTH_STATE&&env.ACCOUNT_SESSIONS&&validKey&&validOrigin&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
    return json({ok:ready,service:"img-oauth",configured:ready},ready?200:503);
   }
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
+  // Explicit production kill-switch: credentials alone must never activate login.
+  if(env.OAUTH_ENABLED!=="true")return json({error:"oauth_not_enabled"},503);
   if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
   // Never allow an unconfigured or malformed deployment origin to begin OAuth.
   try { origin(env); } catch (_) { return json({error:"invalid_service_origin"},503); }
