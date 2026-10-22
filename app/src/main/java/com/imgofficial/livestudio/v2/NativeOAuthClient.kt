@@ -304,6 +304,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
    connection.requestMethod="POST"
    connection.doOutput=true
    val payload=JSONObject().put("draftRequestId",draftId).put("operatorConfirmed",true)
+    .put("clientProtocolVersion",2)
    connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
    val code=connection.responseCode
    if(code !in 200..299) {
