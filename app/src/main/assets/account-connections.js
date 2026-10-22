@@ -84,6 +84,14 @@
     if(result.status==="expired"){delete pairingCodes[provider];state[provider]="disconnected";publish();}
     return result.status;
   }
+  function cancelPending(provider) {
+    if (!Object.prototype.hasOwnProperty.call(providers,provider)) throw new Error("Unsupported platform");
+    if(state[provider]!=="authorization-pending") return false;
+    delete pairingCodes[provider];
+    state[provider]="disconnected";
+    publish();
+    return true;
+  }
   async function disconnect(provider) {
     if (!Object.prototype.hasOwnProperty.call(providers, provider)) throw new Error("Unsupported platform");
     const origin = requireBackend();
@@ -103,7 +111,7 @@
   });
   window.addEventListener("pageshow", () => { if (backend) refresh().catch(() => {}); });
   window.IMGAccounts = Object.freeze({
-    configure, refresh, connect, disconnect, verifyPairing,
+    configure, refresh, connect, disconnect, verifyPairing, cancelPending,
     getStatus: () => ({...state}),
     subscribe(fn) { listeners.add(fn); fn({...state}); return () => listeners.delete(fn); }
   });
