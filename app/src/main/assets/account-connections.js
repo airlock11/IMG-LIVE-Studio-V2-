@@ -91,7 +91,8 @@
   if(!data||typeof data.liveApiAccessible!=="boolean"||
      !(typeof data.liveEnabled==="boolean"||data.liveEnabled===null)||
      data.publishingConfigured!==false||!Array.isArray(data.broadcasts)||
-     data.broadcasts.length>12)
+     data.broadcasts.length>12||!Array.isArray(data.privateDrafts||[])||
+   (data.privateDrafts||[]).length>3)
     throw Error("Invalid live readiness response");
   privateDraftAvailable=data.canCreatePrivateDraft===true && data.liveApiAccessible===true;
   return {
@@ -100,6 +101,8 @@
    reason:String(data.reason||""),
    publishingConfigured:false,
    canCreatePrivateDraft:data.canCreatePrivateDraft===true,
+   privateDrafts:(data.privateDrafts||[]).filter(item=>/^[a-f0-9]{32}$/.test(item?.requestId)&&
+      typeof item?.title==="string").map(item=>({requestId:item.requestId,title:item.title.slice(0,100)})),
    broadcasts:data.broadcasts.map(item=>({
     title:String(item.title||"Untitled broadcast").slice(0,150),
     status:String(item.status||""),
