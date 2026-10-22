@@ -140,7 +140,7 @@ function bottom(){const items=[['home','Home','home'],['leagues','Leagues','trop
 function genericTitle(title,back='home',sub=''){return `<div class="title-top"><button class="icon-btn ghost" data-go="${back}" aria-label="Back">${ic('back')}</button><div><h1>${esc(title)}</h1>${sub?`<span class="kicker">${esc(sub)}</span>`:''}</div></div>`}
 
 function recordOnly(){return !data.options.yt&&!data.options.fb&&!data.options.tiktok}
-function broadcastStartLabel(){return recordOnly()?'RECORD VIDEO':data.options.yt?'START PRIVATE UPLOAD':'START BROADCAST'}
+function broadcastStartLabel(){return recordOnly()?'RECORD VIDEO':data.options.yt?'GO LIVE NOW · PRIVATE':'START BROADCAST'}
 function recordingMode(){return Boolean(data.live.active&&data.live.recordOnly)}
 function recordingState(){return {sport:activeSport(),options:data.options,live:data.live,teams:gameTeams(),sponsors:data.sponsors}}
 
@@ -211,7 +211,7 @@ function youtubeDestination(){
     '<p class="helper">Complete the Google sign-in in your browser. Return here to verify the account automatically.</p><button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
     '<button class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect YouTube</button>')+
   (youtubeFeedback?'<p class="helper" role="status">'+esc(youtubeFeedback)+'</p>':'')+
-  '<p class="helper">Private upload only. Starting the video feed does not publish the event publicly on YouTube.</p>'+
+  '<p class="helper">GO LIVE NOW starts a new private YouTube broadcast as soon as the camera feed connects. Private means only authorized viewers can watch. Production authorization is still pending.</p>'+
   '</div></div>';
 }
 function youtubeTitle(){
@@ -233,23 +233,19 @@ async function startPrivateYouTubeFromStudio(){
   if(status.youtube!=='connected')throw Error('Connect YouTube in Broadcast Settings.');
   const check=await accounts.checkYoutubeLiveReadiness();
   if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
-  const requestedTitle=String(data.options.broadcast.liveTitle||'').trim();
-  // Do not silently stream an older saved event under the wrong title.
-  // Reusing a confirmed existing event is allowed only if its title matches
-  // the chosen title, or the broadcaster left the title field empty.
-  let owned=(check.privateDrafts||[]).find(d=>
-   !requestedTitle||d.title===requestedTitle)?.requestId;
-  if(!owned){
-   // Creating a new PRIVATE event is a separate, quota-limited Google API
-   // action. Require an explicit audience classification and use a unique
-   // request identifier; never make a public event automatically.
-   if(!youtubeAudience)throw Error('Select the YouTube audience classification first.');
-   if(!check.canCreatePrivateDraft)throw Error('No reusable private event is available. Private event creation is currently unavailable.');
-   const title=youtubeTitle(),scheduledStartTime=new Date(Date.now()+20*60*1000).toISOString();
-   const draftRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
-   await accounts.createYoutubePrivateDraft({title,scheduledStartTime,madeForKids:youtubeAudience==='yes',draftRequestId});
-   owned=draftRequestId;
-  }
+  // GO LIVE NOW deliberately creates a new private event configured to
+  // auto-start once Android begins RTMPS. No manually scheduled draft choice.
+  if(!youtubeAudience)throw Error('Select the YouTube audience classification first.');
+  if(!check.canCreatePrivateDraft)
+   throw Error('YouTube private live creation is not enabled on the IMG server.');
+  const title=youtubeTitle();
+  const draftRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),
+   x=>x.toString(16).padStart(2,'0')).join('');
+  youtubeFeedback='Creating private live broadcast…';
+  await accounts.createYoutubePrivateDraft({
+   title,madeForKids:youtubeAudience==='yes',draftRequestId,startNow:true
+  });
+  const owned=draftRequestId;
   if(!/^[a-f0-9]{32}$/.test(owned))throw Error('No valid private YouTube event is available.');
   youtubeFeedback='';
   // The WebView camera may already own the same physical lens. Release its
