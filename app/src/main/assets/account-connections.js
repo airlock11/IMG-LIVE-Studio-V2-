@@ -43,6 +43,11 @@
       throw new Error("Unable to verify account connections");
     }
     const data = await response.json();
+    if (!data || typeof data !== "object" || Object.keys(providers).some(name => typeof data[name]?.connected !== "boolean")) {
+      for (const name of Object.keys(providers)) state[name] = "disconnected";
+      publish();
+      throw new Error("Invalid account verification response");
+    }
     for (const name of Object.keys(providers)) {
       const confirmed = data[name]?.connected === true;
       state[name] = confirmed ? "connected" : state[name] === "authorization-pending" ? "authorization-pending" : "disconnected";
