@@ -136,6 +136,15 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if (action.startsWith("native-private-video:")) {
+        val draftId=action.removePrefix("native-private-video:")
+        if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
+           BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
+         runOnUiThread {
+          startActivity(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+           .putExtra("draftRequestId",draftId))
+         }
+        }
        } else if (action.startsWith("oauth-open:")) {
         runOnUiThread { openOAuthBrowser(action.removePrefix("oauth-open:")) }
        } else if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
