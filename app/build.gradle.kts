@@ -3,18 +3,21 @@ plugins {
  id("com.android.application")
  id("org.jetbrains.kotlin.android")
 }
+val sideBySideTest = providers.gradleProperty("imgSideBySideTest").orElse("false").get() == "true"
 android {
  buildFeatures { buildConfig = true }
  namespace = "com.imgofficial.livestudio.v2"
  compileSdk = 35
  defaultConfig {
-  applicationId = "com.imgofficial.livestudio.v2"
+  applicationId = if (sideBySideTest) "com.imgofficial.livestudio.v2.test" else "com.imgofficial.livestudio.v2"
   minSdk = 26
   targetSdk = 35
-  versionCode = 2
-  versionName = "0.2.0-v2-private-video"
+  versionCode = if (sideBySideTest) 3 else 2
+  versionName = if (sideBySideTest) "0.3.0-v2-test" else "0.2.0-v2-private-video"
+  manifestPlaceholders["imgAppLabel"] = if (sideBySideTest) "IMG LIVE Studio V2 Test" else "IMG LIVE Studio"
   val oauthOrigin = providers.gradleProperty("imgOAuthBackendUrl").orElse("").get()
   require(oauthOrigin.isEmpty() || (oauthOrigin.startsWith("https://") && !oauthOrigin.contains('"') && !oauthOrigin.contains('\\'))) { "Invalid trusted OAuth backend origin" }
+  require(!sideBySideTest || oauthOrigin.isNotEmpty()) { "V2 device-test build requires an explicit trusted OAuth backend URL" }
   buildConfigField("String", "OAUTH_BACKEND_URL", "\"$oauthOrigin\"")
  }
  compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
