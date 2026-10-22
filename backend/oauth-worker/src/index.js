@@ -55,6 +55,20 @@ export default {async fetch(req,env){
    const record=session?JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+session)):null;
    return withCors(json({facebook:{connected:!!record?.facebook},youtube:{connected:!!record?.youtube}}),req,env);
   }
+  const pairing=path.match(/^\/api\/connections\/(facebook|youtube)\/pairing$/);
+  if(pairing&&method==="POST"){
+   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
+   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
+   const body=await req.json().catch(()=>null);
+   if(!body||typeof body.pairingCode!=="string"||!/^[-_A-Za-z0-9]{43}$/.test(body.pairingCode))
+    return json({error:"invalid_pairing_code"},400);
+   const key="pair:"+await digest(body.pairingCode);
+   const raw=await env.OAUTH_STATE.get(key);
+   if(!raw)return withCors(json({status:"expired"}),req,env);
+   const attempt=JSON.parse(raw);
+   if(attempt.provider!==pairing[1]||attempt.session!==session)return json({error:"pairing_session_mismatch"},403);
+   return withCors(json({status:attempt.status==="complete"?"complete":"pending"}),req,env);
+  }
   const disconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
   if(disconnect&&method==="POST"){
    if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
