@@ -80,7 +80,11 @@
     const response=await fetch(requireBackend()+"/api/connections/"+provider+"/pairing",{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({pairingCode:code})});
     if (!response.ok) throw new Error("Unable to verify account pairing");
     const result=await response.json();
-    if(result.status==="complete"){delete pairingCodes[provider];await refresh();}
+    if(result.status==="complete"){
+      await refresh();
+      if(state[provider]!=="connected") throw new Error("Authorization completed, but the secure account session could not be verified. Please retry after the IMG login service is configured.");
+      delete pairingCodes[provider];
+    }
     if(["expired","declined","cancelled"].includes(result.status)){delete pairingCodes[provider];state[provider]="disconnected";publish();}
     return result.status;
   }
