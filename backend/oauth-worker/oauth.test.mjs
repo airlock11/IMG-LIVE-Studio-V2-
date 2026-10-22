@@ -57,3 +57,8 @@ test('callback rejects absent state', async () => {
 test('unknown routes return 404', async () => {
   assert.equal((await call('/api/not-found')).status, 404);
 });
+
+test('Meta OAuth token exchange must not embed app secrets in URLs', () => {
+  assert.match(source, /fetch\("https:\/\/graph\.facebook\.com\/v24\.0\/oauth\/access_token",\{method:"POST"/);
+  assert.doesNotMatch(source, /endpoint\.search\s*=\s*new URLSearchParams/);
+});
