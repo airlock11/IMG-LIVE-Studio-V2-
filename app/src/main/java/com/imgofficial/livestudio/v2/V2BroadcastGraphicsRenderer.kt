@@ -168,7 +168,7 @@ internal object V2BroadcastGraphicsRenderer {
   val points=(if(index==0)score.homeScore else score.awayScore).coerceIn(0,999)
   val fouls=(if(index==0)score.homeFouls else score.awayFouls).coerceIn(0,99)
   val rim=if(style in listOf(1,3,6,9))SILVER else 0xFF778E99.toInt()
-  bevel(c,p,x,y,w,h,color,mix(color,INK,.84f),if(style in listOf(2,7))h*.37f:7f,rim)
+  bevel(c,p,x,y,w,h,color,mix(color,INK,.84f),if(style in listOf(2,7))h*.37f else 7f,rim)
   hardware(c,p,x,y,w,h,accent)
   val logoR=min(h*.30f,w*.115f)
   mark(c,p,x+logoR+9f,y+h*.46f,logoR,color,name,logo)
@@ -188,7 +188,7 @@ internal object V2BroadcastGraphicsRenderer {
    label(c,p,"FOULS ${fouls}${bonus}",x+w*.34f,y+h*.89f,min(19f,h*.15f),SILVER)
    // Possession and bonus diode sequence, not generic separator dots.
    for(j in 0..4){
-    p.color=if(j<fouls.coerceAtMost(5))accent:0xFF33373F.toInt()
+    p.color=if(j<fouls.coerceAtMost(5))accent else 0xFF33373F.toInt()
     c.drawCircle(x+w*.08f+j*w*.052f,y+h*.84f,max(2.2f,h*.027f),p)
    }
   }
@@ -198,7 +198,7 @@ internal object V2BroadcastGraphicsRenderer {
   style:Int,c1:Int,c2:Int,accent:Int,logos:Array<Bitmap?>){
   val id=style
   p.setShadowLayer(19f,1f,9f,0xB8000000.toInt())
-  shape(c,p,7f,7f,946f,126f,0xFF06080C.toInt(),if(id==2||id==7)60f:12f)
+  shape(c,p,7f,7f,946f,126f,0xFF06080C.toInt(),if(id==2||id==7)60f else 12f)
   p.clearShadowLayer()
   val left=if(id in listOf(0,6))24f:18f
   val teamW=if(id==2||id==5)334f else if(id==7)349f else 338f
