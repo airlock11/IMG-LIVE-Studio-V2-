@@ -109,7 +109,14 @@ class V2BroadcastService:Service(),ConnectChecker {
  private fun publish(){listeners.toList().forEach{listener->
   try{listener.onBroadcastStatus(title,running,connecting,ended,portrait,front)}catch(_:Exception){}
  }}
- private fun notifyState(value:String){ title=value;publish() }
+ private fun notifyState(value:String){
+  title=value
+  if(foreground)try{
+   // Notification is intentionally non-secret: never include an RTMPS URL.
+   getSystemService(NotificationManager::class.java).notify(notificationId,notification())
+  }catch(_:Exception){}
+  publish()
+ }
  fun isActive()=running||connecting
  fun isEnded()=ended
  fun isPortrait()=portrait
@@ -157,7 +164,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   return Notification.Builder(this,channel)
    .setSmallIcon(android.R.drawable.ic_menu_camera)
    .setContentTitle("IMG LIVE Studio V2 • Private video")
-   .setContentText("Camera + microphone broadcast service active")
+   .setContentText(title.take(90))
    .setContentIntent(open).setOngoing(true)
    .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,
     "Stop Upload",stop).build()).build()
@@ -233,6 +240,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(!foreground)notifyState("Broadcast service is not ready. Keep V2 open and tap Start.")
    return
   }
+  if(!networkReady){notifyState("No internet connection. Connect Wi-Fi or mobile data first.");return}
   attempted=true
   connecting=true
   recoveryAttempts=0
