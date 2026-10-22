@@ -248,14 +248,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    setSingleLine(true);setText((gameSeconds/60).toString())
    textSize=24f;setTextColor(Color.WHITE)
    gravity=Gravity.CENTER;background=rounded(Color.rgb(34,53,45),10)
-   selectAllOnFocus=true
+   setSelectAllOnFocus(true)
   }
   val ss=android.widget.EditText(this).apply{
    inputType=android.text.InputType.TYPE_CLASS_NUMBER
    setSingleLine(true);setText((gameSeconds%60).toString())
    textSize=24f;setTextColor(Color.WHITE)
    gravity=Gravity.CENTER;background=rounded(Color.rgb(34,53,45),10)
-   selectAllOnFocus=true
+   setSelectAllOnFocus(true)
   }
   row.addView(mm,LinearLayout.LayoutParams(0,dp(54),1f))
   row.addView(ink(":",25f),LinearLayout.LayoutParams(dp(20),dp(54)))
