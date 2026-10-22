@@ -255,35 +255,164 @@ internal object V2BroadcastGraphicsRenderer {
   identityTransition(c,p,award,index,x,y,w*.70f,h,style,accent,color,name,logo)
   pointsFlash(c,p,award,index,x+w*.71f,y+5f,w*.25f,h-10f,accent,style)
  }
- private fun wide(c:Canvas,p:Paint,score:V2Scorecard.State,a:V2Scorecard.Award?,
-  style:Int,c1:Int,c2:Int,accent:Int,logos:Array<Bitmap?>){
-  val id=style
-  p.setShadowLayer(19f,1f,9f,0xB8000000.toInt())
-  shape(c,p,7f,7f,946f,126f,0xFF06080C.toInt(),if(id==2||id==7)60f else 12f)
-  p.clearShadowLayer()
-  val left=if(id in listOf(0,6))24f else 18f
-  val teamW=if(id==2||id==5)334f else if(id==7)349f else 338f
-  if(id==2||id==7){
-   bevel(c,p,14f,13f,930f,112f,0xFFBFCBCE.toInt(),0xFF3F4C55.toInt(),59f,SILVER)
+ private fun wide(c:Canvas,p:Paint,s:V2Scorecard.State,a:V2Scorecard.Award?,
+  id:Int,c1:Int,c2:Int,accent:Int,logos:Array<Bitmap?>){
+  val names=arrayOf(s.home.uppercase().take(12),s.away.uppercase().take(12))
+  val points=intArrayOf(s.homeScore,s.awayScore)
+  val fouls=intArrayOf(s.homeFouls,s.awayFouls)
+  val col=intArrayOf(c1,c2)
+  fun num(i:Int,x:Float,y:Float,w:Float,h:Float,light:Boolean=false){
+   bevel(c,p,x,y,w,h,
+    if(light)0xFFF5F7F4.toInt() else 0xFF21232B.toInt(),
+    if(light)0xFFABBAC2.toInt() else 0xFF07090D.toInt(),3f,SILVER)
+   label(c,p,points[i].toString(),x+w*.5f,y+h*.80f,min(h*.83f,w*.8f),
+    if(light)INK else WHITE)
+   pointsFlash(c,p,a,i,x,y,w,h,accent,id)
   }
-  team(c,p,score,0,left,17f,teamW,101f,id,c1,accent,logos[0],a)
-  team(c,p,score,1,960f-left-teamW,17f,teamW,101f,id,c2,accent,logos[1],a)
-  val cx=960f*.5f
-  val towerW=if(id==2||id==5)191f else 210f
-  clock(c,p,score,cx-towerW*.5f,20f,towerW,94f,id,accent)
-  if(id in listOf(0,1,4,6)){
-   bevel(c,p,31f,125f,898f,15f,0xFF333F46.toInt(),0xFF070A0D.toInt(),3f,SILVER)
-   label(c,p,"IMG  •  LIVE",485f,136f,14f,SILVER)
-  }else if(id==2||id==5){
-   bevel(c,p,366f,108f,229f,32f,0xFF9CA7AA.toInt(),0xFF0D1219.toInt(),5f,SILVER)
-   label(c,p,"BROADCAST",480f,130f,21f,WHITE)
-  }else if(id==7){
-   val plate=Path().apply{
-    moveTo(390f,111f);lineTo(570f,111f)
-    lineTo(546f,140f);lineTo(410f,140f);close()
+  fun badge(i:Int,x:Float,y:Float,r:Float){
+   mark(c,p,x,y,r,col[i],names[i],logos[i])
+  }
+  fun awardName(i:Int,x:Float,y:Float,w:Float,h:Float){
+   identityTransition(c,p,a,i,x,y,w,h,id,accent,col[i],names[i],logos[i])
+  }
+  fun lights(i:Int,x:Float,y:Float,vertical:Boolean){
+   for(j in 0..4){
+    p.color=if(j<fouls[i].coerceAtMost(5))accent else 0xFF303238.toInt()
+    val px=if(vertical)x else x+j*20f
+    val py=if(vertical)y+j*15f else y
+    c.drawCircle(px,py,6f,p)
    }
-   p.color=0xFF151C22.toInt();c.drawPath(plate,p)
-   label(c,p,"IMG · PRIME",480f,131f,16f,SILVER)
+  }
+  fun banner(x:Float,y:Float,w:Float,code:String){
+   bevel(c,p,x,y,w,24f,0xFF30363D.toInt(),0xFF14191D.toInt(),2f,SILVER)
+   label(c,p,code,x+w*.5f,y+17f,17f,SILVER)
+  }
+  when(id){
+   0->{ // Long broadcast plate: two colored team sections, white score, right match clock.
+    bevel(c,p,12f,5f,936f,136f,0xFF353839.toInt(),0xFF05080D.toInt(),5f,SILVER)
+    for(i in 0..1){
+     val x=18f+i*343f
+     bevel(c,p,x,13f,343f,81f,col[i],mix(col[i],INK,.66f),1f,col[i])
+     badge(i,x+51f,52f,36f)
+     label(c,p,names[i],x+146f,66f,42f,WHITE,Paint.Align.CENTER,170f)
+     num(i,x+264f,14f,77f,80f)
+     awardName(i,x+89f,13f,173f,81f)
+    }
+    bevel(c,p,707f,13f,235f,81f,0xFF424447.toInt(),0xFF14191E.toInt(),2f,SILVER)
+    label(c,p,if(s.period<=4)"${s.period}RD" else "OT",751f,65f,27f,SILVER)
+    bevel(c,p,802f,22f,93f,62f,WHITE,0xFFBBC5C8.toInt(),10f,INK)
+    label(c,p,s.clock.ifEmpty{"10:00"},850f,67f,37f,INK)
+    label(c,p,"24",918f,70f,49f,0xFFFFBA30.toInt())
+    banner(18f,98f,323f,"IMG • LIVE SPORTS")
+    banner(362f,98f,337f,"BASKETBALL • Q${s.period}")
+    banner(704f,98f,238f,"BROADCAST GRAPHICS")
+   }
+   1->{ // Chrome capsule with team LEDs, center emblem and hanging clock extension.
+    bevel(c,p,11f,2f,938f,109f,SILVER,0xFF182029.toInt(),53f,SILVER)
+    bevel(c,p,22f,9f,916f,92f,0xFF3D4244.toInt(),0xFF090D11.toInt(),45f,0xFF65767E.toInt())
+    bevel(c,p,32f,15f,240f,83f,c1,mix(c1,INK,.8f),43f,SILVER)
+    bevel(c,p,686f,15f,240f,83f,c2,mix(c2,INK,.8f),43f,SILVER)
+    badge(0,81f,54f,36f);badge(1,878f,54f,36f)
+    label(c,p,names[0],187f,83f,32f)
+    label(c,p,names[1],773f,83f,32f)
+    lights(0,288f,20f,true);lights(1,669f,20f,true)
+    num(0,315f,14f,120f,84f);num(1,527f,14f,120f,84f)
+    awardName(0,117f,14f,168f,84f)
+    awardName(1,673f,14f,168f,84f)
+    mark(c,p,481f,55f,61f,accent,"IMG",null)
+    bevel(c,p,324f,105f,489f,35f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
+    label(c,p,if(s.period<=4)"${s.period}TH" else "OT",380f,131f,33f,INK)
+    label(c,p,s.clock.ifEmpty{"10:00"},554f,130f,38f,WHITE)
+    label(c,p,"24",737f,130f,33f,0xFFFFCA53.toInt())
+   }
+   2->{ // Asymmetric beveled floating team nameplates + slim bottom ticker.
+    p.setShadowLayer(14f,0f,8f,0xA0000000.toInt())
+    bevel(c,p,9f,13f,455f,89f,c1,mix(c1,INK,.66f),9f,SILVER)
+    bevel(c,p,496f,13f,455f,89f,c2,mix(c2,INK,.67f),9f,SILVER)
+    p.clearShadowLayer()
+    badge(0,62f,57f,37f);badge(1,904f,57f,37f)
+    label(c,p,names[0],203f,55f,34f)
+    label(c,p,names[1],750f,55f,34f)
+    num(0,357f,22f,103f,78f);num(1,500f,22f,103f,78f)
+    awardName(0,103f,17f,237f,84f);awardName(1,619f,17f,232f,84f)
+    bevel(c,p,185f,108f,598f,34f,0xFF50545B.toInt(),0xFF080C12.toInt(),10f,SILVER)
+    label(c,p,if(s.period<=4)"Q${s.period}" else "OT",266f,133f,24f)
+    label(c,p,s.clock.ifBlank{"10:00"},485f,133f,26f)
+    label(c,p,"SHOT 24",685f,133f,24f,accent)
+   }
+   3->{ // NBA-like circular mid-clock strip with opposing logos at the extreme edges.
+    bevel(c,p,4f,20f,952f,98f,0xFF232B31.toInt(),0xFF080B0E.toInt(),5f,SILVER)
+    bevel(c,p,8f,26f,473f,83f,c1,mix(c1,INK,.7f),3f,SILVER)
+    bevel(c,p,480f,26f,473f,83f,c2,mix(c2,INK,.7f),3f,SILVER)
+    badge(0,62f,68f,38f);badge(1,906f,68f,38f)
+    label(c,p,names[0],195f,83f,39f)
+    label(c,p,names[1],757f,83f,39f)
+    num(0,323f,32f,113f,75f);num(1,520f,32f,113f,75f)
+    awardName(0,108f,27f,212f,80f);awardName(1,637f,27f,213f,80f)
+    mark(c,p,480f,66f,62f,accent,"IMG",null)
+    shape(c,p,422f,58f,116f,48f,0xED111C25.toInt(),7f)
+    label(c,p,s.clock.ifBlank{"10:00"},480f,78f,32f)
+    label(c,p,"Q${s.period}   24",480f,99f,21f,accent)
+    banner(12f,122f,936f,"FOULS ${s.homeFouls}                  IMG LIVE                  FOULS ${s.awayFouls}")
+   }
+   4->{ // Vertical stacked scoreboard with separate game-clock/bonus column.
+    bevel(c,p,3f,4f,954f,134f,0xFF20272C.toInt(),0xFF05080C.toInt(),7f,SILVER)
+    bevel(c,p,15f,13f,234f,57f,0xFF3B3D42.toInt(),0xFF14171B.toInt(),4f,SILVER)
+    label(c,p,s.clock.ifBlank{"10:00"},131f,55f,57f)
+    bevel(c,p,15f,75f,234f,51f,WHITE,0xFFB5C1C6.toInt(),4f,SILVER)
+    label(c,p,"Q${s.period}   24",131f,112f,38f,INK)
+    for(i in 0..1){
+     val y=13f+i*59f
+     bevel(c,p,252f,y,695f,57f,col[i],mix(col[i],INK,.66f),1f,SILVER)
+     badge(i,310f,y+28f,24f)
+     label(c,p,names[i],484f,y+43f,41f)
+     num(i,778f,y+3f,164f,51f)
+     awardName(i,352f,y+2f,419f,54f)
+    }
+   }
+   5->{ // Clock and period circular orb floats over the middle of the whole plate.
+    bevel(c,p,14f,14f,932f,106f,0xFF3B4650.toInt(),0xFF06090E.toInt(),8f,SILVER)
+    for(i in 0..1){
+     val x=if(i==0)21f else 539f
+     bevel(c,p,x,20f,398f,96f,col[i],mix(col[i],INK,.73f),6f,SILVER)
+     badge(i,x+43f,68f,36f)
+     label(c,p,names[i],x+155f,65f,36f)
+     num(i,x+276f,27f,108f,82f)
+     awardName(i,x+87f,21f,188f,92f)
+    }
+    mark(c,p,479f,69f,66f,accent,"IMG",null)
+    shape(c,p,432f,55f,94f,65f,0xEC121922.toInt(),18f)
+    label(c,p,s.clock.ifBlank{"10:00"},479f,81f,31f)
+    label(c,p,"Q${s.period} 24",479f,107f,24f,accent)
+    banner(159f,119f,644f,"IMG • LIVE GAME GRAPHICS")
+   }
+   6->{ // Legacy network white plates, independent fouls and possession modules.
+    bevel(c,p,5f,16f,950f,101f,0xFF333C43.toInt(),0xFF060A0F.toInt(),8f,SILVER)
+    bevel(c,p,13f,24f,401f,81f,c1,mix(c1,INK,.55f),4f,SILVER)
+    bevel(c,p,546f,24f,401f,81f,c2,mix(c2,INK,.55f),4f,SILVER)
+    badge(0,64f,64f,34f);badge(1,895f,64f,34f)
+    label(c,p,names[0],193f,67f,37f);label(c,p,names[1],772f,67f,37f)
+    num(0,310f,32f,101f,70f,true);num(1,548f,32f,101f,70f,true)
+    awardName(0,101f,27f,201f,74f);awardName(1,653f,27f,200f,74f)
+    clock(c,p,s,419f,19f,122f,93f,6,accent)
+    banner(17f,113f,926f,"TEAM FOULS  ${s.homeFouls}                    IMG • Q${s.period}                     TEAM FOULS ${s.awayFouls}")
+   }
+   else->{ // Polished rounded capsule with extended central score clock.
+    bevel(c,p,8f,5f,944f,130f,SILVER,0xFF141B20.toInt(),64f,SILVER)
+    bevel(c,p,20f,16f,920f,108f,0xFF2B363C.toInt(),0xFF070D13.toInt(),55f,SILVER)
+    for(i in 0..1){
+     val x=if(i==0)32f else 581f
+     bevel(c,p,x,23f,347f,93f,col[i],mix(col[i],INK,.78f),45f,SILVER)
+     badge(i,x+54f,69f,35f)
+     label(c,p,names[i],x+174f,66f,32f)
+     num(i,x+253f,31f,94f,76f)
+     awardName(i,x+97f,24f,156f,88f)
+    }
+    mark(c,p,480f,71f,61f,accent,"IMG",null)
+    shape(c,p,424f,53f,112f,62f,0xDB131A22.toInt(),15f)
+    label(c,p,s.clock.ifEmpty{"10:00"},480f,81f,32f)
+    label(c,p,"Q${s.period}  24",480f,105f,22f,accent)
+   }
   }
  }
  private fun compactBoard(c:Canvas,p:Paint,s:V2Scorecard.State,a:V2Scorecard.Award?,
