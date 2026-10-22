@@ -49,8 +49,10 @@ jobs:
             if grep -E 'FATAL EXCEPTION|Process: com.imgofficial.livestudio.v2' img-v2-logcat.txt; then exit 1; fi
             adb shell screencap -p /sdcard/img-v2.png
             adb pull /sdcard/img-v2.png img-v2-emulator.png
-            adb shell uiautomator dump /sdcard/img-v2-ui.xml
-            adb pull /sdcard/img-v2-ui.xml img-v2-ui.xml
+            # UI hierarchy capture can be OOM-killed (exit 137) on hosted emulators.
+            # Keep app launch/crash checks mandatory; make optional evidence best-effort.
+            timeout 20s adb shell uiautomator dump /sdcard/img-v2-ui.xml || true
+            timeout 10s adb pull /sdcard/img-v2-ui.xml img-v2-ui.xml || true
       - name: Upload actual emulator evidence
         if: always()
         uses: actions/upload-artifact@v4
