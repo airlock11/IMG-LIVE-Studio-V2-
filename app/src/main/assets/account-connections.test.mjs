@@ -13,11 +13,12 @@ function controller(handler) {
    outbound.push(raw);
    if(raw.startsWith('oauth-open:'))return;
    const cmd=JSON.parse(raw);
-   const outcome=handler(cmd);
-   queueMicrotask(()=>native.onmessage?.({data:JSON.stringify({
-    requestId:cmd.requestId,ok:outcome.ok!==false,
-    data:outcome.data||{},error:outcome.error
-   })}));
+   Promise.resolve(handler(cmd)).then(outcome=>{
+    queueMicrotask(()=>native.onmessage?.({data:JSON.stringify({
+     requestId:cmd.requestId,ok:outcome.ok!==false,
+     data:outcome.data||{},error:outcome.error
+    })}));
+   });
   }
  };
  const window={
@@ -125,4 +126,39 @@ test('failed server logout cannot be represented as a successful sign-out',async
  await accounts.refresh();
  await assert.rejects(accounts.signOut(),/upstream_failure/);
  assert.equal(accounts.getStatus().facebook,'connected');
+});
+
+test('global logout prevents late OAuth authorization responses from reviving a pending session',async()=>{
+ let finishAuthorization;
+ const held=new Promise(resolve=>{finishAuthorization=resolve});
+ const {accounts,outbound}=controller(cmd=>{
+  if(cmd.action==='connect')return held;
+  if(cmd.action==='signOut')return {data:{signedOut:true}};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ const pendingConnect=accounts.connect('facebook');
+ assert.equal(accounts.getStatus().facebook,'connecting');
+ await accounts.signOut();
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+ finishAuthorization({data:{pairingCode:'C'.repeat(43),authorizationUrl:'https://www.facebook.com/v24.0/dialog/oauth?client_id=x'}});
+ await assert.rejects(pendingConnect,/session changed/i);
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+ assert.ok(!outbound.some(x=>x.startsWith('oauth-open:')));
+});
+test('global logout ignores a stale account status response after the session is revoked',async()=>{
+ let finishRefresh;
+ const held=new Promise(resolve=>{finishRefresh=resolve});
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='refresh')return held;
+  if(cmd.action==='signOut')return {data:{signedOut:true}};
+  throw Error('unexpected action');
+ });
+ accounts.enableNative();
+ const pendingRefresh=accounts.refresh();
+ await accounts.signOut();
+ finishRefresh({data:{facebook:{connected:true},youtube:{connected:true}}});
+ await pendingRefresh;
+ assert.equal(accounts.getStatus().facebook,'disconnected');
+ assert.equal(accounts.getStatus().youtube,'disconnected');
 });
