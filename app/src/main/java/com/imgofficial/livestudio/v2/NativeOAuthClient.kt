@@ -256,5 +256,69 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
   } finally { connection.disconnect() }
  }
 
+
+ /**
+  * Delivers the private RTMPS destination ONLY to native Android.
+  * This method never uses the IMGNativeChannel JS reply and never persists
+  * any ingest key, URL, Google access token or IMG session cookie in WebView.
+  */
+ fun preparePrivateIngest(draftId:String, callback:(String?,String?)->Unit) {
+  executor.execute {
+   val answer=try { fetchPrivateIngest(draftId) }
+   catch (_:Exception) { Pair<String?,String?>(null,"Private video setup unavailable") }
+   callback(answer.first,answer.second)
+  }
+ }
+
+ private fun fetchPrivateIngest(draftId:String):Pair<String?,String?> {
+  if(!Regex("^[a-f0-9]{32}$").matches(draftId))return Pair(null,"Invalid private draft")
+  val connection=(URL(baseUrl.trimEnd('/')+"/api/connections/youtube/private-ingest")
+   .openConnection() as HttpURLConnection)
+  try {
+   connection.instanceFollowRedirects=false
+   connection.connectTimeout=15000
+   connection.readTimeout=15000
+   connection.useCaches=false
+   connection.setRequestProperty("Origin",appOrigin)
+   connection.setRequestProperty("Accept","application/json")
+   connection.setRequestProperty("Content-Type","application/json")
+   connection.setRequestProperty("Cache-Control","no-store")
+   if(sessionCookie==null)sessionCookie=loadSession()
+   val session=sessionCookie?:return Pair(null,"Connect YouTube in V2 first")
+   connection.setRequestProperty("Cookie","__Host-img_session=$session")
+   connection.requestMethod="POST"
+   connection.doOutput=true
+   val payload=JSONObject().put("draftRequestId",draftId).put("operatorConfirmed",true)
+   connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+   val code=connection.responseCode
+   if(code !in 200..299) return Pair(null,when(code) {
+    503 -> "Private camera upload is not enabled on the test server"
+    401 -> "Your YouTube connection needs authorization"
+    404 -> "The private draft is not found in this YouTube session"
+    409 -> "This private feed was already prepared or is not eligible"
+    else -> "YouTube private feed preparation was rejected"
+   })
+   val body=connection.inputStream.bufferedReader().use { it.readText().take(2048) }
+   val data=JSONObject(body)
+   if(data.opt("prepared")!==true || data.optString("privacy")!="private" ||
+      data.opt("autoStart")!==false)return Pair(null,"Unverified private feed response")
+   val secret=data.optString("rtmpsUrl")
+   if(!isPrivateYouTubeRtmps(secret))return Pair(null,"Unsafe video destination rejected")
+   return Pair(secret,null)
+  }finally{connection.disconnect()}
+ }
+
+ private fun isPrivateYouTubeRtmps(input:String):Boolean=try {
+  if(input.length !in 35..700 || input.any { it.isWhitespace() })false
+  else {
+   val uri=java.net.URI(input)
+   uri.scheme?.lowercase()=="rtmps"&&
+    uri.host?.lowercase() in setOf("a.rtmps.youtube.com","b.rtmps.youtube.com")&&
+    (uri.port==-1||uri.port==443)&&uri.rawUserInfo==null&&
+    uri.rawQuery==null&&uri.rawFragment==null&&
+    uri.path?.startsWith("/live2/")==true
+  }
+ }catch(_:Exception){false}
+
  fun close() { executor.shutdownNow() }
 }
