@@ -28,6 +28,7 @@ import androidx.webkit.WebViewAssetLoader
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
  private lateinit var browser: WebView
+ private var oauthClient: NativeOAuthClient? = null
  private lateinit var root: FrameLayout
  private var fullscreenView: View? = null
  private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
@@ -43,6 +44,7 @@ class MainActivity : Activity() {
 
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  if (BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) oauthClient = NativeOAuthClient(this, BuildConfig.OAUTH_BACKEND_URL)
   browser = WebView(this).apply {
    settings.javaScriptEnabled = true
    settings.mediaPlaybackRequiresUserGesture = true
@@ -50,9 +52,8 @@ class MainActivity : Activity() {
    settings.domStorageEnabled = true
    settings.setSupportMultipleWindows(false)
    settings.javaScriptCanOpenWindowsAutomatically = false
-   // OAuth backend is cross-origin. Cookies remain HttpOnly and scoped to the backend;
-   // only enable third-party cookies when a trusted backend is compiled into this APK.
-   CookieManager.getInstance().setAcceptThirdPartyCookies(this, BuildConfig.OAUTH_BACKEND_URL.isNotBlank())
+   // OAuth sessions and network requests live exclusively in native Android.
+   CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
    settings.allowFileAccess = false
    settings.allowContentAccess = false
    settings.allowFileAccessFromFileURLs = false
@@ -61,8 +62,8 @@ class MainActivity : Activity() {
     override fun onPageFinished(view: WebView, url: String?) {
      super.onPageFinished(view, url)
      if(url == "$origin/assets/connections.html" && BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
-      // Backend origin is injected only by the signed Android build, never from page URLs.
-      view.evaluateJavascript("window.IMGAccounts?.configure(" + JSONObject.quote(BuildConfig.OAUTH_BACKEND_URL) + "); window.IMGAccounts?.refresh().catch(()=>{});", null)
+      // Native transport is enabled only for signed builds with a pinned HTTPS backend.
+      view.evaluateJavascript("window.IMGAccounts?.enableNative(); window.IMGAccounts?.refresh().catch(()=>{});", null)
      }
     }
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -123,7 +124,19 @@ class MainActivity : Activity() {
        sourceOrigin: Uri, isMainFrame: Boolean, replyProxy: JavaScriptReplyProxy) {
        if (!isMainFrame || sourceOrigin.toString().removeSuffix("/") != origin) return
        val action = message.data ?: return
-       if (action.startsWith("oauth-open:")) {
+       if (action.startsWith("{")) {
+        try {
+         val command = JSONObject(action)
+         if (command.optString("type") == "oauth-api") {
+          val client = oauthClient ?: return
+          client.request(command) { result ->
+           runOnUiThread { replyProxy.postMessage(result.toString()) }
+          }
+         }
+        } catch (_: Exception) {
+         // Never execute arbitrary unrecognized WebView messages.
+        }
+       } else if (action.startsWith("oauth-open:")) {
         runOnUiThread { openOAuthBrowser(action.removePrefix("oauth-open:")) }
        } else if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
         runOnUiThread { handleNativeAction(action) }
@@ -233,6 +246,7 @@ class MainActivity : Activity() {
   pendingFileChooser?.onReceiveValue(null)
   pendingFileChooser = null
   window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+  oauthClient?.close()
   // Origin-scoped WebMessage listener is released when WebView is destroyed.
   browser.destroy()
   super.onDestroy()
