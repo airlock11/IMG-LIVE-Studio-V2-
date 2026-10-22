@@ -124,6 +124,12 @@ class MainActivity : Activity() {
 
  override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray) {
   super.onRequestPermissionsResult(requestCode,permissions,grantResults)
+  if(requestCode==503 || requestCode==504) {
+   val permitted=grantResults.isNotEmpty() && grantResults.all { it==PackageManager.PERMISSION_GRANTED }
+   val type=if(requestCode==503) "camera" else "microphone"
+   browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-permission',{detail:{type:'$type',granted:$permitted}}))",null)
+   return
+  }
   if(requestCode==501) {
    val request=pendingMediaRequest ?: return
    pendingMediaRequest=null
@@ -137,8 +143,16 @@ class MainActivity : Activity() {
   @JavascriptInterface fun command(action: String) {
    runOnUiThread {
     when(action) {
-     "camera","microphone" ->
-      Toast.makeText(this@MainActivity,"Use the prototype camera controls to grant Android permissions",Toast.LENGTH_LONG).show()
+     "camera" -> {
+      if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
+       requestPermissions(arrayOf(Manifest.permission.CAMERA),503)
+      else browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-camera-ready'))",null)
+     }
+     "microphone" -> {
+      if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
+       requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO),504)
+      else browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-microphone-ready'))",null)
+     }
      "broadcast","record","replay" ->
       Toast.makeText(this@MainActivity,"Native broadcast engine not connected",Toast.LENGTH_LONG).show()
      else -> Toast.makeText(this@MainActivity,"Unsupported command",Toast.LENGTH_SHORT).show()
