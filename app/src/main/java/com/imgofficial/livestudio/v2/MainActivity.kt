@@ -184,7 +184,6 @@ class MainActivity : Activity() {
            .putExtra("img_away",team("away")))
          }
         }
-       }
        } else if (action.startsWith("native-private-video:")) {
         val draftId=action.removePrefix("native-private-video:")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
