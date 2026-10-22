@@ -167,7 +167,7 @@ class MainActivity : Activity() {
         val draftId=payload.substringBefore(':')
         val encodedGame=payload.substringAfter(':',"")
         if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
-           encodedGame.length<=1800&&BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+           encodedGame.length<=100000&&BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
          // Safely bounded team names/sport are NON-SECRET game metadata.
          // The Worker still checks private event ownership before RTMPS.
          val game=try{JSONObject(Uri.decode(encodedGame))}catch(_:Exception){JSONObject()}
@@ -181,7 +181,19 @@ class MainActivity : Activity() {
            .putExtra("img_autostart",true)
            .putExtra("img_sport",sport)
            .putExtra("img_home",team("home"))
-           .putExtra("img_away",team("away")))
+           .putExtra("img_away",team("away"))
+           .putExtra("img_graphics",game.optString("graphics").take(30))
+           .putExtra("img_graphics_position",game.optString("position").take(32))
+           .putExtra("img_graphics_size",game.optInt("size",60))
+           .putExtra("img_graphics_opacity",game.optInt("opacity",100))
+           .putExtra("img_graphics_width",game.optInt("width",100))
+           .putExtra("img_graphics_height",game.optInt("height",100))
+           .putExtra("img_graphics_offset_x",game.optInt("offsetX",0))
+           .putExtra("img_graphics_offset_y",game.optInt("offsetY",0))
+           .putExtra("img_graphics_margin",game.optInt("margin",3))
+           .putExtra("img_graphics_animated",game.optBoolean("animated",true))
+           .putExtra("img_logo_home",game.optString("logoHome").take(35000))
+           .putExtra("img_logo_away",game.optString("logoAway").take(35000)))
          }
         }
        } else if (action.startsWith("native-private-video:")) {
