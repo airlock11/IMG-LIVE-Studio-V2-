@@ -318,3 +318,24 @@ test('token response with unknown lifetime fails closed and does not create a co
   assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_accounts').length,0);
  }finally{globalThis.fetch=original;}
 });
+
+test('daily scheduled D1 cleanup removes expired records and preserves live sessions',async()=>{
+ const env=makeEnv({OAUTH_ENABLED:'false'});
+ const old=Date.now()-120000,future=Date.now()+3600000;
+ for(const [id,expiry] of [['expired-device',old],['active-device',future]]){
+  env.OAUTH_DB.execute('INSERT INTO oauth_sessions(session_id,expires_at) VALUES(?,?)',id,expiry);
+  env.OAUTH_DB.execute("INSERT INTO oauth_pairings(pairing_hash,session_id,provider,status,expires_at) VALUES(?,?,?,'pending',?)",'pair-'+id,id,'youtube',expiry);
+  env.OAUTH_DB.execute('INSERT INTO oauth_states(state_hash,session_id,provider,verifier,pairing_hash,expires_at) VALUES(?,?,?,?,?,?)','state-'+id,id,'youtube','mock-verifier','pair-'+id,expiry);
+  env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at) VALUES(?,?,?,?,?)',id,'youtube','{}',expiry,expiry);
+ }
+ // Even with the public login switch disabled, expiration cleanup still runs.
+ await worker.scheduled({scheduledTime:Date.now()},env,{});
+ for(const table of ['oauth_sessions','oauth_pairings','oauth_states','oauth_accounts']){
+  const rows=env.OAUTH_DB.query('SELECT * FROM '+table);
+  assert.equal(rows.length,1,table+' should have retained one active row');
+ }
+ assert.equal(env.OAUTH_DB.query('SELECT session_id FROM oauth_sessions')[0].session_id,'active-device');
+ assert.equal(env.OAUTH_DB.query('SELECT session_id FROM oauth_accounts')[0].session_id,'active-device');
+ await worker.scheduled({scheduledTime:Date.now()},env,{});
+ assert.equal(env.OAUTH_DB.query('SELECT * FROM oauth_sessions').length,1,'cleanup is idempotent');
+});
