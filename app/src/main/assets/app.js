@@ -56,7 +56,7 @@ const SPORTS=[{id:'basketball',name:'Basketball',icon:'basketball',description:'
 const sportName=()=>SPORTS.find(x=>x.id===data.options.sport)?.name||'Basketball';
 const activeSport=()=>data.options.sport==='pickleball'?'pickleball':'basketball';
 const sportLeagues=()=>data.leagues.filter(l=>(l.sport||'basketball')===activeSport());
-const defaults=()=>({version:8,leagues:[],events:[],sponsors:[{name:'',img:''}],options:{sport:'basketball',basketballMode:'standard',streetFormat:'1v1',streetShowTeams:false,streetOverlaySize:45,streetOverlayOpacity:100,streetOverlayColor:'#E66D48',streetWinTarget:21,streetPositions:[{x:.14,y:.52},{x:.86,y:.52}],regularOrientation:'landscape',streetPlayers:[[{name:'',photo:''},{name:'',photo:''}],[{name:'',photo:''},{name:'',photo:''}]],pickleballTarget:11,pickleballType:'doubles',pickleballScoring:'sideout',pickleballMatch:'best3',orientation:'landscape',appOrientation:'landscape',appearance:'dark',overlay:'simple',overlaySize:45,overlayOpacity:100,overlayColor:'#E66D48',quality:'720p',fps:30,shotVisible:true,mic:true,micInputs:[{id:'device',name:'Device microphone',enabled:true,type:'device'}],broadcast:{homeName:'',homeLogo:'',awayName:'',awayLogo:'',leagueName:'',leagueLogo:'',showLeagueName:false},yt:false,fb:false,tiktok:false,penalty:5,quarterMins:10,slideSecs:5,slideTransition:'fade'},live:{active:false,lockedOrientation:null,timeout:false,slides:false,playing:true,slideIndex:0,recordOnly:false,seconds:600,shot:24,clockRunning:false,quarter:1,scores:[0,0],fouls:[0,0],possession:0,pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'',undo:[]},selectedEventId:null,selectedLeagueId:null})
+const defaults=()=>({version:8,leagues:[],events:[],sponsors:[{name:'',img:''}],options:{sport:'basketball',basketballMode:'standard',streetFormat:'1v1',streetShowTeams:false,streetOverlaySize:45,streetOverlayOpacity:100,streetOverlayColor:'#E66D48',streetWinTarget:21,streetPositions:[{x:.14,y:.52},{x:.86,y:.52}],regularOrientation:'landscape',streetPlayers:[[{name:'',photo:''},{name:'',photo:''}],[{name:'',photo:''},{name:'',photo:''}]],pickleballTarget:11,pickleballType:'doubles',pickleballScoring:'sideout',pickleballMatch:'best3',orientation:'landscape',appOrientation:'landscape',appearance:'dark',overlay:'prime-tv',overlaySize:60,overlayOpacity:100,overlayColor:'#2FE0B0',overlayPosition:'bottom-center',overlayOffsetX:0,overlayOffsetY:0,overlayWidth:100,overlayHeight:100,overlaySafe:3,overlayAnimated:true,quality:'720p',fps:30,shotVisible:true,mic:true,micInputs:[{id:'device',name:'Device microphone',enabled:true,type:'device'}],broadcast:{homeName:'',homeLogo:'',awayName:'',awayLogo:'',leagueName:'',leagueLogo:'',showLeagueName:false},yt:false,fb:false,tiktok:false,penalty:5,quarterMins:10,slideSecs:5,slideTransition:'fade'},live:{active:false,lockedOrientation:null,timeout:false,slides:false,playing:true,slideIndex:0,recordOnly:false,seconds:600,shot:24,clockRunning:false,quarter:1,scores:[0,0],fouls:[0,0],possession:0,pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'',undo:[]},selectedEventId:null,selectedLeagueId:null})
 function load(){const d=defaults();try{const fromKey=localStorage.getItem(KEY),raw=fromKey||localStorage.getItem(LEGACY_KEY),saved=JSON.parse(raw||'null');if(saved&&([6,7,8].includes(saved.version))){const o={...d.options,...saved.options};o.fb=false;o.broadcast={...d.options.broadcast,...saved.options?.broadcast};
 // Convert original prefilled examples to placeholders without erasing custom names.
 if(o.broadcast.homeName==='Home Team')o.broadcast.homeName='';
@@ -78,7 +78,12 @@ const oldPositions=Array.isArray(saved.options?.streetPositions)?saved.options.s
  edge=Math.max(.10,Math.min(.24,edge));
  o.streetPositions=[{x:edge,y:sharedY},{x:1-edge,y:sharedY}];
  o.regularOrientation='landscape';if(o.basketballMode!=='streetball')o.orientation='landscape';
-o.streetPlayers=d.options.streetPlayers.map((row,i)=>row.map((p,j)=>({...p,...(saved.options?.streetPlayers?.[i]?.[j]||{})})));if(!SPORTS.some(x=>x.id===o.sport))o.sport='basketball';o.overlay=({tv:'simple',minimal:'narrow',arena:'pro-arena'})[o.overlay]||o.overlay;if(!['simple','narrow','corner-left','corner-right','pro-arena','pro-league'].includes(o.overlay))o.overlay='simple';o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(115,Number(o.overlaySize)||45));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
+o.streetPlayers=d.options.streetPlayers.map((row,i)=>row.map((p,j)=>({...p,...(saved.options?.streetPlayers?.[i]?.[j]||{})})));if(!SPORTS.some(x=>x.id===o.sport))o.sport='basketball';o.overlay=normalizeGraphic(({'simple':'prime-tv','narrow':'broadcast-classic','corner-left':'edge-box','corner-right':'match-cube','pro-arena':'arena-glass','pro-league':'courtside-a','tv':'prime-tv','minimal':'broadcast-classic','arena':'arena-glass'})[o.overlay]||o.overlay);
+o.overlayPosition=['top-left','top-right','bottom-left','bottom-right','bottom-center'].includes(o.overlayPosition)?o.overlayPosition:(graphicIsCompact(o.overlay)?'bottom-right':'bottom-center');
+for(const [field,min,max,standard] of [['overlayOffsetX',-30,30,0],['overlayOffsetY',-30,30,0],['overlayWidth',65,150,100],['overlayHeight',65,150,100],['overlaySafe',1,10,3]]){
+ o[field]=Math.max(min,Math.min(max,Number.isFinite(Number(o[field]))?Number(o[field]):standard));
+}
+o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(115,Number(o.overlaySize)||45));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
  const cannedNames=['COURTSIDE','NORTHSTAR','PEAK SPORT'];
  const onlyCannedSponsors=savedSponsors.length===3&&savedSponsors.every((item,i)=>item?.name===cannedNames[i]&&!item?.img);
  return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors,version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
@@ -256,7 +261,12 @@ async function startPrivateYouTubeFromStudio(){
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
   const game=encodeURIComponent(JSON.stringify({
-   sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24)
+   sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
+   graphics:normalizeGraphic(data.options.overlay),position:data.options.overlayPosition,
+   size:Math.round(data.options.overlaySize),opacity:Math.round(data.options.overlayOpacity),
+   width:Math.round(data.options.overlayWidth),height:Math.round(data.options.overlayHeight),
+   offsetX:Math.round(data.options.overlayOffsetX),offsetY:Math.round(data.options.overlayOffsetY),
+   margin:Math.round(data.options.overlaySafe),animated:data.options.overlayAnimated!==false
   }));
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
@@ -531,28 +541,62 @@ function setupOpts(){const o=data.options,b=o.broadcast;const ev=selectedEvent()
 <label><span class="small-label">Players</span><select class="input" data-input="pickleballType"><option value="doubles" ${o.pickleballType==='doubles'?'selected':''}>Doubles</option><option value="singles" ${o.pickleballType==='singles'?'selected':''}>Singles</option></select></label>
 </div><p class="pickle-scoring-explainer">Win by two. Standard doubles begins at 0–0–2. In singles, one player serves per turn. Use Undo to correct the previous rally.</p>
 <a class="pickle-rules-source" href="https://usapickleball.org/rules/" target="_blank" rel="noopener noreferrer">USA Pickleball official rules ↗</a></section>
-<section class="control-section"><h3>Pickleball scoreboard appearance</h3>${scoreSettings()}</section>`:`<section class="control-section"><h3>${streetballActive()?'Streetball scoreboard':'Embedded scoreboard'}</h3><p class="helper">${streetballActive()?'Side-by-side vertical scores, photos and names in portrait. Adjust overall size, opacity and color.':'Six broadcast styles. Customize the entire scoreboard size, opacity and color.'}</p>${scoreSettings()}${streetballActive()?'':`<div class="setting-row"><span class="main">Show shot clock<span class="sub">Hide or display shot time in video scoreboard</span></span><button class="toggle ${o.shotVisible?'active':''}" data-action="toggle-shot-visible" role="switch" aria-checked="${o.shotVisible}" aria-label="Show shot clock"></button></div>`}</section>`}${activeSport()==='pickleball'||streetballActive()?'':`<section class="control-section"><h3>Basketball foul rules</h3><div class="setting-row"><span class="main">Team penalty threshold<span class="sub">Per period · customizable</span></span><select class="input" style="width:120px;min-height:42px" data-input="penalty">${[4,5,6].map(n=>`<option value="${n}" ${o.penalty===n?'selected':''}>${n} fouls</option>`).join('')}</select></div></section>`}<section class="control-section"><h3>Video orientation</h3><p class="helper">${streetballActive()?'Streetball portrait output will be available in a future update.':'Landscape 16:9 is the default and only enabled V2 broadcast mode.'}</p></section><section class="control-section"><h3>Video quality</h3><div class="quality-group"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${o.quality===v?'active':''}" data-set="quality:${v}">${v}</button>`).join('')}</div></div><div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${Number(o.fps)===v?'active':''}" data-set="fps:${v}">${v} FPS</button>`).join('')}</div></div></div><p class="helper">Saved preference. The native private upload currently uses a fixed encoder profile with adaptive bitrate.</p></section><section class="control-section"><h3>Microphone sources</h3><p class="helper">Enable one or several sources at once. The built-in microphone is supported. Multiple microphone mixing is not available yet.</p>${o.micInputs.map(m=>`<div class="setting-row"><span class="main">${esc(m.name)}<span class="sub">${m.type==='device'?'Built-in device microphone':'Additional microphone (not yet available)'}</span></span><div class="row" style="gap:7px"><button class="toggle ${m.enabled?'active':''}" data-action="mic-source-${m.id}" role="switch" aria-checked="${m.enabled}" aria-label="Use ${esc(m.name)}"></button>${m.type!=='device'?`<button class="icon-btn ghost" data-action="remove-mic-${m.id}" aria-label="Remove ${esc(m.name)}">${ic('x',17)}</button>`:''}</div></div>`).join('')}<button class="action-line" data-action="add-mic" disabled aria-disabled="true">${ic('plus',17)}<span>Additional microphones unavailable</span>${ic('arrow',16)}</button></section><section class="control-section" style="border-bottom:0"><div class="dropdown"><button data-action="toggle-sponsors" aria-expanded="${sponsorOpen}"><span>Sponsors & Timeout Slides <span class="chip-inline">${data.sponsors.length} slides</span></span>${ic(sponsorOpen?'up':'chevron',19)}</button>${sponsorOpen?sponsorSettings():''}</div></section></div></details>`}
+<section class="control-section"><h3>Pickleball scoreboard appearance</h3>${scoreSettings()}</section>`:`<section class="control-section"><h3>${streetballActive()?'Streetball Graphics':'Broadcast Graphics'}</h3><p class="helper">${streetballActive()?'Side-by-side vertical scores, photos and names in portrait. Adjust overall size, opacity and color.':'Six broadcast styles. Customize the entire scoreboard size, opacity and color.'}</p>${scoreSettings()}${streetballActive()?'':`<div class="setting-row"><span class="main">Show shot clock<span class="sub">Hide or display shot time in video scoreboard</span></span><button class="toggle ${o.shotVisible?'active':''}" data-action="toggle-shot-visible" role="switch" aria-checked="${o.shotVisible}" aria-label="Show shot clock"></button></div>`}</section>`}${activeSport()==='pickleball'||streetballActive()?'':`<section class="control-section"><h3>Basketball foul rules</h3><div class="setting-row"><span class="main">Team penalty threshold<span class="sub">Per period · customizable</span></span><select class="input" style="width:120px;min-height:42px" data-input="penalty">${[4,5,6].map(n=>`<option value="${n}" ${o.penalty===n?'selected':''}>${n} fouls</option>`).join('')}</select></div></section>`}<section class="control-section"><h3>Video orientation</h3><p class="helper">${streetballActive()?'Streetball portrait output will be available in a future update.':'Landscape 16:9 is the default and only enabled V2 broadcast mode.'}</p></section><section class="control-section"><h3>Video quality</h3><div class="quality-group"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${o.quality===v?'active':''}" data-set="quality:${v}">${v}</button>`).join('')}</div></div><div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${Number(o.fps)===v?'active':''}" data-set="fps:${v}">${v} FPS</button>`).join('')}</div></div></div><p class="helper">Saved preference. The native private upload currently uses a fixed encoder profile with adaptive bitrate.</p></section><section class="control-section"><h3>Microphone sources</h3><p class="helper">Enable one or several sources at once. The built-in microphone is supported. Multiple microphone mixing is not available yet.</p>${o.micInputs.map(m=>`<div class="setting-row"><span class="main">${esc(m.name)}<span class="sub">${m.type==='device'?'Built-in device microphone':'Additional microphone (not yet available)'}</span></span><div class="row" style="gap:7px"><button class="toggle ${m.enabled?'active':''}" data-action="mic-source-${m.id}" role="switch" aria-checked="${m.enabled}" aria-label="Use ${esc(m.name)}"></button>${m.type!=='device'?`<button class="icon-btn ghost" data-action="remove-mic-${m.id}" aria-label="Remove ${esc(m.name)}">${ic('x',17)}</button>`:''}</div></div>`).join('')}<button class="action-line" data-action="add-mic" disabled aria-disabled="true">${ic('plus',17)}<span>Additional microphones unavailable</span>${ic('arrow',16)}</button></section><section class="control-section" style="border-bottom:0"><div class="dropdown"><button data-action="toggle-sponsors" aria-expanded="${sponsorOpen}"><span>Sponsors & Timeout Slides <span class="chip-inline">${data.sponsors.length} slides</span></span>${ic(sponsorOpen?'up':'chevron',19)}</button>${sponsorOpen?sponsorSettings():''}</div></section></div></details>`}
 function sponsorSettings(){const o=data.options;return `<div class="dropdown-body"><p class="hint">Only the camera video switches to sponsor slides. Your phone controls remain visible.</p><div class="sponsor-list">${data.sponsors.map((s,i)=>`<div class="sponsor-row"><span class="sponsor-number">${i+1}</span><span>${esc(s.name)}${s.img?' ✓':''}</span><button data-action="sponsor-up-${i}" aria-label="Move sponsor up" ${i===0?'disabled':''}>${ic('up',16)}</button><button data-action="sponsor-edit-${i}" aria-label="Edit sponsor">${ic('edit',16)}</button><button data-action="sponsor-remove-${i}" aria-label="Remove sponsor" ${data.sponsors.length<2?'disabled':''}>${ic('x',16)}</button></div>`).join('')}</div><button class="action-line" data-action="sponsor-add" style="font-size:12px">${ic('plus',16)} <span>Add sponsor slide</span>${ic('arrow',15)}</button><div class="small-label" style="margin:16px 0 8px">Slide duration</div><div class="chips">${[3,5,10,0].map(s=>`<button class="chip ${o.slideSecs===s?'active':''}" data-set="slideSecs:${s}">${s?s+' sec':'Manual'}</button>`).join('')}</div><div class="small-label" style="margin:18px 0 8px">Transition</div><div class="chips">${['fade','slide'].map(t=>`<button class="chip ${o.slideTransition===t?'active':''}" data-set="slideTransition:${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div>`}
 
-const SCOREBOARD_STYLES=[["simple","Simple"],["narrow","Narrow"],["corner-left","Corner Left"],["corner-right","Corner Right"],["pro-arena","Pro Arena"],["pro-league","Pro League"]];
+// Shared public graphic identifiers are mirrored by V2BroadcastService.
+// The first 8 styles are wide and default to bottom-center. The last 4
+// are compact corner graphics, with editable positions.
+const SCOREBOARD_STYLES=[
+ ["prime-tv","Prime TV","wide","Glass / stadium wipe"],
+ ["courtside-a","Courtside A","wide","Split chrome / score takeover"],
+ ["courtside-b","Courtside B","wide","Oval center dial"],
+ ["arena-glass","Arena Glass","wide","Glass reflect sweep"],
+ ["rivalry-plate","Rivalry Plate","wide","Team identity takeover"],
+ ["center-dial","Center Dial","wide","Circular time module"],
+ ["broadcast-classic","Broadcast Classic","wide","Number roll"],
+ ["crown-pill","Crown Pill","wide","Gloss capsule flip"],
+ ["split-box","Split Box","compact","Stacked modular boxes"],
+ ["match-cube","Match Cube","compact","Vertical stats tower"],
+ ["edge-box","Edge Box","compact","Corner score burst"],
+ ["legacy-tv","Legacy TV","compact","Heritage stacked bars"]
+];
+const SCOREBOARD_IDS=SCOREBOARD_STYLES.map(x=>x[0]);
+const graphicIsCompact=id=>SCOREBOARD_STYLES.some(x=>x[0]===id&&x[2]==="compact");
+const normalizeGraphic=id=>SCOREBOARD_IDS.includes(id)?id:"prime-tv";
 const SCOREBOARD_PALETTE=["#E66D48","#C33F4B","#225AA9","#21846D","#B88637","#6E5CAC"];
-function scoreStyleName(value){const found=SCOREBOARD_STYLES.find(x=>x[0]===value);return found?found[1]:'Simple'}
+function scoreStyleName(value){const found=SCOREBOARD_STYLES.find(x=>x[0]===value);return found?found[1]:'Prime TV'}
 function scoreSettings(compact=false){
  const o=data.options,isolated=streetballActive(),
- size=Math.min(115,Math.max(15,Number(isolated?o.streetOverlaySize:o.overlaySize)||45)),
+ size=Math.min(115,Math.max(15,Number(isolated?o.streetOverlaySize:o.overlaySize)||60)),
  alpha=Math.min(100,Math.max(30,isolated?o.streetOverlayOpacity:o.overlayOpacity)),
  choice=isolated?o.streetOverlayColor:o.overlayColor,
- color=/^#[0-9a-fA-F]{6}$/.test(choice||'')?choice:'#E66D48';
- return '<div class="scoreboard-designer '+(compact?'designer-dialog':'')+'">'+
- (activeSport()==='pickleball'||streetballActive()?'<p class="helper">'+(streetballActive()?'Streetball side overlay':'Pickleball scoreboard')+' · size, opacity and color</p>':
- '<div class="score-style-grid" role="group" aria-label="Scoreboard layouts">'+
- SCOREBOARD_STYLES.map(([id,name])=>'<button class="score-style-choice '+(o.overlay===id?'active':'')+'" data-set="overlay:'+id+'" aria-pressed="'+(o.overlay===id)+'"><span class="score-mini '+id+'"><b></b><i></i><b></b></span><span>'+name+'</span></button>').join('')+'</div>')+
+ color=/^#[0-9a-fA-F]{6}$/.test(choice||'')?choice:'#2FE0B0';
+ const selected=normalizeGraphic(o.overlay);
+ const styleCard=([id,name,type,motion],i)=>
+  '<button type="button" class="graphics-pack '+(selected===id?'active':'')+'" data-set="overlay:'+id+'" aria-pressed="'+(selected===id)+'" title="'+esc(name)+'">'+
+  '<span class="graphics-art style-'+id+'"><i class="logo-unit"></i><b class="team-one"></b><strong class="score-one">86</strong><i class="time-unit">Q4<br>8:24</i><strong class="score-two">89</strong><b class="team-two"></b><i class="shine"></i></span>'+
+  '<span class="graphics-copy"><strong>'+name+'</strong><small>'+((type==='compact')?'CORNER • ':'WIDE • ')+esc(motion)+'</small></span>'+
+  '</button>';
+ const row=(label,key,min,max,step=5)=>
+  '<label class="scoreboard-adjust"><span>'+label+' <output data-graphics-output="'+key+'">'+o[key]+'</output></span>'+
+  '<input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+Number(o[key])+'" data-graphics-range="'+key+'" aria-label="'+label+'"></label>';
+ return '<div class="scoreboard-designer broadcast-graphics-designer '+(compact?'designer-dialog':'')+'">'+
+ (activeSport()==='pickleball'||isolated?'<p class="helper">Independent '+(isolated?'Streetball':'Pickleball')+' graphics controls</p>':
+ '<div class="graphics-header"><h3>Broadcast Graphics</h3><p>Premium broadcast packages with different layouts, motion and placement. Prime TV and Courtside A are included.</p></div>'+
+ '<div class="graphics-library" role="group" aria-label="Broadcast Graphics style library">'+SCOREBOARD_STYLES.map(styleCard).join('')+'</div>'+
+ '<div class="graphics-subhead"><strong>PLACEMENT</strong><span>'+(graphicIsCompact(selected)?'Compact • corner by default':'Wide • bottom center by default')+'</span></div>'+
+ '<div class="graphics-positions" role="group" aria-label="Graphics position">'+
+ [['bottom-center','Bottom center'],['bottom-left','Bottom left'],['bottom-right','Bottom right'],['top-left','Top left'],['top-right','Top right']].map(([id,name])=>'<button class="'+(o.overlayPosition===id?'active':'')+'" data-set="overlayPosition:'+id+'" aria-pressed="'+(o.overlayPosition===id)+'">'+name+'</button>').join('')+'</div>'+
+ '<div class="graphics-geometry">'+row('Width %','overlayWidth',65,150)+row('Height %','overlayHeight',65,150)+row('Horizontal offset %','overlayOffsetX',-30,30,1)+row('Vertical offset %','overlayOffsetY',-30,30,1)+row('Safe edge margin %','overlaySafe',1,10,1)+'</div>'+
+ '<label class="graphics-switch-row"><span>Animated score awards</span><input type="checkbox" data-graphics-check="overlayAnimated" '+(o.overlayAnimated?'checked':'')+'></label>')+
  '<div class="scoreboard-adjust-grid">'+
- '<label class="scoreboard-adjust"><span>Scoreboard size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="115" step="5" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label>'+
- '<label class="scoreboard-adjust"><span>Opacity <output data-score-range-output="opacity">'+alpha+'%</output></span><input type="range" min="30" max="100" step="5" value="'+alpha+'" data-score-range="opacity" aria-label="Scoreboard opacity"></label></div>'+
- '<div class="score-color-row"><span class="small-label">Scoreboard color</span><div class="score-color-palette">'+
- SCOREBOARD_PALETTE.map(hex=>'<button class="score-color-swatch '+(color.toLowerCase()===hex.toLowerCase()?'selected':'')+'" style="--swatch:'+hex+'" data-set="overlayColor:'+hex+'" aria-label="Set scoreboard color '+hex+'" aria-pressed="'+(color.toLowerCase()===hex.toLowerCase())+'"></button>').join('')+
- '<label class="score-color-custom" title="Custom scoreboard color"><input type="color" data-score-color="1" aria-label="Custom scoreboard color" value="'+color+'"><span>Custom</span></label></div></div>'+(isolated&&compact?(streetWinTargetControls()+streetPositionControls()):'')+'</div>';
+ '<label class="scoreboard-adjust"><span>Overall size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="115" step="5" value="'+size+'" data-score-range="size"></label>'+
+ '<label class="scoreboard-adjust"><span>Opacity <output data-score-range-output="opacity">'+alpha+'%</output></span><input type="range" min="30" max="100" step="5" value="'+alpha+'" data-score-range="opacity"></label></div>'+
+ '<div class="score-color-row"><span class="small-label">Team graphic accent</span><div class="score-color-palette">'+
+ SCOREBOARD_PALETTE.map(hex=>'<button class="score-color-swatch '+(color.toLowerCase()===hex.toLowerCase()?'selected':'')+'" style="--swatch:'+hex+'" data-set="overlayColor:'+hex+'" aria-pressed="'+(color.toLowerCase()===hex.toLowerCase())+'" aria-label="Accent '+hex+'"></button>').join('')+
+ '<label class="score-color-custom"><input type="color" data-score-color="1" value="'+color+'" aria-label="Custom accent color"><span>Custom</span></label></div></div>'+
+ (isolated&&compact?(streetWinTargetControls()+streetPositionControls()):'')+'</div>';
 }
 
 
@@ -818,6 +862,7 @@ function resetForNewBroadcast(){
  fresh.overlaySize=previous.overlaySize;
  fresh.overlayOpacity=previous.overlayOpacity;
  fresh.overlayColor=previous.overlayColor;
+ for(const k of ['overlayPosition','overlayOffsetX','overlayOffsetY','overlayWidth','overlayHeight','overlaySafe','overlayAnimated'])fresh[k]=previous[k];
  fresh.shotVisible=previous.shotVisible;
  fresh.mic=previous.mic;
  youtubeExpanded=Boolean(previous.yt);
@@ -1101,7 +1146,11 @@ if(name==='save-team'){const t=thisLeague()?.teams.find(x=>x.id===dialog.id),val
 if(name==='studio-reset'){dialog={type:'reset'};return render(true)}
 if(name==='confirm-reset'){const d=defaults();Object.keys(data).forEach(k=>delete data[k]);Object.assign(data,d);selectedLeagueId=null;selectedEventId=null;dialog=null;draft=null;persist();navigate('home');return toast('Studio data cleared.');}
 }
-function setOption(input){const [k,v]=input.split(':');if(k==='overlayColor'&&!/^#[0-9a-fA-F]{6}$/.test(v))return;if(k==='orientation'){if(data.live.active){toast('Orientation is locked during broadcasting.');return}if(streetballActive()&&v!=='portrait'){toast('Streetball uses portrait orientation. Select Regular game for landscape.');return}data.options.orientation=v;if(!streetballActive())data.options.regularOrientation=v;persist();render(true);return requestOrientation(v)}data.options[streetballActive()&&k==='overlayColor'?'streetOverlayColor':k]=['penalty','slideSecs','quarterMins','fps'].includes(k)?Number(v):v;persist();render(true)}
+function setOption(input){const [k,v]=input.split(':');if(k==='overlayColor'&&!/^#[0-9a-fA-F]{6}$/.test(v))return;
+if(k==='overlay'&&!SCOREBOARD_IDS.includes(v))return;
+if(k==='overlayPosition'&&!['top-left','top-right','bottom-left','bottom-right','bottom-center'].includes(v))return;
+if(k==='overlay' && graphicIsCompact(v) && !graphicIsCompact(data.options.overlay))data.options.overlayPosition='bottom-right';
+if(k==='overlay' && !graphicIsCompact(v) && graphicIsCompact(data.options.overlay))data.options.overlayPosition='bottom-center';if(k==='orientation'){if(data.live.active){toast('Orientation is locked during broadcasting.');return}if(streetballActive()&&v!=='portrait'){toast('Streetball uses portrait orientation. Select Regular game for landscape.');return}data.options.orientation=v;if(!streetballActive())data.options.regularOrientation=v;persist();render(true);return requestOrientation(v)}data.options[streetballActive()&&k==='overlayColor'?'streetOverlayColor':k]=['penalty','slideSecs','quarterMins','fps'].includes(k)?Number(v):v;persist();render(true)}
 let orientationRequestId=0;
 async function requestOrientation(mode,liveStart=false){const req=++orientationRequestId;
  if(window.IMGNativeChannel?.postMessage){
@@ -1154,6 +1203,13 @@ document.addEventListener('input',e=>{const t=e.target;
   document.querySelectorAll('[data-street-vertical-output]').forEach(el=>el.textContent=Math.round(y*100)+'%');
   persist();window.IMGMedia?.paintStreetballPreview?.();return;
  }
+if(t.dataset.graphicsRange){
+ const k=t.dataset.graphicsRange,allowed={overlayWidth:[65,150],overlayHeight:[65,150],overlayOffsetX:[-30,30],overlayOffsetY:[-30,30],overlaySafe:[1,10]};
+ if(!allowed[k])return;const value=Math.round(Number(t.value));if(!Number.isFinite(value))return;
+ data.options[k]=Math.max(allowed[k][0],Math.min(allowed[k][1],value));persist();
+ document.querySelectorAll('[data-graphics-output="'+k+'"]').forEach(x=>x.textContent=data.options[k]);
+ window.IMGMedia?.paintBroadcastPreview?.();return;
+}
 if(t.dataset.scoreRange){const street=streetballActive(),prop=t.dataset.scoreRange==='size'?(street?'streetOverlaySize':'overlaySize'):(street?'streetOverlayOpacity':'overlayOpacity'),v=Math.round(Number(t.value));data.options[prop]=v;persist();document.querySelectorAll('[data-score-range-output="'+t.dataset.scoreRange+'"]').forEach(el=>el.textContent=v+'%');document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--overlay-size':'--overlay-opacity',v/100));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--street-size':'--street-alpha',t.dataset.scoreRange==='size'?Math.max(.32,Math.min(1.45,v/60)):v/100));window.IMGMedia?.paintStreetballPreview?.();return}
 if(t.dataset.scoreColor){data.options[streetballActive()?'streetOverlayColor':'overlayColor']=t.value;persist();document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty('--overlay-accent',t.value));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty('--street-accent',t.value));window.IMGMedia?.paintStreetballPreview?.();return}
 if(t.dataset.streetPlayer){
@@ -1180,6 +1236,10 @@ document.addEventListener('change',async e=>{const t=e.target;
   data.options.streetWinTarget=points;persist();return render(true);
  }
  if(t.dataset.streetVertical||t.dataset.streetHorizontal){persist();return}
+if(t.dataset.graphicsCheck){
+ if(t.dataset.graphicsCheck==='overlayAnimated'){data.options.overlayAnimated=!!t.checked;persist();return render(true)}return;
+}
+if(t.dataset.graphicsRange){persist();return render(true)}
 if(t.dataset.scoreRange||t.dataset.scoreColor){persist();return render(true)}if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}if(!t.dataset.upload||!t.files?.[0])return;const file=t.files[0];
 if(t.dataset.upload.startsWith('street-')){
  const match=/^street-([01])-([01])$/.exec(t.dataset.upload);if(!match)return;
