@@ -176,3 +176,43 @@ test('YouTube staging screen script parses and Facebook is disabled',async()=>{
   assert.equal(html.split('id="'+id+'"').length-1,1);
  }
 });
+
+test('read-only live check runs only after verified YouTube login and returns sanitized information',async()=>{
+ const {accounts,outbound}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
+  if(cmd.action==='youtubeLiveReadiness')return {data:{
+   liveApiAccessible:true,liveEnabled:true,reason:'live_api_accessible',
+   publishingConfigured:false,
+   broadcasts:[{title:'Practice Game',status:'ready',privacy:'private',scheduledStartTime:'2026-10-23T09:00:00Z',hasStream:true}]
+  }};
+  throw Error('unexpected command '+cmd.action);
+ });
+ accounts.enableNative();
+ await assert.rejects(accounts.checkYoutubeLiveReadiness(),/Connect your YouTube/);
+ await accounts.refresh();
+ const result=await accounts.checkYoutubeLiveReadiness();
+ assert.equal(result.liveApiAccessible,true);
+ assert.equal(result.publishingConfigured,false);
+ assert.equal(result.broadcasts.length,1);
+ assert.equal(result.broadcasts[0].title,'Practice Game');
+ assert.ok(outbound.some(raw=>JSON.parse(raw).action==='youtubeLiveReadiness'));
+ assert.ok(!outbound.some(raw=>raw.includes('access_token')||raw.includes('streamName')));
+});
+test('live readiness cannot be used after confirmed native logout',async()=>{
+ const {accounts}=controller(cmd=>{
+  if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
+  if(cmd.action==='signOut')return {data:{signedOut:true}};
+  throw Error('unexpected command '+cmd.action);
+ });
+ accounts.enableNative();
+ await accounts.refresh();
+ await accounts.signOut();
+ await assert.rejects(accounts.checkYoutubeLiveReadiness(),/Connect your YouTube/);
+});
+test('read-only live panel is gated by verified YouTube login and does not display a go-live button',async()=>{
+ const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
+ assert.ok(html.includes('id="youtube-readiness"'));
+ assert.ok(html.includes('id="youtube-readiness-button"'));
+ assert.ok(html.includes('checkYoutubeLiveReadiness()'));
+ assert.ok(!html.includes('youtube-start-live-button'));
+});
