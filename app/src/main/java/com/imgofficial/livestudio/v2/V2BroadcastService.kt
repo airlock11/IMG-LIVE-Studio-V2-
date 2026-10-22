@@ -168,9 +168,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(android.os.Build.VERSION.SDK_INT>=29){
    val manager=getSystemService(POWER_SERVICE) as PowerManager
    try{
-    thermalSeverity=manager.currentThermalStatus
     thermalMonitorRegistered=thermalListener?.let{manager.addThermalStatusListener(it);true}?:false
-    onThermalState(thermalSeverity)
+    onThermalState(manager.currentThermalStatus)
    }catch(_:Exception){thermalMonitorRegistered=false}
   }
   getSystemService(NotificationManager::class.java).createNotificationChannel(
