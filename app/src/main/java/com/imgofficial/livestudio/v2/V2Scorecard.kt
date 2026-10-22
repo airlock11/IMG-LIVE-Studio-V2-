@@ -151,7 +151,7 @@ internal object V2Scorecard {
    val bottom=if(court)0xFFAA8650.toInt() else 0xFF102C29.toInt()
    gradient(c,p,167f,y,405f,60f,top,bottom)
    streaks(c,p,167f,y,405f,60f,if(court)0x339C3C13 else 0x3352B89A)
-   rect(c,p,176f,y+51f,83f,4f,if(team==0)accent:0xFFD3E0DB.toInt(),1f)
+   rect(c,p,176f,y+51f,83f,4f,if(team==0)accent else 0xFFD3E0DB.toInt(),1f)
    rect(c,p,269f,y+51f,46f,4f,0x885A675F.toInt(),1f)
    rect(c,p,326f,y+51f,53f,4f,0x885A675F.toInt(),1f)
    val labelSize=if(names[team].length>12)26f else 31f
