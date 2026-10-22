@@ -482,7 +482,7 @@ test('YouTube Live eligibility error is conveyed without sharing Google API erro
   const response=await call('/api/connections/youtube/live-readiness',{headers:{origin:appOrigin,cookie:account.cookie}},env);
   assert.equal(response.status,200);
   const payload=await response.json();
-  assert.deepEqual(payload,{liveApiAccessible:false,liveEnabled:false,reason:'live_streaming_not_enabled',broadcasts:[]});
+  assert.deepEqual(payload,{liveApiAccessible:false,liveEnabled:false,reason:'live_streaming_not_enabled',broadcasts:[],publishingConfigured:false,canCreatePrivateDraft:false});
   assert.doesNotMatch(JSON.stringify(payload),/Private Google diagnostic/);
  }finally{globalThis.fetch=old;}
 });
@@ -633,4 +633,40 @@ test('draft rate limit prevents more than three user initiated private drafts pe
   assert.equal((await final.json()).error,'private_draft_limit_reached');
   assert.equal(sent,3);
  }finally{globalThis.fetch=original;}
+});
+
+test('YouTube Live readiness distinguishes upstream permission, quota, invalid request and temporary failures',async()=>{
+ const env=makeEnv();
+ const auth=await seedConnectedYoutube(env);
+ const prev=globalThis.fetch;
+ const cases=[
+  {status:403,reasons:['insufficientLivePermissions'],expected:'insufficient_live_permissions',enabled:null},
+  {status:403,reasons:['livePermissionBlocked'],expected:'live_permission_blocked',enabled:false},
+  {status:403,reasons:['quotaExceeded'],expected:'youtube_api_quota_exceeded',enabled:null},
+  {status:403,reasons:['rateLimitExceeded'],expected:'youtube_api_rate_limited',enabled:null},
+  {status:403,reasons:['accessNotConfigured'],expected:'youtube_api_not_enabled',enabled:null},
+  {status:403,reasons:['someUndocumentedGoogleFailure'],expected:'youtube_api_forbidden',enabled:null},
+  {status:400,reasons:['invalidFilters'],expected:'youtube_api_bad_request',enabled:null},
+  {status:429,reasons:[],expected:'youtube_api_rate_limited',enabled:null},
+  {status:500,reasons:[],expected:'youtube_api_temporarily_unavailable',enabled:null}
+ ];
+ try {
+  for(const item of cases){
+   globalThis.fetch=async (url,options)=>{
+    assert.ok(String(url).startsWith('https://www.googleapis.com/youtube/v3/liveBroadcasts?'));
+    assert.equal(options.headers.Authorization,'Bearer private-test-access');
+    return Response.json({error:{code:item.status,errors:item.reasons.map(reason=>({reason,message:'Secret Google response and account data!'})),
+      message:'This secret diagnostic must never enter the app'}},{status:item.status});
+   };
+   const response=await call('/api/connections/youtube/live-readiness',{headers:{...ctype,cookie:auth.cookie}},env);
+   assert.equal(response.status,200,item.expected);
+   const body=await response.json();
+   assert.deepEqual(body,{liveApiAccessible:false,liveEnabled:item.enabled,reason:item.expected,broadcasts:[],publishingConfigured:false,canCreatePrivateDraft:false},item.expected);
+   assert.doesNotMatch(JSON.stringify(body),/Secret Google|private-test-access|account data/);
+  }
+  globalThis.fetch=async ()=>{throw Error('Sensitive upstream network error');};
+  const network=await call('/api/connections/youtube/live-readiness',{headers:{...ctype,cookie:auth.cookie}},env);
+  assert.equal(network.status,200);
+  assert.equal((await network.json()).reason,'youtube_api_network_unavailable');
+ }finally{globalThis.fetch=prev;}
 });
