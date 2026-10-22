@@ -19,7 +19,6 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 
 /**
@@ -37,7 +36,6 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var status:TextView
  private lateinit var start:Button
  private lateinit var stop:Button
- private lateinit var scoreStatus:TextView
  private val draftId by lazy {intent.getStringExtra("draftRequestId").orEmpty()}
  private val conn=object:ServiceConnection {
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
@@ -379,10 +377,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   refresh()
  }
  private fun refreshScoreboard(){
-  if(!::scoreStatus.isInitialized)return
+  if(!::homeDisplay.isInitialized)return
   val score=broadcast?.scorecard()?:return
-  val label=if(score.sport=="pickleball")"Game" else "Q"
-  scoreStatus.text="${score.home}: ${score.homeScore}   •   ${score.away}: ${score.awayScore}   $label${score.period}"
   homeDisplay.text=score.homeScore.toString()
   awayDisplay.text=score.awayScore.toString()
   periodDisplay.text=if(score.sport=="pickleball")"Game ${score.period}" else when(score.period){
