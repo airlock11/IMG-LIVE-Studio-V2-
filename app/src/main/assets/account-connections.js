@@ -51,7 +51,8 @@
       if (auth.protocol !== "https:" || auth.hostname !== providers[provider] ||
           auth.username || auth.password) throw new Error("Invalid authorization destination");
       // A native shell opens this in the system browser, not an embedded login WebView.
-      window.open(auth.href, "_blank", "noopener,noreferrer");
+      if (!window.IMGNativeChannel?.postMessage) throw new Error("Secure account login requires the Android app.");
+      window.IMGNativeChannel.postMessage("oauth-open:" + auth.href);
       state[provider] = "authorization-pending";
       publish();
       return true;
