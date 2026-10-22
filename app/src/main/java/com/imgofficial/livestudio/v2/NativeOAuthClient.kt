@@ -206,6 +206,19 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
        .put("hasStream",item.opt("hasStream") === true))
      }
      safe.put("broadcasts",safeBroadcasts)
+     val draftRecords=data.optJSONArray("privateDrafts")?:org.json.JSONArray()
+     if(draftRecords.length()>3)return JSONObject().put("ok",false).put("error","Invalid owned draft list")
+     val safeOwned=org.json.JSONArray()
+     for(index in 0 until draftRecords.length()){
+      val d=draftRecords.optJSONObject(index)?:return JSONObject().put("ok",false).put("error","Invalid owned draft")
+      val id=d.optString("requestId")
+      val title=d.optString("title")
+      if(!Regex("^[a-f0-9]{32}$").matches(id)||title.length !in 5..100)
+       return JSONObject().put("ok",false).put("error","Invalid owned draft data")
+      safeOwned.put(JSONObject().put("requestId",id).put("title",title)
+       .put("scheduledStartTime",d.optString("scheduledStartTime").take(40)))
+     }
+     safe.put("privateDrafts",safeOwned)
      safe.put("canCreatePrivateDraft",accessible === true && data.opt("canCreatePrivateDraft") === true)
     }
     "createYoutubePrivateDraft" -> {
