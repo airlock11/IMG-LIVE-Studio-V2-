@@ -49,7 +49,10 @@ class MainActivity : Activity() {
   window.statusBarColor = android.graphics.Color.rgb(16,23,27)
   window.navigationBarColor = android.graphics.Color.rgb(16,23,27)
   window.decorView.systemUiVisibility = 0
-  androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, true)
+  // Layout is explicitly inset by the real system bars (including cutouts)
+  // instead of relying on WebView CSS vh, which can extend beneath the
+  // status icons on phones running edge-to-edge Android.
+  androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
   if (BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) oauthClient = NativeOAuthClient(this, BuildConfig.OAUTH_BACKEND_URL)
   browser = WebView(this).apply {
    settings.javaScriptEnabled = true
@@ -190,8 +193,18 @@ class MainActivity : Activity() {
   }
   if(savedInstanceState != null) browser.restoreState(savedInstanceState)
   root = FrameLayout(this)
+  root.setBackgroundColor(android.graphics.Color.rgb(16,23,27))
   root.addView(browser, FrameLayout.LayoutParams(-1,-1))
+  androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { view,insets ->
+   val bars=insets.getInsets(
+    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+    androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+   )
+   view.setPadding(bars.left,bars.top,bars.right,bars.bottom)
+   insets
+  }
   setContentView(root)
+  androidx.core.view.ViewCompat.requestApplyInsets(root)
   window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
  }
 
