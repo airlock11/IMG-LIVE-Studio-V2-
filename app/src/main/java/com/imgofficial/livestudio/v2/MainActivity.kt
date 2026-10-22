@@ -50,8 +50,9 @@ class MainActivity : Activity() {
    settings.domStorageEnabled = true
    settings.setSupportMultipleWindows(false)
    settings.javaScriptCanOpenWindowsAutomatically = false
-   // OAuth API is on a separate HTTPS origin; allow its HttpOnly session cookie.
-   CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+   // OAuth backend is cross-origin. Cookies remain HttpOnly and scoped to the backend;
+   // only enable third-party cookies when a trusted backend is compiled into this APK.
+   CookieManager.getInstance().setAcceptThirdPartyCookies(this, BuildConfig.OAUTH_BACKEND_URL.isNotBlank())
    settings.allowFileAccess = false
    settings.allowContentAccess = false
    settings.allowFileAccessFromFileURLs = false
