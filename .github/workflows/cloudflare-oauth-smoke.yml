@@ -47,6 +47,11 @@ jobs:
             assert.equal(connections.status,200);
             assert.equal(connections.data.youtube.connected,false);
             assert.equal(connections.data.facebook.connected,false);
+            const readiness=await get('/api/connections/youtube/live-readiness',{
+              headers:{Origin:'https://appassets.androidplatform.net'}
+            });
+            assert.equal(readiness.status,401,'Readiness must not be available without a native session');
+            assert.equal(readiness.data.error,'not_authenticated');
             const facebook=await get('/api/connections/facebook/authorize',{
               method:'POST',headers:{Origin:'https://appassets.androidplatform.net','Content-Type':'application/json'},body:'{}'
             });
