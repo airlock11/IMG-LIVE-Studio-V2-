@@ -260,7 +260,9 @@ export default {async fetch(req,env){
    const owned=await env.OAUTH_DB.prepare(
     "SELECT d.request_id,d.title,d.scheduled_start FROM youtube_private_draft_requests d "+
     "LEFT JOIN youtube_private_ingest_attempts i ON i.session_id=d.session_id AND i.draft_request_id=d.request_id "+
-    "WHERE d.session_id=? AND d.state='complete' AND i.session_id IS NULL ORDER BY d.created_at DESC LIMIT 3")
+    "WHERE d.session_id=? AND d.state='complete' "+
+    "AND (i.session_id IS NULL OR (i.state='complete' AND i.stream_id IS NOT NULL)) "+
+    "ORDER BY d.created_at DESC LIMIT 3")
     .bind(session).all();
    const privateDrafts=(owned.results||[]).filter(x=>/^[a-f0-9]{32}$/.test(x.request_id)).map(x=>({
     requestId:x.request_id,title:String(x.title).slice(0,100),
@@ -395,6 +397,45 @@ export default {async fetch(req,env){
    if(typeof token.access_token!=="string"||!token.access_token||
       typeof token.channel_id!=="string"||!/^[A-Za-z0-9_-]{16,64}$/.test(token.channel_id))
     return withCors(json({error:"youtube_channel_not_verified"},409),req);
+   // Reopen a confirmed, already-bound PRIVATE ingest instead of consuming
+   // another draft quota or duplicating YouTube resources. Never reuse a
+   // failed/ambiguous attempt. This is an explicit native operator request.
+   const prior=await env.OAUTH_DB.prepare(
+    "SELECT state,stream_id FROM youtube_private_ingest_attempts WHERE session_id=? AND draft_request_id=?")
+    .bind(session,draftId).first();
+   if(prior){
+    if(prior.state!=="complete"||typeof prior.stream_id!=="string"||
+       !/^[A-Za-z0-9_-]{8,100}$/.test(prior.stream_id))
+     return withCors(json({error:"private_ingest_already_attempted"},409),req);
+    const headers={Authorization:"Bearer "+token.access_token,Accept:"application/json"};
+    let video,stream;
+    try{
+     video=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id%2Cstatus%2Csnippet%2CcontentDetails&id="+encodeURIComponent(draft.broadcast_id),
+      {method:"GET",headers,redirect:"manual"});
+     if(!video.ok)return withCors(json({error:"private_ingest_resume_broadcast_unavailable"},502),req);
+     const events=(await video.json().catch(()=>null))?.items;
+     const item=Array.isArray(events)&&events.length===1?events[0]:null;
+     if(item?.id!==draft.broadcast_id||item?.snippet?.channelId!==token.channel_id||
+        item?.status?.privacyStatus!=="private"||
+        !["created","ready"].includes(item?.status?.lifeCycleStatus)||
+        item?.contentDetails?.boundStreamId!==prior.stream_id)
+      return withCors(json({error:"private_ingest_resume_not_private_ready"},409),req);
+     stream=await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=id%2Ccdn%2Csnippet%2Cstatus&id="+encodeURIComponent(prior.stream_id),
+      {method:"GET",headers,redirect:"manual"});
+     if(!stream.ok)return withCors(json({error:"private_ingest_resume_stream_unavailable"},502),req);
+     const streams=(await stream.json().catch(()=>null))?.items;
+     const feed=Array.isArray(streams)&&streams.length===1?streams[0]:null;
+     if(feed?.id!==prior.stream_id||feed?.snippet?.channelId!==token.channel_id||
+        feed?.cdn?.ingestionType!=="rtmp"||feed?.status?.streamStatus==="error")
+      return withCors(json({error:"private_ingest_resume_stream_not_eligible"},409),req);
+     const url=safeRtmps(feed?.cdn?.ingestionInfo?.rtmpsIngestionAddress,
+      feed?.cdn?.ingestionInfo?.streamName);
+     if(!url)return withCors(json({error:"private_ingest_resume_destination_invalid"},502),req);
+     // RTMPS secret never persisted or included in readiness/HTML responses.
+     return withCors(json({prepared:true,resumed:true,privacy:"private",
+      broadcastTitle:draft.title,rtmpsUrl:url,streamId:prior.stream_id,autoStart:false}),req);
+    }catch(_){return withCors(json({error:"private_ingest_resume_api_unavailable"},502),req);}
+   }
    // D1 claim precedes external writes: failed/ambiguous attempts cannot be
    // replayed into accidental duplicate Google streams.
    const claim=await env.OAUTH_DB.prepare(
