@@ -232,6 +232,14 @@ class MainActivity : Activity() {
      else -> Toast.makeText(this@MainActivity,"Unsupported command",Toast.LENGTH_SHORT).show()
     }
  }
+ // Returning from the system Google login browser doesn't always fire WebView
+ // visibilitychange. Explicitly prompt the existing page to verify pairing;
+ // the connection badge still changes only after confirmed backend status.
+ override fun onResume() {
+  super.onResume()
+  if(::browser.isInitialized && browser.url == "$origin/assets/connections.html")
+   browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
+ }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {
   if(fullscreenView != null) browser.webChromeClient?.onHideCustomView()
