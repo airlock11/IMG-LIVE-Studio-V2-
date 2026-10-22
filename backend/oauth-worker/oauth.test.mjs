@@ -57,7 +57,7 @@ async function authorize(env,provider='facebook',cookie){
  const headers={...ctype};
  if(cookie)headers.cookie=cookie;
  const response=await call('/api/connections/'+provider+'/authorize',{method:'POST',headers,body:'{}'},env);
- assert.equal(response.status,200,await response.text().catch(()=>'')); // only called for successful responses
+ assert.equal(response.status,200,'OAuth authorize must succeed');
  const data=await response.json();
  const state=new URL(data.authorizationUrl).searchParams.get('state');
  const sessionCookie=response.headers.get('set-cookie').split(';')[0];
@@ -160,7 +160,7 @@ test('provider token exchange uses POST and stores encrypted token only',async()
    return new Response(JSON.stringify({access_token:'private-facebook-token',expires_in:3600}),{status:200,headers:{'content-type':'application/json'}});
   };
   const callback=await call('/api/connections/facebook/callback?state='+start.state+'&code=abc',{},env);
-  assert.equal(callback.status,200,await callback.text().catch(()=>''));
+  assert.equal(callback.status,200,'OAuth callback must succeed');
   const records=env.OAUTH_DB.query('SELECT provider,encrypted_token FROM oauth_accounts');
   assert.equal(records.length,1);
   assert.equal(records[0].provider,'facebook');
