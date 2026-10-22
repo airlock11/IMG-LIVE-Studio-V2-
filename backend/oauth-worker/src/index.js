@@ -67,7 +67,7 @@ export default {async fetch(req,env){
    if(!raw)return withCors(json({status:"expired"}),req,env);
    const attempt=JSON.parse(raw);
    if(attempt.provider!==pairing[1]||attempt.session!==session)return json({error:"pairing_session_mismatch"},403);
-   return withCors(json({status:attempt.status==="complete"?"complete":"pending"}),req,env);
+   return withCors(json({status:["complete","cancelled","declined"].includes(attempt.status)?attempt.status:"pending"}),req,env);
   }
   const cancel=path.match(/^\/api\/connections\/(facebook|youtube)\/cancel$/);
   if(cancel&&method==="POST"){
