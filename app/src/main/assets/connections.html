@@ -42,7 +42,16 @@ document.getElementById('youtube-readiness-button').addEventListener('click',asy
    status.textContent=item.status+' · '+item.privacy+(item.hasStream?' · Stream assigned':' · No stream assigned')+scheduled;
    row.appendChild(status);list.appendChild(row);
   }
- }catch(e){result.textContent='Unable to check live readiness: '+e.message}
+ }catch(e){
+  const error=String(e?.message||e);
+  result.textContent=error.includes('youtube_reauthorization_required')?
+   'Your YouTube authorization needs renewal. Disconnect and connect YouTube again, then retry.':
+   error.includes('oauth_not_enabled')?
+   'The IMG YouTube test window has ended. Live readiness testing is temporarily disabled.':
+   error.includes('youtube_not_connected')?
+   'Your YouTube connection could not be verified. Reconnect YouTube and retry.':
+   'Unable to check live readiness: '+error;
+ }
  finally{button.disabled=false}
 });
 let draftRequestId='',draftPayloadHash='';
