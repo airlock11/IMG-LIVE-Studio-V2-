@@ -161,7 +161,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   landscapeButton.isEnabled=usable
   flipButton.isEnabled=usable
   if(service!=null) {
-   status.text=service.getStatus()
+   status.text=service.getStatus()+"\n"+service.connectionSummary()
    portraitButton.text=if(service.isPortrait())"✓ Portrait" else "Portrait"
    landscapeButton.text=if(service.isPortrait())"Landscape" else "✓ Landscape"
    flipButton.text=if(service.frontCamera())"Switch to rear camera" else "Switch to front camera"
