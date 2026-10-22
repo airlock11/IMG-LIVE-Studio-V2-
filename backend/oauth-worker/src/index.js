@@ -167,6 +167,66 @@ export default {async fetch(req,env){
   try{origin(env);}catch(_){return json({error:"invalid_service_origin"},503);}
   const session=await readSession(env,req);
   if(path==="/api/connections"&&method==="GET")return withCors(json(await status(env,session)),req);
+
+  // Read-only YouTube live readiness: the Google access token is decrypted
+  // server-side only. Never retrieve CDN ingestionInfo or streamName, and
+  // never return tokens, stream keys, or untrusted Google response bodies.
+  if(path==="/api/connections/youtube/live-readiness"&&method==="GET"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
+   const current=await status(env,session);
+   if(!current.youtube.connected)return withCors(json({error:"youtube_not_connected"},409),req);
+   const record=await env.OAUTH_DB.prepare("SELECT a.encrypted_token,a.access_expires_at FROM oauth_accounts a JOIN oauth_sessions s ON a.session_id=s.session_id WHERE a.session_id=? AND a.provider='youtube' AND a.expires_at>? AND s.expires_at>?")
+    .bind(session,now(),now()).first();
+   if(!record||record.access_expires_at<=now()+10000)
+    return withCors(json({error:"youtube_not_connected"},409),req);
+   const token=await decryptTokens(env,record.encrypted_token);
+   if(typeof token.access_token!=="string"||!token.access_token||
+      typeof token.channel_id!=="string"||!/^[A-Za-z0-9_-]{16,64}$/.test(token.channel_id))
+    return withCors(json({error:"youtube_channel_not_verified"},409),req);
+   let response;
+   try{
+    response=await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=id%2Csnippet%2Cstatus%2CcontentDetails&mine=true&broadcastType=all&maxResults=20",{
+     method:"GET",
+     headers:{Authorization:"Bearer "+token.access_token,Accept:"application/json"},
+     redirect:"error"
+    });
+   }catch(_){return withCors(json({error:"youtube_live_api_unavailable"},502),req);}
+   if(!response.ok){
+    if(response.status===401)return withCors(json({error:"youtube_reauthorization_required"},401),req);
+    if(response.status===403){
+     const denied=await response.json().catch(()=>null);
+     const reasons=(denied?.error?.errors||[]).map(item=>item?.reason);
+     if(reasons.includes("liveStreamingNotEnabled"))
+      return withCors(json({liveApiAccessible:false,liveEnabled:false,reason:"live_streaming_not_enabled",broadcasts:[]}),req);
+     if(reasons.includes("insufficientLivePermissions")||reasons.includes("insufficientPermissions"))
+      return withCors(json({liveApiAccessible:false,liveEnabled:null,reason:"insufficient_live_permissions",broadcasts:[]}),req);
+    }
+    return withCors(json({error:"youtube_live_api_unavailable"},502),req);
+   }
+   const live=await response.json().catch(()=>null);
+   if(!live||!Array.isArray(live.items))return withCors(json({error:"invalid_youtube_live_response"},502),req);
+   // Limit display to currently relevant broadcasts. Ignore arbitrary
+   // Google fields including contentDetails ingestion or security metadata.
+   const broadcasts=live.items.filter(item=>["created","ready","testing","live"].includes(item?.status?.lifeCycleStatus))
+    .slice(0,12).map(item=>({
+     id:typeof item.id==="string"?item.id.slice(0,100):"",
+     title:typeof item.snippet?.title==="string"?item.snippet.title.slice(0,150):"Untitled broadcast",
+     status:item.status.lifeCycleStatus,
+     privacy:["public","private","unlisted"].includes(item.status?.privacyStatus)?item.status.privacyStatus:"unknown",
+     scheduledStartTime:typeof item.snippet?.scheduledStartTime==="string"?item.snippet.scheduledStartTime.slice(0,40):null,
+     hasStream:!!item.contentDetails?.boundStreamId
+    }));
+   return withCors(json({
+    liveApiAccessible:true,
+    liveEnabled:true,
+    reason:"live_api_accessible",
+    broadcasts,
+    // Stream creation, RTMP handoff, go-live and transitions are NOT implemented.
+    publishingConfigured:false
+   }),req);
+  }
+
   // Native-only global logout revokes the D1 session and cascades all linked
   // provider accounts, pending authorizations, and pairing codes atomically.
   if(path==="/api/connections/logout"&&method==="POST"){
