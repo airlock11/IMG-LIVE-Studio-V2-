@@ -333,7 +333,7 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
    val body=connection.inputStream.bufferedReader().use { it.readText().take(2048) }
    val data=JSONObject(body)
    if(data.opt("prepared")!==true || data.optString("privacy")!="private" ||
-      data.opt("autoStart")!==false)return Pair(null,"Unverified private feed response")
+      data.opt("autoStart") !is Boolean)return Pair(null,"Unverified private feed response")
    val secret=data.optString("rtmpsUrl")
    if(!isPrivateYouTubeRtmps(secret))return Pair(null,"Unsafe video destination rejected")
    return Pair(secret,null)
