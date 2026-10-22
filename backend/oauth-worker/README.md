@@ -3,7 +3,9 @@
 **Deployment:** A separate Cloudflare Worker named `img-live-studio-oauth` is deployed at
 `https://img-live-studio-oauth.magsipocarnie.workers.dev`.
 
-**Access state:** `OAUTH_ENABLED = "false"`. This is an intentionally **disabled staging deployment**, not a production account-login service. `/health` and account API endpoints return HTTP 503 while disabled. Do not switch it on simply because the Worker is reachable.
+**Access state:** Full production OAuth remains **disabled** (`OAUTH_ENABLED = "false"`). A separate `YOUTUBE_TEST_ENABLED` flag may temporarily enable **YouTube only** for Google Cloud's explicitly registered OAuth test users. The Cloudflare-only `YOUTUBE_TEST_EXPIRES_AT` timestamp closes this test window automatically. Facebook stays disabled. `wrangler.toml` defaults both flags to `false`, so normal source redeploys fail closed.
+
+**YouTube test configuration (October 22, 2026):** Cloudflare has a 24-hour testing window expiring on **October 23, 2026, 11:27 UTC** (7:27 PM Philippine time). The Google OAuth app is still in Testing with a registered test account. This enables a real-account **login test**, not public OAuth availability or live streaming. Don't extend it or turn on full OAuth without an additional security review.
 
 The existing IMG website and the original V1 app/Workers are not changed.
 
@@ -27,8 +29,9 @@ Provider **access-token expiry is tracked separately from the 30-day IMG session
 
 GitHub Actions workflow `IMG V2 Cloudflare OAuth Deployment Smoke` checks the actual public Worker endpoint:
 
-- `GET /health` → 503, `{"ok":false,"configured":false,...}`
-- `GET /api/connections` → 503, `{"error":"oauth_not_enabled"}`
+- With the temporary YouTube test active: `GET /health` → 200, `mode:"youtube_testing"`, `providers.youtube:true`, `providers.facebook:false`.
+- With the temporary YouTube test active: `GET /api/connections` without a session → 200, both providers disconnected; `POST /api/connections/facebook/authorize` → 503 `provider_not_enabled`.
+- After expiry or while testing is disabled: `GET /health` → 503, `GET /api/connections` → 503 `oauth_not_enabled`.
 - Responses must carry `Cache-Control: no-store`.
 
 The regular Fast OAuth Checks run Worker and native WebView bridge regression tests. APK and emulator workflows verify Android builds.
@@ -50,3 +53,14 @@ Only the operator of the legitimate Meta/Google developer applications can suppl
 6. **Publishing:** Facebook Login or Google/YouTube sign-in does **not** by itself enable broadcasting. Live publishing permissions, video destinations, account selection, a native encoder, and actual RTMP publishing require independent integration and testing.
 
 Only after these checks should `OAUTH_ENABLED` be set to `true` and actual Facebook/YouTube accounts be used for E2E validation.
+
+## YouTube test runbook
+
+1. Install the latest **Android APK** from the latest successful `IMG V2 Android APK` GitHub Actions artifact. The app bundles the HTTPS OAuth Worker origin; no developer secrets are entered into the APK.
+2. Open Settings → Connected accounts → YouTube → **Connect**, approve the Google authorization in the external system browser using a Google account listed in Google Cloud **Audience → Test users**.
+3. Return to IMG LIVE Studio. The Android onResume event automatically checks pairing; if necessary tap **Verify**. The UI must not show **Connected** until the server proves the authorization and YouTube channel identity.
+4. If connection is successful, use **Sign out of all accounts** to delete the server D1 session and Android-encrypted session. Verify both connection indicators return to disconnected.
+5. If `youtube_channel_not_found` appears, ensure the Google test account has an active YouTube channel. If `token_exchange_failed` appears, confirm Google's exact redirect URI and that the exposed old Google Client Secret was revoked.
+6. **Google Cloud OAuth Testing mode has special limitations**, including a seven-day lifetime for some refresh tokens. Do not assume test credentials will behave like production credentials.
+
+Additional safeguards needed before public release: validated Android app/device identity, rate limiting, robust provider identity checks, Meta app approval and OAuth scopes, secure key rotation, and native RTMP publishing.
