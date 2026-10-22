@@ -36,7 +36,10 @@
     const response = await fetch(origin + "/api/connections", {credentials:"include",cache:"no-store"});
     if (!response.ok) throw new Error("Unable to check account connections");
     const data = await response.json();
-    for (const name of Object.keys(providers)) state[name] = data[name]?.connected === true ? "connected" : "disconnected";
+    for (const name of Object.keys(providers)) {
+      const confirmed = data[name]?.connected === true;
+      state[name] = confirmed ? "connected" : state[name] === "authorization-pending" ? "authorization-pending" : "disconnected";
+    }
     publish();
     return {...state};
     })();
