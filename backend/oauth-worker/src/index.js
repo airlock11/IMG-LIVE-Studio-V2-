@@ -57,6 +57,7 @@ export default {async fetch(req,env){
   }
   const disconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
   if(disconnect&&method==="POST"){
+   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
    if(req.headers.get("origin")!=="https://appassets.androidplatform.net")
     return json({error:"forbidden_origin"},403);
    if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
