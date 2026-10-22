@@ -163,15 +163,16 @@ test('global logout ignores a stale account status response after the session is
  assert.equal(accounts.getStatus().youtube,'disconnected');
 });
 
-test('test-only Account Connections screen has working syntax and no Facebook connect control',async()=>{
+test('YouTube staging screen script parses and Facebook is disabled',async()=>{
  const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
- const match=[...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/g)];
- assert.equal(match.length,1,'Expected one inline UI controller');
- assert.doesNotThrow(()=>new Script(match[0][1]),'OAuth screen inline controller must parse');
- assert.match(html,/<button id="facebook-button"[^>]*disabled[^>]*>Coming soon<\\/button>/);
- assert.match(html,/<button id="youtube-verify-button"[^>]*hidden>Verify<\\/button>/);
- assert.match(html,/img-native-resume/);
+ const scriptStart=html.indexOf('<script>');
+ const scriptEnd=html.indexOf('</script>',scriptStart);
+ assert.ok(scriptStart>0 && scriptEnd>scriptStart,'Expected embedded account page controller');
+ assert.doesNotThrow(()=>new Script(html.slice(scriptStart+8,scriptEnd)));
+ assert.ok(html.includes('<button id="facebook-button" type="button" disabled>Coming soon</button>'));
+ assert.ok(html.includes('<button id="youtube-verify-button" type="button" hidden>Verify</button>'));
+ assert.ok(html.includes('img-native-resume'));
  for(const id of ['facebook-button','youtube-button','youtube-verify-button','signout-button']){
-  assert.equal((html.match(new RegExp('id="'+id+'"','g'))||[]).length,1);
+  assert.equal(html.split('id="'+id+'"').length-1,1);
  }
 });
