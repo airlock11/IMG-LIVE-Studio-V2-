@@ -1,192 +1,228 @@
-// IMG LIVE Studio OAuth Worker foundation.
-// Required bindings: OAUTH_STATE (KV), ACCOUNT_SESSIONS (KV), GOOGLE_CLIENT_ID,
-// GOOGLE_CLIENT_SECRET, FACEBOOK_APP_ID, FACEBOOK_APP_SECRET, PUBLIC_ORIGIN.
-// Never expose OAuth client secrets or provider access tokens to the Android WebView.
-const json = (body,status=200,headers={}) => new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...headers}});
-const providers = {
-  youtube:{auth:"https://accounts.google.com/o/oauth2/v2/auth",scope:"https://www.googleapis.com/auth/youtube"},
-  facebook:{auth:"https://www.facebook.com/v24.0/dialog/oauth",scope:"public_profile"}
+// IMG LIVE Studio V2 OAuth Worker.
+// OAuth state, pairing, sessions and provider records are stored in D1.
+// Conditional UPDATE statements atomically claim OAuth state and pairing.
+// Tokens are encrypted at rest with TOKEN_ENCRYPTION_KEY (AES-256-GCM).
+// OAuth is disabled unless OAUTH_ENABLED="true"; not safe for real users until approved.
+const json=(body,status=200,headers={})=>new Response(JSON.stringify(body),{status,headers:{"content-type":"application/json; charset=utf-8","cache-control":"no-store",...headers}});
+const providers={
+ youtube:{auth:"https://accounts.google.com/o/oauth2/v2/auth",scope:"https://www.googleapis.com/auth/youtube"},
+ facebook:{auth:"https://www.facebook.com/v24.0/dialog/oauth",scope:"public_profile"}
 };
-const bytes = n => crypto.getRandomValues(new Uint8Array(n));
-const b64url = a => btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
-const digest = async s => b64url(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s))));
-// AES-GCM envelope for OAuth credentials. TOKEN_ENCRYPTION_KEY is a 32-byte
-// random secret encoded as unpadded base64url. Never expose it to clients.
-const encryptionKey = async env => {
- const encoded=env.TOKEN_ENCRYPTION_KEY;
- if(!encoded || !/^[A-Za-z0-9_-]{43}$/.test(encoded))throw Error("Token encryption key is not configured");
- const raw=Uint8Array.from(atob(encoded.replace(/-/g,"+").replace(/_/g,"/")+"="),c=>c.charCodeAt(0));
- if(raw.length!==32)throw Error("Invalid token encryption key");
- return crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
-};
-const encryptTokens=async (env,token)=>{
- const iv=bytes(12),key=await encryptionKey(env);
- const payload=new TextEncoder().encode(JSON.stringify(token));
- const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,payload));
- return {version:1,iv:b64url(iv),ciphertext:b64url(ciphertext)};
-};
-const cookie = req => Object.fromEntries((req.headers.get("cookie")||"").split(";").map(x=>x.trim().split("=")).filter(x=>x.length===2));
-const cookieAttrs = "HttpOnly; Secure; SameSite=None; Path=/";
-const origin = (env) => {
+const bytes=n=>crypto.getRandomValues(new Uint8Array(n));
+const b64url=a=>btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const digest=async s=>b64url(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s))));
+const now=()=>Date.now();
+const sessionLife=30*86400*1000;
+const pendingLife=600*1000;
+const cookie=req=>Object.fromEntries((req.headers.get("cookie")||"").split(";").map(x=>x.trim().split("=")).filter(x=>x.length===2));
+const cookieAttrs="HttpOnly; Secure; SameSite=None; Path=/";
+const origin=env=>{
  const u=new URL(env.PUBLIC_ORIGIN);
  if(u.protocol!=="https:"||u.pathname!=="/"||u.search||u.hash||u.username||u.password||u.port)throw Error("Invalid PUBLIC_ORIGIN");
  return u.origin;
 };
 const redirectUri=(env,provider)=>origin(env)+"/api/connections/"+provider+"/callback";
-const cors=(req,env)=> {
+const cors=req=>{
  const requested=req.headers.get("origin");
- // WebViewAssetLoader is a fixed, trusted application origin.
- if(requested!=="https://appassets.androidplatform.net")return {};
- return {"access-control-allow-origin":requested,"access-control-allow-credentials":"true","vary":"Origin"};
+ return requested==="https://appassets.androidplatform.net"?
+ {"access-control-allow-origin":requested,"access-control-allow-credentials":"true","vary":"Origin"}:{};
 };
-const withCors=(res,req,env)=>{const headers=new Headers(res.headers);for(const [k,v] of Object.entries(cors(req,env)))headers.set(k,v);return new Response(res.body,{status:res.status,headers})};
+const withCors=(response,req)=>{
+ const h=new Headers(response.headers);
+ for(const [key,value] of Object.entries(cors(req)))h.set(key,value);
+ return new Response(response.body,{status:response.status,headers:h});
+};
+const appRequest=req=>req.headers.get("origin")==="https://appassets.androidplatform.net";
+const isJson=req=>req.headers.get("content-type")?.split(";")[0]?.trim()==="application/json";
+const codeValid=s=>typeof s==="string"&&/^[A-Za-z0-9_-]{43}$/.test(s);
+const encryptionKey=async env=>{
+ const encoded=env.TOKEN_ENCRYPTION_KEY;
+ if(!encoded||!/^[A-Za-z0-9_-]{43}$/.test(encoded))throw Error("Invalid token encryption key");
+ const raw=Uint8Array.from(atob(encoded.replace(/-/g,"+").replace(/_/g,"/")+"="),c=>c.charCodeAt(0));
+ if(raw.length!==32)throw Error("Invalid token encryption key");
+ return crypto.subtle.importKey("raw",raw,"AES-GCM",false,["encrypt","decrypt"]);
+};
+const encryptTokens=async(env,token)=>{
+ const iv=bytes(12),key=await encryptionKey(env);
+ const ciphertext=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(JSON.stringify(token))));
+ return {version:1,iv:b64url(iv),ciphertext:b64url(ciphertext)};
+};
+const readSession=async(env,req)=>{
+ const candidate=cookie(req)["__Host-img_session"];
+ if(!codeValid(candidate))return null;
+ const row=await env.OAUTH_DB.prepare("SELECT session_id FROM oauth_sessions WHERE session_id=? AND expires_at>?")
+  .bind(candidate,now()).first();
+ return row?candidate:null;
+};
+const status=async(env,session)=>{
+ if(!session)return {facebook:{connected:false},youtube:{connected:false}};
+ const rows=await env.OAUTH_DB.prepare("SELECT a.provider FROM oauth_accounts a JOIN oauth_sessions s ON s.session_id=a.session_id WHERE a.session_id=? AND s.expires_at>? AND a.expires_at>?")
+  .bind(session,now(),now()).all();
+ const connected=new Set((rows.results||[]).map(x=>x.provider));
+ return {facebook:{connected:connected.has("facebook")},youtube:{connected:connected.has("youtube")}};
+};
+const pairingStatus=async(env,hash)=>{
+ return env.OAUTH_DB.prepare("SELECT session_id,provider,status FROM oauth_pairings WHERE pairing_hash=? AND expires_at>?")
+  .bind(hash,now()).first();
+};
+const declinePair=async(env,hash)=>{
+ await env.OAUTH_DB.prepare("UPDATE oauth_pairings SET status='declined' WHERE pairing_hash=? AND status='processing'")
+  .bind(hash).run();
+};
 export default {async fetch(req,env){
- try {
-  const u=new URL(req.url),path=u.pathname,method=req.method;
+ try{
+  const url=new URL(req.url),path=url.pathname,method=req.method;
   if(method==="OPTIONS"){
-   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
-   return withCors(new Response(null,{status:204,headers:{"access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type","access-control-max-age":"600"}}),req,env);
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   return withCors(new Response(null,{status:204,headers:{"access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type","access-control-max-age":"600"}}),req);
   }
   if(path==="/health"&&method==="GET"){
    let validOrigin=false;
-   try { validOrigin=!!origin(env); } catch (_) { validOrigin=false; }
-   const validKey=typeof env.TOKEN_ENCRYPTION_KEY==="string" && /^[A-Za-z0-9_-]{43}$/.test(env.TOKEN_ENCRYPTION_KEY);
-   const ready=!!(env.OAUTH_ENABLED==="true"&&env.OAUTH_STATE&&env.ACCOUNT_SESSIONS&&validKey&&validOrigin&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
+   try{validOrigin=!!origin(env);}catch(_){}
+   const validKey=typeof env.TOKEN_ENCRYPTION_KEY==="string"&&/^[A-Za-z0-9_-]{43}$/.test(env.TOKEN_ENCRYPTION_KEY);
+   const ready=!!(env.OAUTH_ENABLED==="true"&&env.OAUTH_DB&&validOrigin&&validKey&&env.GOOGLE_CLIENT_ID&&env.GOOGLE_CLIENT_SECRET&&env.FACEBOOK_APP_ID&&env.FACEBOOK_APP_SECRET);
    return json({ok:ready,service:"img-oauth",configured:ready},ready?200:503);
   }
   if(!path.startsWith("/api/connections"))return json({error:"not_found"},404);
-  // Explicit production kill-switch: credentials alone must never activate login.
   if(env.OAUTH_ENABLED!=="true")return json({error:"oauth_not_enabled"},503);
-  if(!env.OAUTH_STATE||!env.ACCOUNT_SESSIONS||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
-  // Never allow an unconfigured or malformed deployment origin to begin OAuth.
-  try { origin(env); } catch (_) { return json({error:"invalid_service_origin"},503); }
-  const cookies=cookie(req);
-  // Sessions are created server-side; no client-supplied user identifiers.
-  let session=cookies["__Host-img_session"];
-  if(!session||!/^[A-Za-z0-9_-]{43}$/.test(session)||!await env.ACCOUNT_SESSIONS.get("session:"+session))session=null;
-  if(path==="/api/connections"&&method==="GET"){
-   const record=session?JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+session)):null;
-   return withCors(json({facebook:{connected:!!record?.facebook},youtube:{connected:!!record?.youtube}}),req,env);
-  }
-  const pairing=path.match(/^\/api\/connections\/(facebook|youtube)\/pairing$/);
-  if(pairing&&method==="POST"){
-   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
-   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
+  if(!env.OAUTH_DB||!env.TOKEN_ENCRYPTION_KEY)return json({error:"service_not_configured"},503);
+  try{origin(env);}catch(_){return json({error:"invalid_service_origin"},503);}
+  const session=await readSession(env,req);
+  if(path==="/api/connections"&&method==="GET")return withCors(json(await status(env,session)),req);
+
+  const matchPair=path.match(/^\/api\/connections\/(facebook|youtube)\/pairing$/);
+  if(matchPair&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return json({error:"unsupported_media_type"},415);
    const body=await req.json().catch(()=>null);
-   if(!body||typeof body.pairingCode!=="string"||!/^[-_A-Za-z0-9]{43}$/.test(body.pairingCode))
-    return json({error:"invalid_pairing_code"},400);
-   const key="pair:"+await digest(body.pairingCode);
-   const raw=await env.OAUTH_STATE.get(key);
-   if(!raw)return withCors(json({status:"expired"}),req,env);
-   if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
-   const attempt=JSON.parse(raw);
-   if(attempt.provider!==pairing[1]||attempt.session!==session)return withCors(json({error:"pairing_session_mismatch"},403),req,env);
-   return withCors(json({status:["complete","cancelled","declined"].includes(attempt.status)?attempt.status:"pending"}),req,env);
+   if(!codeValid(body?.pairingCode))return json({error:"invalid_pairing_code"},400);
+   const hash=await digest(body.pairingCode),attempt=await pairingStatus(env,hash);
+   if(!attempt)return withCors(json({status:"expired"}),req);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
+   if(attempt.provider!==matchPair[1]||attempt.session_id!==session)return withCors(json({error:"pairing_session_mismatch"},403),req);
+   const state=["complete","cancelled","declined"].includes(attempt.status)?attempt.status:"pending";
+   return withCors(json({status:state}),req);
   }
-  const cancel=path.match(/^\/api\/connections\/(facebook|youtube)\/cancel$/);
-  if(cancel&&method==="POST"){
-   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
-   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
-   if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
+
+  const matchCancel=path.match(/^\/api\/connections\/(facebook|youtube)\/cancel$/);
+  if(matchCancel&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return json({error:"unsupported_media_type"},415);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
    const body=await req.json().catch(()=>null);
-   if(!body||typeof body.pairingCode!=="string"||!/^[-_A-Za-z0-9]{43}$/.test(body.pairingCode))
-    return json({error:"invalid_pairing_code"},400);
-   const key="pair:"+await digest(body.pairingCode);
-   const raw=await env.OAUTH_STATE.get(key);
-   if(!raw)return withCors(json({cancelled:true}),req,env);
-   const attempt=JSON.parse(raw);
-   if(attempt.session!==session||attempt.provider!==cancel[1])return withCors(json({error:"pairing_session_mismatch"},403),req,env);
-   if(attempt.status==="complete")return withCors(json({error:"authorization_already_completed"},409),req,env);
-   if(attempt.status==="declined")return withCors(json({error:"authorization_already_declined"},409),req,env);
-   if(attempt.status==="cancelled")return withCors(json({cancelled:true}),req,env);
-   if(attempt.status!=="pending")return withCors(json({error:"invalid_pairing_status"},409),req,env);
-   await env.OAUTH_STATE.put(key,JSON.stringify({...attempt,status:"cancelled"}),{expirationTtl:600});
-   return withCors(json({cancelled:true}),req,env);
+   if(!codeValid(body?.pairingCode))return json({error:"invalid_pairing_code"},400);
+   const hash=await digest(body.pairingCode),provider=matchCancel[1];
+   // CAS: cancellation wins only while pending, never during a token exchange.
+   const changed=await env.OAUTH_DB.prepare("UPDATE oauth_pairings SET status='cancelled' WHERE pairing_hash=? AND session_id=? AND provider=? AND status='pending' AND expires_at>?")
+    .bind(hash,session,provider,now()).run();
+   if(changed.meta?.changes===1)return withCors(json({cancelled:true}),req);
+   const attempt=await pairingStatus(env,hash);
+   if(!attempt)return withCors(json({cancelled:true}),req);
+   if(attempt.session_id!==session||attempt.provider!==provider)return withCors(json({error:"pairing_session_mismatch"},403),req);
+   if(attempt.status==="cancelled")return withCors(json({cancelled:true}),req);
+   return withCors(json({error:"authorization_already_"+attempt.status},409),req);
   }
-  const disconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
-  if(disconnect&&method==="POST"){
-   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return json({error:"unsupported_media_type"},415);
-   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")
-    return json({error:"forbidden_origin"},403);
-   if(!session)return withCors(json({error:"not_authenticated"},401),req,env);
-   const key="session:"+session;
-   const record=JSON.parse(await env.ACCOUNT_SESSIONS.get(key)||"{}");
-   delete record[disconnect[1]];
-   await env.ACCOUNT_SESSIONS.put(key,JSON.stringify(record),{expirationTtl:86400*30});
-   return withCors(json({disconnected:true,provider:disconnect[1]}),req,env);
+
+  const matchDisconnect=path.match(/^\/api\/connections\/(facebook|youtube)\/disconnect$/);
+  if(matchDisconnect&&method==="POST"){
+   if(!isJson(req))return json({error:"unsupported_media_type"},415);
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!session)return withCors(json({error:"not_authenticated"},401),req);
+   await env.OAUTH_DB.prepare("DELETE FROM oauth_accounts WHERE session_id=? AND provider=?")
+    .bind(session,matchDisconnect[1]).run();
+   return withCors(json({disconnected:true,provider:matchDisconnect[1]}),req);
   }
-  const start=path.match(/^\/api\/connections\/(facebook|youtube)\/authorize$/);
-  if(start&&method==="POST"){
-   if(req.headers.get("origin")!=="https://appassets.androidplatform.net")return json({error:"forbidden_origin"},403);
-   if(req.headers.get("content-type")?.split(";")[0]?.trim()!=="application/json")return withCors(json({error:"unsupported_media_type"},415),req,env);
-   const provider=start[1];
-   const id=provider==="youtube"?env.GOOGLE_CLIENT_ID:env.FACEBOOK_APP_ID;
-   if(!id)return withCors(json({error:"provider_not_configured"},503),req,env);
-   if(!session){session=b64url(bytes(32));await env.ACCOUNT_SESSIONS.put("session:"+session,JSON.stringify({}),{expirationTtl:86400*30})}
-   const pairingCode=b64url(bytes(32));
-   await env.OAUTH_STATE.put("pair:"+await digest(pairingCode),JSON.stringify({session,provider,status:"pending"}),{expirationTtl:600});
-   const state=b64url(bytes(32)),verifier=b64url(bytes(32));
-   await env.OAUTH_STATE.put("state:"+state,JSON.stringify({provider,session,verifier,pairingHash:await digest(pairingCode)}),{expirationTtl:600});
-   const p=new URLSearchParams({client_id:id,redirect_uri:redirectUri(env,provider),response_type:"code",state,scope:providers[provider].scope});
-   if(provider==="youtube"){p.set("access_type","offline");p.set("code_challenge_method","S256");p.set("code_challenge",await digest(verifier));p.set("prompt","consent")}
-   const headers={"set-cookie":"__Host-img_session="+session+"; "+cookieAttrs+"; Max-Age=2592000"};
-   return withCors(json({authorizationUrl:providers[provider].auth+"?"+p,pairingCode},200,headers),req,env);
+
+  const matchStart=path.match(/^\/api\/connections\/(facebook|youtube)\/authorize$/);
+  if(matchStart&&method==="POST"){
+   if(!appRequest(req))return json({error:"forbidden_origin"},403);
+   if(!isJson(req))return withCors(json({error:"unsupported_media_type"},415),req);
+   const provider=matchStart[1],id=provider==="youtube"?env.GOOGLE_CLIENT_ID:env.FACEBOOK_APP_ID;
+   if(!id)return withCors(json({error:"provider_not_configured"},503),req);
+   let current=session;
+   if(!current){
+    current=b64url(bytes(32));
+    await env.OAUTH_DB.prepare("INSERT INTO oauth_sessions(session_id,expires_at) VALUES(?,?)")
+     .bind(current,now()+sessionLife).run();
+   }
+   const pairingCode=b64url(bytes(32)),pairingHash=await digest(pairingCode);
+   const state=b64url(bytes(32)),stateHash=await digest(state),verifier=b64url(bytes(32));
+   const expires=now()+pendingLife;
+   // The two records are created in one atomic DB transaction.
+   await env.OAUTH_DB.batch([
+    env.OAUTH_DB.prepare("INSERT INTO oauth_pairings(pairing_hash,session_id,provider,status,expires_at) VALUES(?,?,?,'pending',?)")
+     .bind(pairingHash,current,provider,expires),
+    env.OAUTH_DB.prepare("INSERT INTO oauth_states(state_hash,session_id,provider,verifier,pairing_hash,expires_at) VALUES(?,?,?,?,?,?)")
+     .bind(stateHash,current,provider,verifier,pairingHash,expires)
+   ]);
+   const params=new URLSearchParams({client_id:id,redirect_uri:redirectUri(env,provider),response_type:"code",state,scope:providers[provider].scope});
+   if(provider==="youtube"){
+    params.set("access_type","offline");
+    params.set("code_challenge_method","S256");
+    params.set("code_challenge",await digest(verifier));
+    params.set("prompt","consent");
+   }
+   const headers={"set-cookie":"__Host-img_session="+current+"; "+cookieAttrs+"; Max-Age=2592000"};
+   return withCors(json({authorizationUrl:providers[provider].auth+"?"+params,pairingCode},200,headers),req);
   }
-  const callback=path.match(/^\/api\/connections\/(facebook|youtube)\/callback$/);
-  if(callback&&method==="GET"){
-   const provider=callback[1],state=u.searchParams.get("state"),code=u.searchParams.get("code");
-   if(!state||!/^[-_A-Za-z0-9]{43}$/.test(state))return json({error:"invalid_callback"},400);
-   const key="state:"+state,raw=await env.OAUTH_STATE.get(key);
-   if(!raw)return json({error:"expired_or_replayed_authorization"},400);
-   await env.OAUTH_STATE.delete(key);
-   const attempt=JSON.parse(raw);
+
+  const matchCallback=path.match(/^\/api\/connections\/(facebook|youtube)\/callback$/);
+  if(matchCallback&&method==="GET"){
+   const provider=matchCallback[1],state=url.searchParams.get("state"),authCode=url.searchParams.get("code");
+   if(!codeValid(state))return json({error:"invalid_callback"},400);
+   // Atomic one-time claim (not KV get/delete): two simultaneous callbacks cannot win.
+   const attempt=await env.OAUTH_DB.prepare("UPDATE oauth_states SET used_at=? WHERE state_hash=? AND used_at IS NULL AND expires_at>? RETURNING session_id,provider,verifier,pairing_hash")
+    .bind(now(),await digest(state),now()).first();
+   if(!attempt)return json({error:"expired_or_replayed_authorization"},400);
    if(attempt.provider!==provider)return json({error:"provider_mismatch"},400);
-   if(!attempt.pairingHash)return json({error:"missing_pairing_state"},400);
-   const pairingRecord=await env.OAUTH_STATE.get("pair:"+attempt.pairingHash);
-   if(!pairingRecord)return json({error:"pairing_expired"},400);
-   const pair=JSON.parse(pairingRecord);
-   if(pair.session!==attempt.session||pair.provider!==provider)return json({error:"pairing_mismatch"},403);
-   if(pair.status==="cancelled")return json({error:"authorization_cancelled"},400);
-   if(pair.status!=="pending")return json({error:"invalid_pairing_status"},400);
-   if(u.searchParams.has("error")){
-    await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
-    return json({error:"authorization_declined"},400);
+   // Atomically claim the pairing only if cancellation did not already win.
+   const claimed=await env.OAUTH_DB.prepare("UPDATE oauth_pairings SET status='processing' WHERE pairing_hash=? AND session_id=? AND provider=? AND status='pending' AND expires_at>? RETURNING pairing_hash")
+    .bind(attempt.pairing_hash,attempt.session_id,provider,now()).first();
+   if(!claimed){
+    const record=await pairingStatus(env,attempt.pairing_hash);
+    return json({error:record?.status==="cancelled"?"authorization_cancelled":"invalid_pairing_status"},400);
    }
-   if(!code){
-    await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
-    return json({error:"missing_authorization_code"},400);
+   if(url.searchParams.has("error")||!authCode){
+    await declinePair(env,attempt.pairing_hash);
+    return json({error:url.searchParams.has("error")?"authorization_declined":"missing_authorization_code"},400);
    }
-   if(!/^[A-Za-z0-9_-]{43}$/.test(attempt.session||""))return json({error:"invalid_session"},400);
-   if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
-   const failPairing=async (error,status)=>{
-    await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
+   const alive=await env.OAUTH_DB.prepare("SELECT session_id FROM oauth_sessions WHERE session_id=? AND expires_at>?")
+    .bind(attempt.session_id,now()).first();
+   if(!alive){await declinePair(env,attempt.pairing_hash);return json({error:"session_expired"},400);}
+   const failPairing=async(error,status)=>{
+    await declinePair(env,attempt.pairing_hash);
     return json({error},status);
    };
-   // Exchange codes on the server only. Never return the token to the browser.
+   // Provider client secrets are never sent in URL query parameters.
    let token;
    if(provider==="youtube"){
     if(!env.GOOGLE_CLIENT_SECRET)return failPairing("provider_not_configured",503);
-    const form=new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:redirectUri(env,provider),grant_type:"authorization_code",code_verifier:attempt.verifier});
+    const form=new URLSearchParams({code:authCode,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:redirectUri(env,provider),grant_type:"authorization_code",code_verifier:attempt.verifier});
     const result=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:form});
     if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
-   } else {
+   }else{
     if(!env.FACEBOOK_APP_SECRET)return failPairing("provider_not_configured",503);
-    // Keep Meta app secrets out of request URLs and intermediary URL logs.
-    const form=new URLSearchParams({client_id:env.FACEBOOK_APP_ID,client_secret:env.FACEBOOK_APP_SECRET,redirect_uri:redirectUri(env,provider),code});
+    const form=new URLSearchParams({client_id:env.FACEBOOK_APP_ID,client_secret:env.FACEBOOK_APP_SECRET,redirect_uri:redirectUri(env,provider),code:authCode});
     const result=await fetch("https://graph.facebook.com/v24.0/oauth/access_token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:form});
     if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
    }
-   if(!token || typeof token.access_token!=="string" || !token.access_token.trim())return failPairing("missing_provider_token",502);
-   if(!token.token_type && provider==="youtube")return failPairing("invalid_provider_token_response",502);
-   // Tokens remain in server-side KV; production should use encryption at rest with managed key.
-   const existing=JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+attempt.session)||"{}");
-   existing[provider]=await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?Date.now()+token.expires_in*1000:null});
-   await env.ACCOUNT_SESSIONS.put("session:"+attempt.session,JSON.stringify(existing),{expirationTtl:86400*30});
-   if(attempt.pairingHash)await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({session:attempt.session,provider,status:"complete"}),{expirationTtl:600});
-   return new Response("<!doctype html><title>IMG LIVE Studio</title><p>Account authorization completed. Return to IMG LIVE Studio and refresh connections.</p>",{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
+   if(!token||typeof token.access_token!=="string"||!token.access_token.trim())return failPairing("missing_provider_token",502);
+   if(provider==="youtube"&&!token.token_type)return failPairing("invalid_provider_token_response",502);
+   const encrypted=JSON.stringify(await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?now()+token.expires_in*1000:null}));
+   // Store each provider independently: simultaneous Facebook/YouTube callbacks
+   // cannot overwrite each other. Complete pairing in the same D1 transaction.
+   const completed=await env.OAUTH_DB.batch([
+    env.OAUTH_DB.prepare("INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) SELECT s.session_id,?,?,? FROM oauth_sessions s WHERE s.session_id=? AND s.expires_at>? AND EXISTS(SELECT 1 FROM oauth_pairings p WHERE p.pairing_hash=? AND p.status='processing' AND p.expires_at>?) ON CONFLICT(session_id,provider) DO UPDATE SET encrypted_token=excluded.encrypted_token,expires_at=excluded.expires_at")
+     .bind(provider,encrypted,now()+sessionLife,attempt.session_id,now(),attempt.pairing_hash,now()),
+    env.OAUTH_DB.prepare("UPDATE oauth_pairings SET status='complete' WHERE pairing_hash=? AND status='processing' AND expires_at>?")
+     .bind(attempt.pairing_hash,now())
+   ]);
+   if(completed[0]?.meta?.changes!==1||completed[1]?.meta?.changes!==1)
+    return json({error:"authorization_expired_during_exchange"},409);
+   return new Response("<!doctype html><title>IMG LIVE Studio</title><p>Authorization completed. Return to IMG LIVE Studio to verify your connection.</p>",{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
   }
   return json({error:"not_found"},404);
- }catch(e){return json({error:"server_error"},500)}
+ }catch(_){return json({error:"server_error"},500);}
 }};
