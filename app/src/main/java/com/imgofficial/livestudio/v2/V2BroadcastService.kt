@@ -46,7 +46,17 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var scoreAlpha=1f
  private var lastScoreAlpha:Float?=null
  private var scoreTransitionEpoch=0
- private var graphicsStyle=0 // PRIME sports-TV, COURTSIDE metallic broadcast
+ private var graphicsStyle=0
+ private var graphicsSize=60
+ private var graphicsOpacity=1f
+ private var graphicsWidth=100
+ private var graphicsHeight=100
+ private var graphicsX=0
+ private var graphicsY=0
+ private var graphicsMargin=3
+ private var graphicsPosition="bottom-center"
+ private var graphicsHomeLogo:android.graphics.Bitmap?=null
+ private var graphicsAwayLogo:android.graphics.Bitmap?=null
  private var scoreEffectsEnabled=true
  private var scoreAward:V2Scorecard.Award?=null
  private var lastRenderedAward:V2Scorecard.Award?=null
@@ -347,16 +357,74 @@ class V2BroadcastService:Service(),ConnectChecker {
  internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
  fun graphicsStyle()=graphicsStyle
+ fun graphicsSize()=graphicsSize
+ fun graphicsPosition()=graphicsPosition
  fun scoreEffectsEnabled()=scoreEffectsEnabled
  fun setScoreEffectsEnabled(enabled:Boolean){
   scoreEffectsEnabled=enabled
   if(!enabled){scoreAwardEpoch++;scoreAward=null;updateScorecard()}
  }
  fun setGraphicsStyle(style:Int){
-  if(style !in 0..1 || graphicsStyle==style)return
+  if(style !in 0..11 || graphicsStyle==style)return
+  val oldCompact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
+  val newCompact=V2BroadcastGraphicsRenderer.compact(style)
   graphicsStyle=style
+  if(oldCompact!=newCompact)
+   graphicsPosition=if(newCompact)"bottom-right" else "bottom-center"
   lastGraphicsStyle=-1
+  placeGraphics()
   updateScorecard()
+ }
+ fun configureGraphics(style:Int,position:String,size:Int,opacity:Int,
+  width:Int,height:Int,x:Int,y:Int,margin:Int,effects:Boolean,
+  homeLogo:android.graphics.Bitmap?,awayLogo:android.graphics.Bitmap?){
+  if(style in 0..11)graphicsStyle=style
+  graphicsPosition=if(position in setOf("top-left","top-right","bottom-left","bottom-right","bottom-center"))
+   position else if(V2BroadcastGraphicsRenderer.compact(graphicsStyle))"bottom-right" else "bottom-center"
+  graphicsSize=size.coerceIn(15,115)
+  graphicsOpacity=opacity.coerceIn(30,100)/100f
+  graphicsWidth=width.coerceIn(65,150)
+  graphicsHeight=height.coerceIn(65,150)
+  graphicsX=x.coerceIn(-30,30);graphicsY=y.coerceIn(-30,30)
+  graphicsMargin=margin.coerceIn(1,10)
+  scoreEffectsEnabled=effects
+  graphicsHomeLogo=homeLogo
+  graphicsAwayLogo=awayLogo
+  lastGraphicsStyle=-1
+  placeGraphics();updateScorecard()
+ }
+ fun resizeGraphics(amount:Int){
+  graphicsSize=(graphicsSize+amount).coerceIn(15,115)
+  placeGraphics()
+ }
+ fun placeGraphicsAt(position:String){
+  if(position in setOf("top-left","top-right","bottom-left","bottom-right","bottom-center")){
+   graphicsPosition=position;placeGraphics()
+  }
+ }
+ private fun placeGraphics(){
+  val filter=scoreFilter?:return
+  val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
+  // Maintain natural artwork aspect ratio under every resize setting.
+  val overall=(graphicsSize/60f)*minOf(graphicsWidth,graphicsHeight)/100f
+  var pw=(if(compact)31f else 84f)*overall
+  var ph=pw*(960f/540f)*
+   V2BroadcastGraphicsRenderer.height(graphicsStyle)/
+   V2BroadcastGraphicsRenderer.width(graphicsStyle)
+  val factor=minOf(1f,85f/ph,95f/pw)
+  pw*=factor;ph*=factor
+  val safe=graphicsMargin.toFloat()
+  val px=when(graphicsPosition){
+   "top-left","bottom-left"->safe
+   "top-right","bottom-right"->100f-pw-safe
+   else->(100f-pw)/2f
+  }
+  val py=if(graphicsPosition.startsWith("top"))safe else 100f-ph-safe
+  try{
+   filter.setScale(pw,ph)
+   filter.setPosition((px+graphicsX).coerceIn(safe,100f-pw-safe),
+    (py+graphicsY).coerceIn(safe,100f-ph-safe))
+  }catch(_:Exception){notifyState("Broadcast Graphics position could not be changed.")}
  }
  private fun startScoreAward(team:Int,points:Int,prior:Int){
   val epoch=++scoreAwardEpoch
@@ -442,11 +510,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   val gl=stream?.getGlInterface()?:return
   try{
    if(scoreFilter==null){
-    scoreFilter=ImageFilterRender().also{
-     it.setScale(84f,22.4f)
-     it.setPosition(8f,2.5f)
-     gl.addFilter(it)
-    }
+    scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
+    placeGraphics()
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
@@ -464,7 +529,8 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
-   filter.setImage(V2Scorecard.render(scoreboard,scoreAlpha,scoreAward,graphicsStyle))
+   filter.setImage(V2BroadcastGraphicsRenderer.render(
+    scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo))
    lastScorecardImageState=scoreboard.copy()
    lastRenderedAward=scoreAward
    lastGraphicsStyle=graphicsStyle
