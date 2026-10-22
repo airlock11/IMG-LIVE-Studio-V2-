@@ -1,0 +1,17 @@
+name = "img-live-studio-oauth"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Create two KV namespaces and insert their IDs before deployment.
+# [[kv_namespaces]]
+# binding = "OAUTH_STATE"
+# id = "REPLACE_WITH_STATE_KV_NAMESPACE_ID"
+#
+# [[kv_namespaces]]
+# binding = "ACCOUNT_SESSIONS"
+# id = "REPLACE_WITH_SESSION_KV_NAMESPACE_ID"
+
+# Add PUBLIC_ORIGIN, GOOGLE_CLIENT_ID, and FACEBOOK_APP_ID as environment
+# variables. Store GOOGLE_CLIENT_SECRET and FACEBOOK_APP_SECRET as secrets.
+# Do not deploy until the security checklist in README.md is completed.
