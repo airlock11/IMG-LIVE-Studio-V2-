@@ -5,7 +5,10 @@
 (function () {
  "use strict";
  const providers = Object.freeze({facebook:"www.facebook.com",youtube:"accounts.google.com"});
- const statuses = {facebook:"disconnected",youtube:"disconnected"};
+ // Before the first native status check, do not tell the operator that a
+ // previously connected account has signed out. Never claim Connected until
+ // the Keystore-backed Android client verifies it with the server.
+ const statuses = {facebook:"disconnected",youtube:window.IMGNativeChannel?.postMessage?"verifying":"disconnected"};
  const listeners = new Set();
  const pairingCodes = Object.create(null);
  const pending = new Map();
