@@ -280,8 +280,10 @@ export default {async fetch(req,env){
    }),req);
   }
 
-  // Explicit, rate-limited private draft creation. No stream/RTMP ingestion
-  // credentials are requested or sent to the Android app. Never go live here.
+  // Explicit operator-confirmed private YouTube event. startNow mode uses
+  // Google's mandatory scheduledStartTime internally (near now), but marks
+  // enableAutoStart and enableAutoStop so ingestion starts/ends the live event.
+  // Existing scheduled-draft behavior stays available for older clients.
   if(path==="/api/connections/youtube/private-draft"&&method==="POST"){
    if(!appRequest(req))return json({error:"forbidden_origin"},403);
    if(!isJson(req))return withCors(json({error:"unsupported_media_type"},415),req);
@@ -290,7 +292,11 @@ export default {async fetch(req,env){
    if(Number(req.headers.get("content-length")||0)>4096)return withCors(json({error:"request_too_large"},413),req);
    const body=await req.json().catch(()=>null);
    const title=typeof body?.title==="string"?body.title.trim():"";
-   const schedule=body?.scheduledStartTime;
+   const startNow=body?.startNow===true;
+   // YouTube liveBroadcasts.insert requires scheduledStartTime even for
+   // instant broadcasts. The user never schedules this: it begins when the
+   // verified bound RTMPS stream starts sending frames.
+   const schedule=startNow?new Date(now()+2*60000).toISOString():body?.scheduledStartTime;
    const started=typeof schedule==="string"?Date.parse(schedule):NaN;
    const requestId=body?.requestId;
    if(body?.operatorConfirmed!==true||typeof body?.madeForKids!=="boolean"||
@@ -298,9 +304,14 @@ export default {async fetch(req,env){
       title.length<5||title.length>100||/[\u0000-\u001f\u007f]/.test(title)||
       typeof schedule!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(schedule)||
       !Number.isFinite(started)||new Date(started).toISOString()!==schedule||
-      started<now()+10*60000||started>now()+7*86400000)
+      (!startNow&&(started<now()+10*60000||started>now()+7*86400000)))
     return withCors(json({error:"invalid_private_draft_request"},400),req);
-   const inputHash=await digest(JSON.stringify({title,scheduledStartTime:schedule,madeForKids:body.madeForKids}));
+   // Avoid hashing the server-generated instant timestamp: an idempotent
+   // retry with the same request ID must not look like a conflicting request.
+   const inputHash=await digest(JSON.stringify({
+    title,...(startNow?{startNow:true}:{scheduledStartTime:schedule}),
+    madeForKids:body.madeForKids
+   }));
    // Atomic idempotency claim plus small per-session quota. An unknown result
    // from YouTube cannot be replayed under the same request ID.
    const claimed=await env.OAUTH_DB.prepare(
@@ -340,7 +351,7 @@ export default {async fetch(req,env){
      body:JSON.stringify({
       snippet:{title,scheduledStartTime:schedule},
       status:{privacyStatus:"private",selfDeclaredMadeForKids:body.madeForKids},
-      contentDetails:{enableAutoStart:false,enableAutoStop:false}
+      contentDetails:{enableAutoStart:startNow,enableAutoStop:startNow}
      })
     });
    }catch(_){return fail("youtube_draft_creation_unavailable",502);}
@@ -470,7 +481,8 @@ export default {async fetch(req,env){
     created=await fetch("https://www.googleapis.com/youtube/v3/liveStreams?part=id%2Ccdn%2Csnippet%2CcontentDetails",{
      method:"POST",redirect:"manual",headers:{...headers,"content-type":"application/json"},
      body:JSON.stringify({snippet:{title:"IMG LIVE Studio private test feed"},
-      cdn:{frameRate:"30fps",ingestionType:"rtmp",resolution:"720p"},
+      // Automatically detect the 540p / 24fps phone-friendly H.264 profile.
+      cdn:{frameRate:"variable",ingestionType:"rtmp",resolution:"variable"},
       contentDetails:{isReusable:false}})
     });
    }catch(_){return fail("youtube_ingest_creation_unavailable",502);}
