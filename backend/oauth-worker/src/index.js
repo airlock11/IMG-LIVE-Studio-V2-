@@ -144,24 +144,28 @@ export default {async fetch(req,env){
    }
    if(!/^[A-Za-z0-9_-]{43}$/.test(attempt.session||""))return json({error:"invalid_session"},400);
    if(!await env.ACCOUNT_SESSIONS.get("session:"+attempt.session))return json({error:"session_expired"},400);
+   const failPairing=async (error,status)=>{
+    await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({...pair,status:"declined"}),{expirationTtl:600});
+    return json({error},status);
+   };
    // Exchange codes on the server only. Never return the token to the browser.
    let token;
    if(provider==="youtube"){
-    if(!env.GOOGLE_CLIENT_SECRET)return json({error:"provider_not_configured"},503);
+    if(!env.GOOGLE_CLIENT_SECRET)return failPairing("provider_not_configured",503);
     const form=new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,redirect_uri:redirectUri(env,provider),grant_type:"authorization_code",code_verifier:attempt.verifier});
     const result=await fetch("https://oauth2.googleapis.com/token",{method:"POST",headers:{"content-type":"application/x-www-form-urlencoded"},body:form});
-    if(!result.ok)return json({error:"token_exchange_failed"},502);
+    if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
    } else {
-    if(!env.FACEBOOK_APP_SECRET)return json({error:"provider_not_configured"},503);
+    if(!env.FACEBOOK_APP_SECRET)return failPairing("provider_not_configured",503);
     const endpoint=new URL("https://graph.facebook.com/v24.0/oauth/access_token");
     endpoint.search=new URLSearchParams({client_id:env.FACEBOOK_APP_ID,client_secret:env.FACEBOOK_APP_SECRET,redirect_uri:redirectUri(env,provider),code}).toString();
     const result=await fetch(endpoint);
-    if(!result.ok)return json({error:"token_exchange_failed"},502);
+    if(!result.ok)return failPairing("token_exchange_failed",502);
     token=await result.json();
    }
-   if(!token.access_token)return json({error:"missing_provider_token"},502);
-   if(!token.token_type && provider==="youtube")return json({error:"invalid_provider_token_response"},502);
+   if(!token.access_token)return failPairing("missing_provider_token",502);
+   if(!token.token_type && provider==="youtube")return failPairing("invalid_provider_token_response",502);
    // Tokens remain in server-side KV; production should use encryption at rest with managed key.
    const existing=JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+attempt.session)||"{}");
    existing[provider]=await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?Date.now()+token.expires_in*1000:null});
