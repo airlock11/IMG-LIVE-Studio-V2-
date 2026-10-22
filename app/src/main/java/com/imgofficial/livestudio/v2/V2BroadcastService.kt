@@ -313,9 +313,11 @@ class V2BroadcastService:Service(),ConnectChecker {
     // Only retry a rejected non-creating request by explicitly tapping Start.
     attempted=false
     notifyState(error?:"Private YouTube upload preparation failed.")
-    // A failed preparation is not an active broadcast. Release foreground
-    // camera/microphone service state while keeping the V2 login untouched.
-    if(foreground){stopForeground(STOP_FOREGROUND_REMOVE);foreground=false;stopSelf()}
+    // A failed preparation is not a Google sign-out. Keep this already-bound
+    // service alive so the operator can retry the SAME private event without
+    // orphaning the Activity binder or recreating an OAuth session.
+    // Release only the foreground notification; camera preview may remain.
+    if(foreground){stopForeground(STOP_FOREGROUND_REMOVE);foreground=false}
     return@post
    }
    try {
