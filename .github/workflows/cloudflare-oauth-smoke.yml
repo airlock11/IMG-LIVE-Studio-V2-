@@ -1,0 +1,47 @@
+name: IMG V2 Cloudflare OAuth Deployment Smoke
+on:
+  push:
+    paths:
+      - 'backend/oauth-worker/**'
+      - '.github/workflows/cloudflare-oauth-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: img-v2-cloudflare-smoke-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check-disabled-deployment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify independent V2 OAuth Worker is reachable but login is disabled
+        env:
+          IMG_V2_OAUTH_URL: https://img-live-studio-oauth.magsipocarnie.workers.dev
+        run: |
+          node --input-type=module - <<'NODE'
+          import assert from 'node:assert/strict';
+          const base=process.env.IMG_V2_OAUTH_URL;
+          for(const [path,expected] of [
+            ['/health','health'],
+            ['/api/connections','oauth_not_enabled']
+          ]){
+            let response;
+            for(let i=0;i<4;i++){
+              try {response=await fetch(base+path,{signal:AbortSignal.timeout(12000)});break;}
+              catch(error){if(i===3)throw error;await new Promise(resolve=>setTimeout(resolve,3000));}
+            }
+            const payload=await response.json();
+            assert.equal(response.status,503,`${path}: OAuth must remain disabled`);
+            if(expected==='health'){
+              assert.equal(payload.configured,false);
+              assert.equal(payload.ok,false);
+            } else assert.equal(payload.error,expected);
+            assert.equal(response.headers.get('cache-control'),'no-store');
+            console.log(path, 'safely disabled (503)');
+          }
+          NODE
