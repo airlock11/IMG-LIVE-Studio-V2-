@@ -30,5 +30,6 @@ dependencies {
  implementation("androidx.core:core-ktx:1.15.0")
  implementation("androidx.activity:activity-ktx:1.9.3")
  implementation("androidx.webkit:webkit:1.12.1")
+ implementation("androidx.browser:browser:1.8.0")
  implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
 }
