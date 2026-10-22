@@ -36,7 +36,14 @@
     if (refreshPending) return refreshPending;
     const origin = requireBackend();
     refreshPending = (async () => {
-    const response = await fetch(origin + "/api/connections", {credentials:"include",cache:"no-store"});
+    let response;
+    try {
+      response = await fetch(origin + "/api/connections", {credentials:"include",cache:"no-store"});
+    } catch (error) {
+      for (const name of Object.keys(providers)) state[name] = "disconnected";
+      publish();
+      throw new Error("Account verification service is unreachable");
+    }
     if (!response.ok) {
       for (const name of Object.keys(providers)) state[name] = "disconnected";
       publish();
