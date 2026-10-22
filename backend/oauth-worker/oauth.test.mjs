@@ -5,6 +5,7 @@ import {DatabaseSync} from 'node:sqlite';
 
 const source=await readFile(new URL('./src/index.js',import.meta.url),'utf8');
 const schema=await readFile(new URL('./migrations/0001_oauth_transactional.sql',import.meta.url),'utf8');
+const schema2=await readFile(new URL('./migrations/0002_access_token_lifecycle.sql',import.meta.url),'utf8');
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const api='https://oauth.example.test';
 const appOrigin='https://appassets.androidplatform.net';
@@ -14,6 +15,7 @@ function memoryD1(){
  const db=new DatabaseSync(':memory:');
  db.exec('PRAGMA foreign_keys=ON;');
  db.exec(schema);
+ db.exec(schema2);
  const make=(sql,args=[])=>({
   sql,args,
   bind(...values){return make(sql,values)},
@@ -176,8 +178,8 @@ test('simultaneous different-provider callbacks preserve both accounts',async()=
  const fetchOriginal=globalThis.fetch;
  try{
   globalThis.fetch=async target=>{
-   if(target==='https://oauth2.googleapis.com/token')return Response.json({access_token:'youtube-token',token_type:'Bearer'});
-   if(target==='https://graph.facebook.com/v24.0/oauth/access_token')return Response.json({access_token:'facebook-token'});
+   if(target==='https://oauth2.googleapis.com/token')return Response.json({access_token:'youtube-token',refresh_token:'youtube-refresh-token',token_type:'Bearer',expires_in:3600});
+   if(target==='https://graph.facebook.com/v24.0/oauth/access_token')return Response.json({access_token:'facebook-token',expires_in:3600});
    throw Error('unexpected target');
   };
   const results=await Promise.all([
@@ -191,8 +193,8 @@ test('simultaneous different-provider callbacks preserve both accounts',async()=
 });
 test('disconnect removes only the selected provider',async()=>{
  const env=makeEnv(),session=await authorize(env);
- env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) VALUES(?,?,?,?)',session.cookie.split('=')[1],'facebook','{}',Date.now()+600000);
- env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) VALUES(?,?,?,?)',session.cookie.split('=')[1],'youtube','{}',Date.now()+600000);
+ env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at) VALUES(?,?,?,?,?)',session.cookie.split('=')[1],'facebook','{}',Date.now()+600000,Date.now()+600000);
+ env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at) VALUES(?,?,?,?,?)',session.cookie.split('=')[1],'youtube','{}',Date.now()+600000,Date.now()+600000);
  const response=await call('/api/connections/facebook/disconnect',{method:'POST',headers:{...ctype,cookie:session.cookie},body:'{}'},env);
  assert.equal(response.status,200);
  const view=await call('/api/connections',{headers:{cookie:session.cookie,origin:appOrigin}},env);
@@ -209,7 +211,7 @@ test('global logout revokes session, provider tokens and all pending OAuth state
  const youtube=await authorize(env,'youtube',facebook.cookie);
  const id=facebook.cookie.split('=')[1];
  for(const provider of ['facebook','youtube']){
-  env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at) VALUES(?,?,?,?)',id,provider,'{}',Date.now()+600000);
+  env.OAUTH_DB.execute('INSERT INTO oauth_accounts(session_id,provider,encrypted_token,expires_at,access_expires_at) VALUES(?,?,?,?,?)',id,provider,'{}',Date.now()+600000,Date.now()+600000);
  }
  const logout=await call('/api/connections/logout',{method:'POST',headers:{...ctype,cookie:facebook.cookie},body:'{}'},env);
  assert.equal(logout.status,200);
