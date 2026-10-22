@@ -60,8 +60,12 @@
    catch(e){clearTimeout(timeout);pending.delete(requestId);reject(e);}
   });
  }
+ // A network timeout, app returning from native camera, or expired staging gate
+ // is NOT a Google sign-out. Only an explicit revoke or verified server status
+ // is allowed to label an account disconnected.
  function failClosed(error) {
-  for(const p of Object.keys(providers)) statuses[p]="disconnected";
+  for(const p of Object.keys(providers))
+   if(statuses[p]==="connected")statuses[p]="verification-unavailable";
   privateDraftAvailable=false;
   publish();
   throw error;
@@ -86,7 +90,7 @@
   try{return await refreshPending;}finally{refreshPending=null;}
  }
  async function checkYoutubeLiveReadiness(){
-  if(statuses.youtube!=="connected")throw Error("Connect your YouTube account first");
+  if(statuses.youtube!=="connected")throw Error(statuses.youtube==="verification-unavailable"?"YouTube status check unavailable. Retry verification; your login was not deleted.":"Connect your YouTube account first");
   const revision=sessionRevision;
   const data=await nativeRequest("youtubeLiveReadiness");
   if(revision!==sessionRevision||statuses.youtube!=="connected")
