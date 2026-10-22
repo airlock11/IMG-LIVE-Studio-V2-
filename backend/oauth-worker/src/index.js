@@ -74,12 +74,14 @@ export default {async fetch(req,env){
    const id=provider==="youtube"?env.GOOGLE_CLIENT_ID:env.FACEBOOK_APP_ID;
    if(!id)return withCors(json({error:"provider_not_configured"},503),req,env);
    if(!session){session=b64url(bytes(32));await env.ACCOUNT_SESSIONS.put("session:"+session,JSON.stringify({}),{expirationTtl:86400*30})}
+   const pairingCode=b64url(bytes(32));
+   await env.OAUTH_STATE.put("pair:"+await digest(pairingCode),JSON.stringify({session,provider,status:"pending"}),{expirationTtl:600});
    const state=b64url(bytes(32)),verifier=b64url(bytes(32));
-   await env.OAUTH_STATE.put("state:"+state,JSON.stringify({provider,session,verifier}),{expirationTtl:600});
+   await env.OAUTH_STATE.put("state:"+state,JSON.stringify({provider,session,verifier,pairingHash:await digest(pairingCode)}),{expirationTtl:600});
    const p=new URLSearchParams({client_id:id,redirect_uri:redirectUri(env,provider),response_type:"code",state,scope:providers[provider].scope});
    if(provider==="youtube"){p.set("access_type","offline");p.set("code_challenge_method","S256");p.set("code_challenge",await digest(verifier));p.set("prompt","consent")}
    const headers={"set-cookie":"img_session="+session+"; "+cookieAttrs+"; Max-Age=2592000"};
-   return withCors(json({authorizationUrl:providers[provider].auth+"?"+p},200,headers),req,env);
+   return withCors(json({authorizationUrl:providers[provider].auth+"?"+p,pairingCode},200,headers),req,env);
   }
   const callback=path.match(/^\/api\/connections\/(facebook|youtube)\/callback$/);
   if(callback&&method==="GET"){
@@ -114,6 +116,7 @@ export default {async fetch(req,env){
    const existing=JSON.parse(await env.ACCOUNT_SESSIONS.get("session:"+attempt.session)||"{}");
    existing[provider]=await encryptTokens(env,{access_token:token.access_token,refresh_token:token.refresh_token||null,expires_at:token.expires_in?Date.now()+token.expires_in*1000:null});
    await env.ACCOUNT_SESSIONS.put("session:"+attempt.session,JSON.stringify(existing),{expirationTtl:86400*30});
+   if(attempt.pairingHash)await env.OAUTH_STATE.put("pair:"+attempt.pairingHash,JSON.stringify({session:attempt.session,provider,status:"complete"}),{expirationTtl:600});
    return new Response("<!doctype html><title>IMG LIVE Studio</title><p>Account authorization completed. Return to IMG LIVE Studio and refresh connections.</p>",{headers:{"content-type":"text/html; charset=utf-8","cache-control":"no-store"}});
   }
   return json({error:"not_found"},404);
