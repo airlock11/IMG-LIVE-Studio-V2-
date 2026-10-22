@@ -272,7 +272,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   scoreGrid.addView(teamCard(0),LinearLayout.LayoutParams(0,-1,1f))
   scoreGrid.addView(teamCard(1),LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
-  body.addView(scoreGrid,matchHeight(0.29f))
+  val pickleball=intent.getStringExtra("img_sport")=="pickleball"
+  body.addView(scoreGrid,matchHeight(if(pickleball)0.42f else 0.29f))
   val fouls=LinearLayout(this).apply{
    orientation=LinearLayout.HORIZONTAL
    setPadding(0,gap,0,0)
@@ -284,7 +285,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    fouls.addView(greenButton("AWAY FOUL +1"){broadcast?.addFoul(1);refreshScoreboard()},
     LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
   }
-  body.addView(fouls,matchHeight(0.13f))
+  if(!pickleball)body.addView(fouls,matchHeight(0.13f))
   panel.addView(body,LinearLayout.LayoutParams(-1,0,1f))
   val footer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
