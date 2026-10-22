@@ -1,6 +1,12 @@
 name: IMG V2 Android APK
 on:
  push:
+  paths:
+   - 'app/**'
+   - 'build.gradle.kts'
+   - 'settings.gradle.kts'
+   - 'gradle/**'
+   - '.github/workflows/android.yml'
  workflow_dispatch:
 jobs:
  apk:
