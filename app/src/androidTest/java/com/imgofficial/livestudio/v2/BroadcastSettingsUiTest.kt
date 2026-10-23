@@ -139,7 +139,7 @@ class BroadcastSettingsUiTest {
     "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
    assertEquals("No duplicate preview container","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-sticky-preview'))"))
-   assertEquals("Original preview is visible and pinned directly beneath the header","true",js(activity,web,
+   val visiblePinned=js(activity,web,
     """(function(){
       const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll');
       if(!a||!p)return false;
@@ -148,7 +148,17 @@ class BroadcastSettingsUiTest {
       return getComputedStyle(a).position==='fixed'&&a.classList.contains('img-score-pinned')
        &&Math.abs(r.top-b.top)<5&&r.width>150&&r.height>80
        &&(node===a||a.contains(node));
-     })()"""))
+     })()""")
+   if(visiblePinned!="true"){
+    val debug=js(activity,web,"""(function(){
+     const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll'),r=a?.getBoundingClientRect(),b=p?.getBoundingClientRect(),pt=r?{x:r.left+r.width/2,y:r.top+Math.min(25,r.height/2)}:null,n=pt?document.elementFromPoint(pt.x,pt.y):null;
+     return JSON.stringify({pinned:a?.classList.contains('img-score-pinned'),parent:a?.parentElement?.className,position:a?getComputedStyle(a).position:null,
+      styleTop:a?.style.getPropertyValue('--img-score-top'),styleLeft:a?.style.getPropertyValue('--img-score-left'),
+      art:r?{top:r.top,left:r.left,width:r.width,height:r.height,bottom:r.bottom}:null,pane:b?{top:b.top,left:b.left,width:b.width,height:b.height}:null,
+      node:n?.tagName,hitClass:n?.className,inside:a?.contains(n),atPoint:pt,device:window.devicePixelRatio});
+    })()""")
+    throw AssertionError("Original preview visibility diagnostic: "+debug)
+   }
    capture(activity,2,"scoreboard")
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-origin');return !!e&&!e.classList.contains('img-score-pinned')})()")
