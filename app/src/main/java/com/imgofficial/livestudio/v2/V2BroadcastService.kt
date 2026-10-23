@@ -58,7 +58,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var currentRecordFile:File?=null
  private var offlineRecording=false
  private var offlinePaused=false
- private var sponsorSlides:List<Pair<String,android.graphics.Bitmap?>>=emptyList()
+ private var sponsorSlides: List<Pair<String, android.graphics.Bitmap?>> = emptyList()
  private var sponsorFilter:ImageFilterRender?=null
  private var sponsorShowing=false
  private var sponsorSlideIndex=0
