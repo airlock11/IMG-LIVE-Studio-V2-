@@ -805,47 +805,76 @@ class V2BroadcastService:Service(),ConnectChecker {
  private fun sampleUploadQuality(){
   val engine=stream?:return
   val client=engine.getStreamClient()
+  val nowMs=android.os.SystemClock.elapsedRealtime()
   val dropped=client.getDroppedVideoFrames()
-  val increase=(dropped-previousDropped).coerceAtLeast(0L)
+  val droppedSincePrevious=(dropped-previousDropped).coerceAtLeast(0L)
   previousDropped=dropped
-  // Transport can stall during Wi-Fi -> mobile-data handover without
-  // immediately invoking onConnectionFailed. Detect stalled real uploads
-  // (not just low signal strength) before attempting the same RTMPS URL.
+
+  // Report ACTUAL RTMPS bytes sent over the most recent sample window.
+  // This is traffic observed, not the network's available upload bandwidth:
+  // simple/still scenes may naturally transmit fewer bytes than the target.
   val uploadedBytes=client.getBytesSend()
-  if(networkReady && uploadedBytes<=previousUploadedBytes)stalledUploadSamples++
+  val elapsedMs=nowMs-measuredSendAtMs
+  val delta=(uploadedBytes-previousUploadedBytes).coerceAtLeast(0L)
+  if(measuredSendAtMs>0L&&elapsedMs>=1000L&&uploadedBytes>=previousUploadedBytes)
+   lastMeasuredSendKbps=((delta*8L)/elapsedMs).coerceIn(0L,Int.MAX_VALUE.toLong()).toInt()
+  measuredSendAtMs=nowMs
+  if(networkReady&&uploadedBytes<=previousUploadedBytes)stalledUploadSamples++
   else stalledUploadSamples=0
   previousUploadedBytes=uploadedBytes
+
+  // A stopped RTMPS socket is distinct from temporary congestion. Reconnect
+  // to the SAME private YouTube event after 3 consecutive zero-byte samples.
   if(stalledUploadSamples>=3){
    running=false;connecting=true
-   ui.removeCallbacks(qualityTick)
-   qualityPolling=false
+   lastMeasuredSendKbps=-1
+   ui.removeCallbacks(qualityTick);qualityPolling=false
    notifyState("Video upload stalled • recovering same private feed")
    scheduleRecovery()
    return
   }
-  val congested=client.hasCongestion(35f)||increase>=3
-  if(!networkReady || congested){
+
+  // RTMP queue pressure and dropped upload frames are congestion signals;
+  // the encoder target or Android's mobile-network label is NOT a speedtest.
+  val queueBusy=client.hasCongestion(45f)
+  val severeQueue=client.hasCongestion(75f)
+  val dropping=droppedSincePrevious>=6L
+  if(networkReady&&(queueBusy||dropping)){
    congestedSamples++
    healthySamples=0
-   if(congestedSamples>=2){
-    val reduced=(videoBitrate*0.72).toInt().coerceAtLeast(minBitrate)
+   val changeAllowed=nowMs-lastBitrateChangeAtMs>=10000L
+   if(congestedSamples>=2&&changeAllowed){
+    val factor=if(severeQueue||droppedSincePrevious>=15L)0.70 else 0.80
+    val reduced=(videoBitrate*factor).toInt()
+     .coerceAtLeast(minBitrate).coerceAtMost(thermalBitrateCap)
     if(reduced<videoBitrate){
      videoBitrate=reduced
+     lastBitrateChangeAtMs=nowMs
      try{engine.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
-     notifyState("Weak upload • reducing video to "+(videoBitrate/1000)+" kbps")
+     notifyState("RTMPS congestion • video target lowered to "+(videoBitrate/1000)+" kbps")
+    }else if(nowMs-lastBitrateChangeAtMs>=30000L){
+     lastBitrateChangeAtMs=nowMs
+     notifyState("Video upload remains congested at "+(videoBitrate/1000)+
+      " kbps • consider a lower FPS or resolution for the next broadcast")
     }
     congestedSamples=0
    }
-  }else{
+  }else if(networkReady){
    congestedSamples=0
    healthySamples++
-   // Increase slowly only after sustained good RTMPS queue behaviour.
-   if(healthySamples>=5&&videoBitrate<thermalBitrateCap){
-    videoBitrate=(videoBitrate+100000).coerceAtMost(thermalBitrateCap)
+   // Prevent rapid quality oscillation. Only ramp up after 30 seconds
+   // without outbound queue pressure or dropped outgoing video frames.
+   if(healthySamples>=6&&nowMs-lastBitrateChangeAtMs>=30000L &&
+      videoBitrate<thermalBitrateCap){
+    videoBitrate=(videoBitrate+250000).coerceAtMost(thermalBitrateCap)
+    lastBitrateChangeAtMs=nowMs
     try{engine.setVideoBitrateOnFly(videoBitrate)}catch(_:Exception){}
-    notifyState("Upload improved • video "+(videoBitrate/1000)+" kbps")
+    notifyState("RTMPS stable • video target "+(videoBitrate/1000)+" kbps")
     healthySamples=0
    }
+  }else{
+   healthySamples=0
+   congestedSamples=0
   }
   publish()
  }
