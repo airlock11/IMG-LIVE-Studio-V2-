@@ -34,6 +34,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
  private lateinit var monitor:SurfaceView
+ private var previousGraphicBitmap:android.graphics.Bitmap?=null
+ private var previousGraphicBounds=intArrayOf(-1,-1,-1,-1)
  private lateinit var graphicsPreview:android.widget.ImageView
  private var previewGraphicsPos=floatArrayOf(8f,70f,84f,22f)
  private lateinit var status:TextView
@@ -49,9 +51,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val parentHeight=parent.height
   val bx=if(parentWidth>0)(parentWidth-mw)/2 else monitor.left
   val by=if(parentHeight>0)(parentHeight-mh)/2 else monitor.top
+  val left=bx+(mw*p[0]/100f).toInt()
+  val top=by+(mh*p[1]/100f).toInt()
+  if(previousGraphicBounds.contentEquals(intArrayOf(left,top,pw,ph)))return
+  previousGraphicBounds=intArrayOf(left,top,pw,ph)
   graphicsPreview.layoutParams=FrameLayout.LayoutParams(pw,ph,Gravity.TOP or Gravity.LEFT).apply{
-   leftMargin=bx+(mw*p[0]/100f).toInt()
-   topMargin=by+(mh*p[1]/100f).toInt()
+   leftMargin=left
+   topMargin=top
   }
  }
  override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
@@ -59,7 +65,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   runOnUiThread {
    if(isFinishing||isDestroyed)return@runOnUiThread
    previewGraphicsPos=floatArrayOf(x,y,w,h)
-   graphicsPreview.setImageBitmap(image)
+   // SeekBar movement reuses the same bitmap. Avoid resetting the
+   // ImageView texture on every finger-movement tick.
+   if(previousGraphicBitmap!==image){
+    graphicsPreview.setImageBitmap(image)
+    previousGraphicBitmap=image
+   }
    placePreviewGraphic()
   }
  }
