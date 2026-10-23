@@ -310,12 +310,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(!::clockDisplay.isInitialized)return
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
-  if(::clockToggleButton.isInitialized)
+  if(::clockToggleButton.isInitialized){
    clockToggleButton.text=if(gameRunning)"PAUSE" else "START"
    if(displayedClockPlaying!=gameRunning){
     iconButton(clockToggleButton,if(gameRunning)"pause" else "play",true)
     displayedClockPlaying=gameRunning
    }
+  }
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
   if(broadcast?.scorecard()?.shotClock!=shotSeconds)broadcast?.setShotClock(shotSeconds)
  }
