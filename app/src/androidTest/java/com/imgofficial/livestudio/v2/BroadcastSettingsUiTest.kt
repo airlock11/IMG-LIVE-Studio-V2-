@@ -96,7 +96,13 @@ class BroadcastSettingsUiTest {
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art.img-wizard-score-ready'))")
    js(activity,web,"(function(){const pane=document.querySelector('.img-wizard-scroll'),art=document.querySelector('.img-wizard-score-art');if(!pane||!art)return false;pane.scrollTop+=art.getBoundingClientRect().top-pane.getBoundingClientRect().top-130;return true})()")
    SystemClock.sleep(650)
+   assertEquals("Landscape preview uses 16:9 broadcast coordinates","true",js(activity,web,
+    "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
+   assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
+    "(function(){const p=document.querySelector('.img-wizard-scroll'),c=document.querySelector('[data-img-scoreboard-settings]');if(!p||!c)return false;p.scrollTop=c.offsetTop+90;return true})()"))
+   SystemClock.sleep(700)
    capture(activity,2,"scoreboard")
+
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
@@ -107,9 +113,9 @@ class BroadcastSettingsUiTest {
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
    SystemClock.sleep(650)
    capture(activity,4)
-   val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=setup-destination-youtube]'))")
+   val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=destination-yt]'))")
    assertEquals("YouTube destination missing","true",localToggle)
-   click(activity,web,"setup-destination-youtube")
+   click(activity,web,"destination-yt")
    waitFor(activity,web,"Boolean(document.querySelector('[data-action=toggle-record-local]'))")
    click(activity,web,"toggle-record-local")
    assertEquals("Native recording switch must work","true",
