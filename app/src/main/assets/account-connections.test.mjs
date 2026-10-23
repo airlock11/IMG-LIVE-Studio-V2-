@@ -490,3 +490,27 @@ test('issue 12: professional vector sport, status, and recording controls',async
  assert.ok(app.includes("ic('record',18)"));
  assert.ok(app.includes("ic('microphone',17)"));
 });
+
+test('issue 10 phone FAIL regression: offline opens the existing broadcast controls before Start',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const studio=app.slice(app.indexOf('function studio(){'),app.indexOf('function isTypingControl('));
+ const ready=studio.slice(studio.indexOf("if(screen==='offline-ready')"),studio.indexOf("if(screen==='setup')"));
+ assert.ok(ready.includes('img-offline-ready-game-controls'),'Broadcast controls must be on the offline readiness screen');
+ assert.ok(ready.includes('${liveControls()}'),'Reuse working game and sponsor controls before recording starts');
+ assert.ok(ready.includes('data-action="start-offline-recording"'),'Start button available from broadcasting screen');
+ assert.ok(!ready.includes('STOP RECORDING'),'Do not show Stop until recording has started');
+ assert.ok(css.includes('.img-offline-ready-game-controls'),'Control region is styled and scrollable');
+ const entry=app.slice(app.indexOf("if(name==='setup-record-offline')"),app.indexOf("if(name==='setup-destination-facebook')",app.indexOf("if(name==='setup-record-offline')")));
+ assert.ok(entry.includes("screen='offline-ready'"));
+ assert.ok(!entry.includes('startRecording('),'Entry must not automatically start recording');
+ assert.ok(entry.includes('l.clockRunning=false'),'Initialize fresh offline controls before recording');
+ const start=app.slice(app.indexOf('async function startOfflineRecording()'),app.indexOf('function home(){'));
+ assert.ok(start.includes('await media.startRecording('),'Start must begin an actual local capture');
+ assert.ok(start.includes("screen='live'"),'Switch to recording controls after successful start');
+ assert.ok(!start.includes('l.scores=[0,0]'),'Start must preserve scores prepared before recording');
+ const stop=app.slice(app.indexOf('async function finishBroadcast()'),app.indexOf('async function remoteAction('));
+ assert.ok(stop.includes('media?.stopRecording?.(snapshot)'),'Stop must finalize the local recording');
+ assert.ok(stop.includes('await refreshOfflineClips()'),'Only then refresh saved My Streams');
+ assert.ok(app.includes("l.recordOnly?'finish-broadcast':'exit-live'"),'Streetball Stop Recording must be direct');
+});
