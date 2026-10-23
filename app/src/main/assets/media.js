@@ -556,6 +556,14 @@
   }
   return sponsorVideos.get(uri);
  }
+ function releaseSponsorVideo(uri){
+  const video=sponsorVideos.get(uri);
+  if(!video)return;
+  video.pause();
+  video.removeAttribute('src');
+  try{video.load()}catch(_){}
+  sponsorVideos.delete(uri);
+ }
  function drawSponsor(ctx,s,w,h){
   const live=s.live||{},sp=s.sponsors?.[live.slideIndex]||{name:'SPONSOR'};
   ctx.fillStyle='#102c2b';ctx.fillRect(0,0,w,h);
@@ -761,5 +769,5 @@
  }
  function stopLiveCapture(){liveCapture?.stop();}
 
- window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintSetupScoreboard,paintStreetballPreview,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
+ window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintSetupScoreboard,paintStreetballPreview,releaseSponsorVideo,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
 })();
