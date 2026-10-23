@@ -121,24 +121,27 @@ class BroadcastSettingsUiTest {
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
     "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
    SystemClock.sleep(700)
+   // The FIRST native canvas itself must remain one DOM element and pin in place.
    try {
-    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
+    waitFor(activity,web,"(function(){const a=document.querySelector('.img-wizard-score-origin');return !!a&&a.classList.contains('img-score-pinned')})()")
    }catch(ex:AssertionError){
     val debug=js(activity,web,"""(function(){
-     const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin'),
-      c=document.querySelector('[data-img-scoreboard-settings]'),h=document.querySelector('.img-wizard-sticky-preview');
-     return JSON.stringify({scroll:p?.scrollTop,maxScroll:p?(p.scrollHeight-p.clientHeight):0,
-      paneTop:p?.getBoundingClientRect().top,artBottom:a?.getBoundingClientRect().bottom,
-      sectionBottom:c?.getBoundingClientRect().bottom,hasHolder:!!h,holderHidden:h?.hidden,
-      sectionCount:document.querySelectorAll('[data-img-scoreboard-settings]').length});
-    })()""")
-    throw AssertionError("Sticky preview diagnostic: "+debug,ex)
+      const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');
+      return JSON.stringify({scroll:p?.scrollTop,max:p?(p.scrollHeight-p.clientHeight):0,
+       artTop:a?.getBoundingClientRect().top,paneTop:p?.getBoundingClientRect().top,
+       pinned:a?.classList.contains('img-score-pinned'),canvases:document.querySelectorAll('canvas[data-setup-scoreboard]').length});
+     })()""")
+    throw AssertionError("Original in-place sticky preview: "+debug,ex)
    }
-   assertEquals("Sticky preview must preserve native 16:9 space","true",js(activity,web,
-    "(function(){const c=document.querySelector('.img-wizard-sticky-preview canvas');return !!c&&c.width===1280&&c.height===720})()"))
+   assertEquals("Exactly one physical scoreboard preview","1",js(activity,web,
+    "String(document.querySelectorAll('canvas[data-setup-scoreboard]').length)"))
+   assertEquals("Native 16:9 bitmap stays in original Scoreboard card","true",js(activity,web,
+    "(function(){const c=document.querySelector('[data-img-scoreboard-settings] .img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
+   assertEquals("No duplicate preview container","false",js(activity,web,
+    "Boolean(document.querySelector('.img-wizard-sticky-preview'))"))
    capture(activity,2,"scoreboard")
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
-   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&e.hidden})()")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-origin');return !!e&&!e.classList.contains('img-score-pinned')})()")
 
    // Issue 1: selecting another original on-air graphic never scrolls the pane.
    assertEquals("Choosing a scoreboard must preserve exact scrolling","true",js(activity,web,
