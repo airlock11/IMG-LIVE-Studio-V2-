@@ -165,102 +165,61 @@ internal object V2BroadcastGraphicsRenderer {
   shape(c,p,x+3,y+h-5,w-6f,2f,color)
   c.restoreToCount(save)
  }
+ /**
+  * Preserve the entire original nameplate during scoring. A short glint
+  * travels over its metal border; no solid shutter can obscure the names.
+  */
  private fun identityTransition(c:Canvas,p:Paint,a:V2Scorecard.Award?,
   team:Int,x:Float,y:Float,w:Float,h:Float,style:Int,accent:Int,
   teamColor:Int,name:String,logo:Bitmap?){
   if(a==null||a.team!=team)return
-  val t=a.progress.coerceIn(0f,1f)
-  if(t>=.89f)return
-  val on=(t/.14f).coerceIn(0f,1f)
-  val off=((.86f-t)/.15f).coerceIn(0f,1f)
-  val reveal=min(on,off)
+  val progress=(a.progress/.74f).coerceIn(0f,1f)
+  if(progress>=1f)return
+  val eased=progress*progress*(3f-2f*progress)
+  val glintX=x+w*(-.08f+1.16f*eased)
+  val strength=kotlin.math.sin(progress*Math.PI).toFloat().coerceIn(0f,1f)
   val save=c.save()
   c.clipRect(x,y,x+w,y+h)
-  // A metal shutter wipes across the SCORING TEAM NAMEPLATE; this is
-  // separate from the +points score-cell takeover and never stops the clock.
-  val rightToLeft=style in listOf(0,3,4,6,8,11)
-  val visible=w*reveal
-  val start=if(rightToLeft)x+w-visible else x
-  c.clipRect(start,y,start+visible,y+h)
-  val tone=if(style in listOf(1,5,9))mix(teamColor,WHITE,.26f) else teamColor
-  bevel(c,p,x,y,w,h,tone,mix(teamColor,INK,.78f),
-   if(style in listOf(2,7))h*.40f else 3f,accent)
-  hardware(c,p,x,y,w,h,WHITE)
-  // Dedicated glowing light stripe tracks the leading edge of the wipe.
-  val edge=if(rightToLeft)start else start+visible
-  p.color=Color.argb((130+95*reveal).roundToInt(),255,244,200)
-  p.strokeWidth=max(4f,h*.075f)
-  c.drawLine(edge,y,edge-h*.22f,y+h,p)
-  val logoX=if(style in listOf(2,5,7))x+w*.42f else x+w*.18f
-  val rad=min(h*.38f,w*.14f)
-  mark(c,p,logoX,y+h*.48f,rad,teamColor,name,logo)
-  label(c,p,name.take(10).uppercase(),x+w*.62f,y+h*.58f,
-   min(h*.42f,w*.115f),WHITE,Paint.Align.CENTER,w*.47f)
-  shape(c,p,x+w*.46f,y+h*.78f,w*.46f,h*.055f,accent,2f)
-  // Distinct choreography / moving light surfaces per graphic family.
-  when(style){
-   0,6->hardware(c,p,x+w*(.1f+t*.67f),y,w*.2f,h,accent)
-   1,8->{
-    for(i in 0..3)shape(c,p,x+w*.13f+i*w*.09f,y+h*.92f,
-     w*.055f,h*.04f,if(i<=t*4)accent else 0xFF283039.toInt(),2f)
-   }
-   2,5->{
-    p.style=Paint.Style.STROKE;p.strokeWidth=max(2f,h*.05f)
-    p.color=Color.argb(145,255,239,201)
-    c.drawCircle(x+w*.42f,y+h*.48f,rad+max(1f,t*28f),p)
-    p.style=Paint.Style.FILL
-   }
-   3,7->{
-    val sl=Path().apply{
-     moveTo(x+w*(t-.05f),y);lineTo(x+w*(t+.14f),y)
-     lineTo(x+w*(t-.02f),y+h);lineTo(x+w*(t-.18f),y+h);close()
-    }
-    p.color=Color.argb(85,255,255,255);c.drawPath(sl,p)
-   }
-   4,10->{
-    p.color=Color.argb(120,255,227,146)
-    c.drawRoundRect(RectF(x+w*.46f,y+h*.13f,x+w*.91f,y+h*.27f),4f,4f,p)
-   }
-   else->{}
-  }
+  p.shader=null
+  p.style=Paint.Style.STROKE
+  p.strokeWidth=max(2f,h*.033f)
+  p.color=Color.argb((90f*strength).roundToInt(),255,250,220)
+  c.drawLine(glintX,y+h*.11f,glintX-h*.12f,y+h*.88f,p)
+  p.strokeWidth=max(1.5f,h*.012f)
+  p.color=Color.argb((110f*strength).roundToInt(),
+   Color.red(accent),Color.green(accent),Color.blue(accent))
+  c.drawLine(x+w*.08f,y+h*.085f,
+   glintX.coerceIn(x+w*.08f,x+w*.92f),y+h*.085f,p)
+  p.style=Paint.Style.FILL
   c.restoreToCount(save)
  }
+
+ /**
+  * Highlight the original score window without covering the real score.
+  * The number remains readable on every frame, including triple digits.
+  */
  private fun pointsFlash(c:Canvas,p:Paint,a:V2Scorecard.Award?,team:Int,
   x:Float,y:Float,w:Float,h:Float,accent:Int,style:Int){
   if(a==null||a.team!=team)return
-  val t=a.progress.coerceIn(0f,1f)
-  if(t>=.93f)return
-  val enter=(t/.14f).coerceIn(0f,1f)
-  val exit=((.91f-t)/.15f).coerceIn(0f,1f)
-  val amount=min(enter,exit)
-  val clip=c.save();c.clipRect(x,y,x+w,y+h)
-  when(style%4){
-   0->{
-    val sweep=x+w*(1f-amount)
-    bevel(c,p,sweep,y,w*amount,h,accent,mix(accent,INK,.68f),0f,accent)
-    hardware(c,p,x,y,w,h,WHITE)
-   }
-   1->{
-    // Ribbed metallic number-roll reveal.
-    bevel(c,p,x,y,w,h,mix(accent,WHITE,.37f),accent,4f,WHITE)
-    val offset=(1f-enter)*h
-    shape(c,p,x,y+offset,w,h*.16f,Color.argb(125,255,255,255))
-   }
-   2->{
-    bevel(c,p,x,y,w,h,mix(accent,INK,.35f),INK,12f,accent)
-    val circle=Path().apply{addCircle(x+w*.5f,y+h*.5f,max(w,h)*.5f*amount,Path.Direction.CW)}
-    p.color=Color.argb(100,255,255,255);p.style=Paint.Style.STROKE;p.strokeWidth=4f
-    c.drawPath(circle,p);p.style=Paint.Style.FILL
-   }
-   else->{
-    bevel(c,p,x,y,w,h,mix(accent,WHITE,.25f),INK,5f,accent)
-    val line=x+w*(t*1.4f-.25f)
-    p.color=Color.argb(180,255,255,255);p.strokeWidth=12f
-    c.drawLine(line,y,line+w*.15f,y+h,p)
-   }
-  }
-  if(t>.1f&&t<.79f)label(c,p,"+${a.points}",x+w*.5f,y+h*.73f,min(h*.78f,w*.60f),WHITE)
-  c.restoreToCount(clip)
+  val progress=(a.progress/.78f).coerceIn(0f,1f)
+  if(progress>=1f)return
+  val eased=progress*progress*(3f-2f*progress)
+  val intensity=kotlin.math.sin(progress*Math.PI).toFloat().coerceIn(0f,1f)
+  val save=c.save()
+  c.clipRect(x,y,x+w,y+h)
+  p.shader=null
+  p.style=Paint.Style.STROKE
+  p.strokeWidth=max(1.5f,min(w,h)*.035f)
+  p.color=Color.argb((142f*intensity).roundToInt(),
+   Color.red(accent),Color.green(accent),Color.blue(accent))
+  c.drawRoundRect(RectF(x+2f,y+2f,x+w-2f,y+h-2f),
+   min(w,h)*.10f,min(w,h)*.10f,p)
+  val sx=x+w*(-.06f+1.12f*eased)
+  p.strokeWidth=max(1.5f,min(w,h)*.028f)
+  p.color=Color.argb((120f*intensity).roundToInt(),255,252,229)
+  c.drawLine(sx,y+4f,sx+min(w,h)*.12f,y+4f,p)
+  p.style=Paint.Style.FILL
+  c.restoreToCount(save)
  }
  private fun clock(c:Canvas,p:Paint,score:V2Scorecard.State,
   x:Float,y:Float,w:Float,h:Float,style:Int,accent:Int){
