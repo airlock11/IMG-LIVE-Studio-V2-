@@ -329,9 +329,9 @@ test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confir
  assert.ok(native.includes('start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)'),'No stop square');
  assert.ok(native.includes('resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset")'));
  assert.ok(native.includes('clockHeader.addView(resetClockButton'));
- assert.ok(native.includes('val timeout=iconButton(darkButton("TIMEOUT")'));
- assert.ok(native.includes('showTimeoutPreview(timeout)'));
- assert.ok(native.includes('CLOCKS PAUSED')&&native.includes('RESUME GAME'),'Timeout pauses clock and has resume controls');
+ assert.ok(native.includes('timeoutButton=iconButton(darkButton("TIMEOUT")'));
+ assert.ok(native.includes('showTimeoutPreview(timeoutButton)'));
+ assert.ok(native.includes('CLOCKS PAUSED')&&native.includes('timeoutButton.text=if(timeoutActive)"RESUME"'),'Timeout pauses clocks and converts action into Resume');
  assert.ok(native.includes('broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)'),'Only opt-in timeout slideshow pushes sponsor art into encoded video');
  assert.ok(confirm.includes('customSheet("END STREAM?")'));
  assert.ok(confirm.includes('dangerButton("END STREAM")'));
@@ -413,9 +413,10 @@ test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and re
  assert.ok(block.includes("data-action='sponsor-clear-img-"),'Remove image independently');
  assert.ok(studio.includes("data.sponsors[i].img=''"));
  assert.ok(studio.includes("preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256)"));
- assert.ok(studio.includes('data.sponsors[i].img=value;persist()'));
- assert.ok(studio.includes('for(const item of namedSponsors){'),'All sponsors, not only the first three, should supply a bounded thumbnail');
- assert.ok(studio.includes("if(jpeg.length<=3500)return jpeg;"),'Native image transport must stay bounded');
+ assert.ok(studio.includes('data.sponsors[i].img=value;try{'));
+ assert.ok(studio.includes('saveOriginalSponsor(file)'),'Original image is stored separately without resampling');
+ assert.ok(studio.includes('sendNativeSponsorArtwork(namedSponsors)'),'Native bridge receives image-backed sponsors');
+ assert.ok(studio.includes('native-sponsor-chunk:'),'Native image transport is chunked and bounded');
  assert.ok(!studio.includes('namedSponsors.slice(0,3)'),'Later sponsor images must not be omitted');
 });
 
@@ -464,14 +465,41 @@ test('Timeout suspends game clock and native GL sponsor slides reach real record
  assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(false)'));
  assert.ok(timeout.includes('gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0'));
  assert.ok(svc.includes('ImageFilterRender().also{gl.addFilter(it)}'));
- assert.ok(svc.includes('sponsorFilter?.setImage(picture)'));
- assert.ok(svc.includes('ui.postDelayed(sponsorAdvance,5000)'));
+ assert.ok(svc.includes('sponsorFilter?.setImage(frame)'));
+ assert.ok(svc.includes('ui.postDelayed(sponsorAdvance,sponsorIntervalMs)'));
  assert.ok(svc.includes('ui.removeCallbacks(sponsorAdvance)'));
  assert.ok(a.includes('android.widget.Switch(this)'),'Timeout offers operator slideshow switch');
  assert.ok(a.includes('Show Slideshow')&&a.includes('nextSponsor.isEnabled=timeoutSlideshowEnabled'));
  assert.ok(!timeout.includes('Sponsor slideshow preview'),'No slideshow preview dialog');
  assert.ok(svc.includes('scoreVisibleBeforeSponsor=scoreVisible'),'Remember scoreboard visibility');
- assert.ok(svc.includes('setScorecardVisible(false)'),'Hide scoreboard while slides run');
- assert.ok(svc.includes('if(previous!=null)setScorecardVisible(previous)'),'Restore previous scoreboard visibility after slides');
+ assert.ok(svc.includes('setScorecardVisibleInstant(false)'),'Immediately hide scoreboard while slides run');
+ assert.ok(svc.includes('if(previous!=null)setScorecardVisibleInstant(previous)'),'Immediately restore original scoreboard visibility');
  assert.ok(timeout.includes('gameWasRunningBeforeTimeout=gameRunning'),'Capture pre-timeout run state');
+});
+
+test('V2 Timeout sponsor artwork is unframed, image only, original quality and compact operator controls',async()=>{
+ const [native,svc,app,bridge]=await Promise.all([
+  readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8'),
+  readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8'),
+  readFile(new URL('./app.js',import.meta.url),'utf8'),
+  readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8')
+ ]);
+ const sponsor=svc.slice(svc.indexOf('private var sponsorSlides:'),svc.indexOf('fun configureLocalRecording('));
+ assert.ok(sponsor.includes('drawSponsorOnCamera')||sponsor.includes('private fun drawSponsor('));
+ assert.ok(sponsor.includes('android.graphics.RectF('),'Sponsor image centered on transparent camera output');
+ assert.ok(!sponsor.includes('canvas.drawRoundRect'),'No decorative rectangle/frame');
+ assert.ok(!sponsor.includes('canvas.drawText('),'No sponsor name or IMG title text');
+ assert.ok(sponsor.includes('minOf(w*.92f/bitmap.width,h*.90f/bitmap.height,1f)'),'Aspect ratio preserved, vertical margin and no crop');
+ assert.ok(sponsor.includes('sponsorTransitionMs'),'Crossfade duration adjustable');
+ assert.ok(sponsor.includes('sponsorIntervalMs'),'Auto timing adjustable');
+ assert.ok(sponsor.includes('ui.removeCallbacks(sponsorAdvance)'),'NEXT resets pending auto advance');
+ assert.ok(native.includes('dp(230)'),'Timeout popover remains compact');
+ assert.ok(native.includes('Mode')&&native.includes('Slide every')&&native.includes('Transition'));
+ assert.ok(native.includes('timeoutButton.text=if(timeoutActive)"RESUME"'));
+ assert.ok(native.includes('timeoutPreview?.dismiss()')&&native.includes('setTimeoutMode(false)'));
+ assert.ok(app.includes("indexedDB.open('img-live-sponsor-artwork-v2'"));
+ assert.ok(app.includes('originalKey=await saveOriginalSponsor(file)'));
+ assert.ok(app.includes('sendNativeSponsorArtwork(namedSponsors)')&&app.includes('sendNativeSponsorArtwork(sponsors)'));
+ assert.ok(bridge.includes('receiveSponsorTransfer(action)')&&bridge.includes('imgsponsor_'));
+ assert.ok(native.includes('decodeSponsorFile(token,i)'));
 });

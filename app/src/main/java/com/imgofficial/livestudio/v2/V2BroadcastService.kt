@@ -58,102 +58,138 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var currentRecordFile:File?=null
  private var offlineRecording=false
  private var offlinePaused=false
- private var sponsorSlides: List<Pair<String, android.graphics.Bitmap?>> = emptyList()
+ // Only actual uploaded images are sent on air: never sponsor names,
+ // decorative sponsor frames, opaque cards, headings or text.
+ private var sponsorSlides:List<Pair<String,android.graphics.Bitmap?>> = emptyList()
  private var sponsorFilter:ImageFilterRender?=null
  private var sponsorShowing=false
  private var scoreVisibleBeforeSponsor:Boolean?=null
  private var sponsorSlideIndex=0
+ private var sponsorAuto=true
+ private var sponsorIntervalMs=5000L
+ private var sponsorTransitionMs=500L
+ private var sponsorFrame:android.graphics.Bitmap?=null
+ private var sponsorEpoch=0
  private val sponsorAdvance=object:Runnable{
-  override fun run(){
-   if(!sponsorShowing||ended)return
-   if(sponsorSlides.isNotEmpty())sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
-   paintSponsorSlide()
-   ui.postDelayed(this,5000)
-  }
+  override fun run(){if(sponsorShowing&&!ended&&sponsorAuto)advanceSponsor(false)}
  }
  fun isOfflineRecording()=offlineRecording
  fun isOfflinePaused()=offlinePaused
  fun hasSponsorSlides()=sponsorSlides.isNotEmpty()
  fun configureSponsorSlides(names:List<String>,images:List<android.graphics.Bitmap?>){
   if(running||connecting||offlineRecording)return
-  sponsorSlides=names.take(12).mapIndexed {i,name->
-   name.trim().take(55).ifEmpty{"SPONSOR"} to images.getOrNull(i)
+  sponsorSlides=names.take(12).mapIndexedNotNull {i,name->
+   images.getOrNull(i)?.takeIf{!it.isRecycled}?.let{name.trim().take(55) to it}
   }
- }
- private fun transparentSponsor(){
-  val frame=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
-  try{sponsorFilter?.setImage(frame)}catch(_:Exception){}
  }
  private fun initSponsorFilter(){
   if(sponsorFilter!=null)return
   try{
    val gl=stream?.getGlInterface()?:return
    sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
-   transparentSponsor()
+   // Start with a real transparent texture, not a null/black placeholder.
+   val blank=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
+   sponsorFilter?.setImage(blank)
+   sponsorFrame=blank
    sponsorFilter?.setScale(100f,100f)
    sponsorFilter?.setPosition(0f,0f)
   }catch(_:Exception){notifyState("Sponsor overlay could not initialize.")}
  }
- private fun paintSponsorSlide(){
-  if(!sponsorShowing)return
-  initSponsorFilter()
-  val sponsor=sponsorSlides.getOrNull(sponsorSlideIndex)?:return
+ private fun uploadSponsorFrame(frame:android.graphics.Bitmap){
   try{
-   val width=640;val height=360
-   val picture=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888)
-   val canvas=android.graphics.Canvas(picture)
-   canvas.drawColor(android.graphics.Color.rgb(10,28,25))
-   val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-   paint.color=android.graphics.Color.rgb(42,217,150)
-   canvas.drawRoundRect(25f,26f,615f,334f,24f,24f,paint)
-   paint.color=android.graphics.Color.rgb(13,32,28)
-   canvas.drawRoundRect(30f,31f,610f,329f,20f,20f,paint)
-   paint.color=android.graphics.Color.rgb(190,232,210)
-   paint.textSize=19f;paint.textAlign=android.graphics.Paint.Align.CENTER
-   paint.typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.BOLD)
-   canvas.drawText("IMG LIVE STUDIO  ·  SPONSOR",320f,67f,paint)
-   val img=sponsor.second
-   if(img!=null&&!img.isRecycled){
-    val maxWidth=380f;val maxHeight=155f
-    val factor=minOf(maxWidth/img.width,maxHeight/img.height)
-    val w=img.width*factor;val h=img.height*factor
-    paint.color=android.graphics.Color.WHITE
-    canvas.drawBitmap(img,null,android.graphics.RectF((width-w)/2,(height-h)/2-17f,(width+w)/2,(height+h)/2-17f),paint)
-   }
-   paint.color=android.graphics.Color.WHITE
-   paint.textSize=27f;paint.textAlign=android.graphics.Paint.Align.CENTER
-   paint.typeface=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD)
-   canvas.drawText(sponsor.first.take(32),320f,292f,paint)
-   sponsorFilter?.setImage(picture)
+   initSponsorFilter()
+   sponsorFilter?.setImage(frame)
    sponsorFilter?.setScale(100f,100f)
    sponsorFilter?.setPosition(0f,0f)
-  }catch(_:Exception){notifyState("Sponsor overlay unavailable; camera remains active.")}
+   // Release earlier CPU frames after the GL thread has time to upload.
+   val old=sponsorFrame
+   sponsorFrame=frame
+   if(old!=null&&old!==frame)ui.postDelayed({
+    if(old!==sponsorFrame&&!old.isRecycled)old.recycle()
+   },350L)
+  }catch(_:Exception){notifyState("Sponsor image unavailable; camera stays active.")}
+ }
+ private fun transparentSponsor(){
+  uploadSponsorFrame(android.graphics.Bitmap.createBitmap(8,8,
+   android.graphics.Bitmap.Config.ARGB_8888))
+ }
+ private fun drawSponsor(index:Int,alpha:Float,canvas:android.graphics.Canvas,w:Int,h:Int){
+  val bitmap=sponsorSlides.getOrNull(index)?.second?:return
+  if(bitmap.isRecycled)return
+  // Scale-to-contain with 5% top/bottom room, never crop or distort.
+  val factor=minOf(w*.92f/bitmap.width,h*.90f/bitmap.height,1f)
+  val dw=bitmap.width*factor;val dh=bitmap.height*factor
+  val dst=android.graphics.RectF((w-dw)/2f,(h-dh)/2f,
+   (w+dw)/2f,(h+dh)/2f)
+  val p=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or
+   android.graphics.Paint.FILTER_BITMAP_FLAG).apply{
+   this.alpha=(alpha.coerceIn(0f,1f)*255).toInt()
+  }
+  canvas.drawBitmap(bitmap,null,dst,p)
+ }
+ private fun sponsorFrame(from:Int,to:Int,mix:Float):android.graphics.Bitmap{
+  val w=videoWidth.coerceIn(640,1920);val h=videoHeight.coerceIn(360,1080)
+  val result=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888)
+  val canvas=android.graphics.Canvas(result)
+  if(from!=to&&mix<1f)drawSponsor(from,1f-mix,canvas,w,h)
+  drawSponsor(to,if(from==to)1f else mix,canvas,w,h)
+  return result
+ }
+ private fun displaySponsor(index:Int,previous:Int=index,animate:Boolean=false){
+  val epoch=++sponsorEpoch
+  if(!sponsorShowing)return
+  if(!animate||previous==index||sponsorTransitionMs<=0L){
+   uploadSponsorFrame(sponsorFrame(index,index,1f));return
+  }
+  val start=android.os.SystemClock.uptimeMillis()
+  fun drawStep(){
+   if(!sponsorShowing||ended||epoch!=sponsorEpoch)return
+   val t=((android.os.SystemClock.uptimeMillis()-start).toFloat()/
+    sponsorTransitionMs).coerceIn(0f,1f)
+   val smooth=t*t*(3f-2f*t)
+   uploadSponsorFrame(sponsorFrame(previous,index,smooth))
+   if(t<1f)ui.postDelayed({drawStep()},80L)
+  }
+  drawStep()
+ }
+ private fun scheduleSponsorAdvance(){
+  ui.removeCallbacks(sponsorAdvance)
+  if(sponsorShowing&&sponsorAuto&&!ended)ui.postDelayed(sponsorAdvance,sponsorIntervalMs)
+ }
+ fun setSponsorTiming(auto:Boolean,intervalSeconds:Int,transitionMillis:Int){
+  sponsorAuto=auto
+  sponsorIntervalMs=intervalSeconds.coerceIn(2,30)*1000L
+  sponsorTransitionMs=transitionMillis.coerceIn(0,1500).toLong()
+  scheduleSponsorAdvance()
+ }
+ private fun advanceSponsor(immediate:Boolean){
+  if(!sponsorShowing||sponsorSlides.isEmpty())return
+  val from=sponsorSlideIndex
+  sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
+  // Automatic rotation uses crossfade; manual NEXT switches immediately.
+  displaySponsor(sponsorSlideIndex,from,!immediate)
+  scheduleSponsorAdvance()
  }
  fun setSponsorSlideshow(enabled:Boolean){
   ui.removeCallbacks(sponsorAdvance)
-  val willShow=enabled&&sponsorSlides.isNotEmpty()&&!ended
-  if(willShow){
-   // Preserve visibility set by the operator before sponsor presentation.
+  val show=enabled&&hasSponsorSlides()&&!ended
+  sponsorEpoch++
+  if(show){
    if(!sponsorShowing)scoreVisibleBeforeSponsor=scoreVisible
    sponsorShowing=true
-   setScorecardVisible(false)
+   setScorecardVisibleInstant(false)
    sponsorSlideIndex=0
-   paintSponsorSlide()
-   ui.postDelayed(sponsorAdvance,5000)
+   displaySponsor(sponsorSlideIndex)
+   scheduleSponsorAdvance()
   }else{
    sponsorShowing=false
    transparentSponsor()
    val previous=scoreVisibleBeforeSponsor
    scoreVisibleBeforeSponsor=null
-   if(previous!=null)setScorecardVisible(previous)
+   if(previous!=null)setScorecardVisibleInstant(previous)
   }
  }
- fun nextSponsorSlide(){
-  if(!sponsorShowing||sponsorSlides.isEmpty())return
-  sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
-  paintSponsorSlide()
-  ui.removeCallbacks(sponsorAdvance);ui.postDelayed(sponsorAdvance,5000)
- }
+ fun nextSponsorSlide(){advanceSponsor(true)}
 
  fun configureLocalRecording(enabled:Boolean){
   if(running||connecting)return
@@ -889,6 +925,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   updateScorecard()
  }
 
+ private fun setScorecardVisibleInstant(visible:Boolean){
+  scoreVisible=visible
+  scoreTransitionEpoch++
+  scoreAlpha=if(visible)1f else 0f
+  updateScorecard()
+ }
  fun setScorecardVisible(visible:Boolean){
   if(scoreVisible==visible)return
   scoreVisible=visible
