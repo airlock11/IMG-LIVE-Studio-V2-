@@ -17,6 +17,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.io.File
+import android.graphics.Bitmap
+import android.graphics.Canvas
 
 /** The real bundled WebView must show the four-stage IMG operator wizard, not camera setup. */
 @RunWith(AndroidJUnit4::class)
@@ -46,6 +48,23 @@ class BroadcastSettingsUiTest {
   assertEquals("Missing or unclickable: "+action,"true",js(activity,web,
    "(function(){const b=document.querySelector('[data-action=\"'+\"$action\"+'\"]');if(!b)return false;b.click();return true})()"))
  }
+ private fun capture(activity:android.app.Activity,step:Int){
+  val latch=CountDownLatch(1)
+  val target=File(activity.filesDir,"img-v2-wizard-step"+step+".png")
+  activity.runOnUiThread {
+   try{
+    val root=activity.window.decorView
+    if(root.width>0&&root.height>0){
+     val bitmap=Bitmap.createBitmap(root.width,root.height,Bitmap.Config.ARGB_8888)
+     root.draw(Canvas(bitmap))
+     target.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
+     bitmap.recycle()
+    }
+   }finally{latch.countDown()}
+  }
+  assertTrue("Screenshot capture timed out",latch.await(12,TimeUnit.SECONDS))
+  assertTrue("Step "+step+" screenshot was not saved",target.exists()&&target.length()>0)
+ }
  @Test fun fourStepSetupHasNoCameraAndRealQualityControls(){
   val instrument=InstrumentationRegistry.getInstrumentation()
   val context=instrument.targetContext
@@ -61,8 +80,11 @@ class BroadcastSettingsUiTest {
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-page'))")
    assertEquals("Step 1 has no camera preview","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-page .preview-wrap,.img-wizard-page video[data-img-camera]'))"))
+   capture(activity,1)
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art'))")
+   SystemClock.sleep(600)
+   capture(activity,2)
    assertEquals("Team name field","true",js(activity,web,"Boolean(document.querySelector('[data-quick=\"homeName\"]'))"))
    assertEquals("Real scoreboard selection gallery","true",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-page .graphics-library'))"))
@@ -70,8 +92,17 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('[data-graphics-range^=\"overlayOffset\"]'))"))
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
+   capture(activity,3)
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-quality'))")
+   capture(activity,4)
+   val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=\\\"setup-destination-youtube\\\"]'))")
+   assertEquals("YouTube destination missing","true",localToggle)
+   click(activity,web,"setup-destination-youtube")
+   waitFor(activity,web,"Boolean(document.querySelector('[data-action=\\\"toggle-record-local\\\"]'))")
+   click(activity,web,"toggle-record-local")
+   assertEquals("Native recording switch must work","true",
+    js(activity,web,"Boolean(document.querySelector('[data-action=\\\"toggle-record-local\\\"][aria-checked=\\\"true\\\"]'))"))
    val metric=js(activity,web,"""(function(){
     const root=document.querySelector('.img-wizard-page');
     const controls=root?.querySelector('.img-wizard-quality');
