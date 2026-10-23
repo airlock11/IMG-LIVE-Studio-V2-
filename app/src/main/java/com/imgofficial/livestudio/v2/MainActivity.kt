@@ -421,6 +421,14 @@ class MainActivity : Activity() {
    if(::browser.isInitialized)browser.evaluateJavascript(
     "window.dispatchEvent(new Event('img-native-stream-ended'));",null)
    publishNativeRecordings()
+   // The native service exports a completed MP4 to MediaStore on a worker.
+   // Never claim it is saved before export finishes. Refresh a few times
+   // after the operator returns Home so the actual saved file appears.
+   if(::browser.isInitialized){
+    for(delayMs in listOf(1200L,3600L,7200L)){
+     browser.postDelayed({if(!isFinishing&&!isDestroyed)publishNativeRecordings()},delayMs)
+    }
+   }
    return
   }
   if(requestCode == fileChooserRequest) {
