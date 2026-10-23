@@ -453,18 +453,42 @@ test('issue 8 My Streams: real saved clips, dates, logos, direct play and See al
  assert.ok(native.includes('.put("homeLogo",savedHomeLogo)')&&native.includes('.put("awayLogo",savedAwayLogo)'));
  assert.ok(native.includes('IS_PENDING,0'),'Only successfully exported clips should be indexed');
 });
-test('issue 10: offline recording opens broadcasting controls, does not record until tapped',async()=>{
+test('issue 10: Offline Recording immediately opens the real native broadcast controls and never auto-records',async()=>{
  const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
- const block=app.slice(app.indexOf('function studio(){'),app.indexOf('function isTypingControl('));
- assert.ok(block.includes("screen==='offline-ready'"));
- assert.ok(block.includes('img-offline-ready-controls'),'Broadcast readiness controls are available');
- assert.ok(block.includes('data-action="start-offline-recording"'));
- assert.ok(block.includes("data-action=\"toggle-mic\""));
- const action=app.slice(app.indexOf("if(name==='setup-record-offline')"),app.indexOf("if(name==='setup-destination-facebook')",app.indexOf("if(name==='setup-record-offline')")));
- assert.ok(action.includes("screen='offline-ready'"));
- assert.ok(!action.includes('startRecording('),'No automatic record on offline entry');
- assert.ok(app.includes('if(name===\'start-offline-recording\')return startOfflineRecording()'));
- assert.ok(app.includes('STOP RECORDING'));
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const main=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ const service=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const action=app.slice(app.indexOf("if(name==='setup-record-offline')"),
+  app.indexOf("if(name==='setup-destination-facebook')",app.indexOf("if(name==='setup-record-offline')")));
+ assert.ok(action.includes('return openNativeOfflineControls()'));
+ assert.ok(!action.includes("screen='offline-ready'"));
+ assert.ok(!action.includes('startRecording('),'Tap entry must not begin recording');
+ assert.ok(app.includes("native-offline-video-start:"));
+ assert.ok(main.includes('img_offline_mode')&&main.includes('offlineMode||game.optBoolean("recordLocal"'));
+ assert.ok(activity.includes('if(offlineMode)"RECORD" else "GO LIVE"'));
+ assert.ok(activity.includes('if(service?.isOfflineRecording()==true){confirmStopRecording();'));
+ assert.ok(activity.includes('greenButton("RESUME")')&&activity.includes('dangerButton("END")'));
+ assert.ok(service.includes('fun startOfflineRecording():Boolean'));
+ assert.ok(service.includes('beginLocalRecording(encoder)'));
+ assert.ok(service.includes('fun activateOfflineForeground():Boolean'));
+ assert.ok(!service.slice(service.indexOf('fun activateOfflineForeground'),service.indexOf('fun startOfflineRecording')).includes('networkReady'),
+  'Offline must not require internet');
+ assert.ok(activity.includes('broadcast?.stopBroadcast()'),'End finalizes local recording');
+});
+test('Timeout actually pauses clock and burns the sponsor slideshow into native outgoing video',async()=>{
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const service=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ assert.ok(activity.includes('gameWasRunningBeforeTimeout=gameRunning'));
+ assert.ok(activity.includes('gameRunning=false;lastTick=0L;updateGameClock()'));
+ assert.ok(activity.includes('broadcast?.showSponsorSlides(true)'));
+ assert.ok(activity.includes('broadcast?.showSponsorSlides(false)'));
+ assert.ok(activity.includes('greenButton("RESUME GAME")'));
+ assert.ok(service.includes('gl.addFilter(it)'),'Sponsor GL overlay must belong to native compositor');
+ assert.ok(service.includes('sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}'));
+ assert.ok(service.includes('fun showSponsorSlides(show:Boolean)'));
+ assert.ok(service.includes('ui.postDelayed({nextSponsorFrame(version)},5000L)'));
+ assert.ok(service.includes('sponsorVisible=false;sponsorEpoch++'));
+ assert.ok(activity.includes('if(service.isSponsorSlidesVisible())View.INVISIBLE'));
 });
 test('issue 11: camera/mic teardown and repeated start/stop safety',async()=>{
  const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
