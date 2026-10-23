@@ -57,7 +57,12 @@ const svgPaths={
  sports:'<circle cx="6.8" cy="6.8" r="3.3"/><path d="M4.5 4.5c1.6 1.2 2.9 2.6 4.6 4.6M4.6 9l4.3-4.3M14 10l7-7M13 11l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l2.5-2.5a4.5 4.5 0 0 0-6.3-6.5Z"/>',
  basketball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7C9.7 9.8 9.7 14.2 5.7 18.3M18.3 5.7c-4 4.1-4 8.5 0 12.6"/>',
  user:'<circle cx="12" cy="8" r="4"/><path d="M4.5 21v-2.5c0-3.7 3.2-6 7.5-6s7.5 2.3 7.5 6V21"/>',
- pickleball:'<ellipse cx="8" cy="8" rx="5.5" ry="6.7" transform="rotate(-35 8 8)"/><path d="m12 12 7.6 7.5a1.4 1.4 0 0 0 2-2L14 10"/><circle cx="5.7" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="9.8" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="7.3" cy="10" r=".65" fill="currentColor" stroke="none"/><circle cx="11.2" cy="9.8" r=".65" fill="currentColor" stroke="none"/><circle cx="19" cy="4.5" r="3"/><circle cx="18" cy="3.5" r=".45" fill="currentColor" stroke="none"/><circle cx="20" cy="5.2" r=".45" fill="currentColor" stroke="none"/>'};
+ pickleball:'<ellipse cx="8.7" cy="8.4" rx="5.9" ry="7.3" transform="rotate(-33 8.7 8.4)"/><path d="M12.8 13.1 19 20a1.6 1.6 0 0 0 2.2-2.2l-6.1-6.6"/><circle cx="6.3" cy="5.9" r=".55" fill="currentColor" stroke="none"/><circle cx="9.3" cy="5.5" r=".55" fill="currentColor" stroke="none"/><circle cx="6.6" cy="9.3" r=".55" fill="currentColor" stroke="none"/><circle cx="10" cy="9.4" r=".55" fill="currentColor" stroke="none"/><circle cx="19" cy="5.2" r="3"/><circle cx="18.2" cy="4.3" r=".42" fill="currentColor" stroke="none"/><circle cx="20.1" cy="5.7" r=".42" fill="currentColor" stroke="none"/>',
+ wifi:'<path d="M2.5 8.8a14.2 14.2 0 0 1 19 0M5.6 12.3a9.6 9.6 0 0 1 12.8 0M9.1 15.8a4.5 4.5 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/>',
+ 'layout-broadcast':'<rect x="2.5" y="3.5" width="19" height="17" rx="2.5"/><path d="M3 15.8h18M8 16v4.2M16 16v4.2M7 8.5h10M7 11.5h7"/>',
+ microphone:'<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M8.5 21h7"/>',
+ record:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/>'
+};
 function ic(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${svgPaths[name]||svgPaths.more}</svg>`}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>String(Date.now())+Math.random().toString(36).slice(2,6);
@@ -1007,7 +1012,19 @@ function streetballGlassScreen(){
 }
 
 function studio(){
- if(screen==='offline-ready')return `<div class="studio-page img-offline-ready-page"><div class="studio-top"><div><p class="eyebrow">OFFLINE RECORDING</p><h1>Broadcasting</h1></div><button class="icon-btn" data-action="offline-ready-back" aria-label="Back to setup">${ic('back',19)}</button></div>${camera()}<div class="img-offline-ready-note">Ready to record on this device</div><div class="fixed-cta"><button class="solid-btn green" data-action="start-offline-recording">${ic('video',18)} START RECORDING</button></div></div>`;
+ if(screen==='offline-ready'){
+  const b=data.options.broadcast,o=data.options;
+  const mic=Boolean(o.micInputs?.some(item=>item.type==='device'&&item.enabled));
+  return `<div class="studio-page img-offline-ready-page"><div class="studio-top"><div><p class="eyebrow">OFFLINE RECORDING</p><h1>Broadcasting</h1></div><button class="icon-btn" data-action="offline-ready-back" aria-label="Back to setup">${ic('back',19)}</button></div>
+   ${camera()}
+   <div class="img-offline-ready-controls">
+    <div class="img-offline-ready-teams"><span>${esc(b.homeName||'Home')}</span><strong>${ic('video',15)} OFFLINE</strong><span>${esc(b.awayName||'Away')}</span></div>
+    <div class="img-offline-ready-setting"><span>${ic('video',17)} ${esc(o.quality)} · ${Number(o.fps)===60?60:30} FPS</span><span>Device recording</span></div>
+    <div class="img-offline-ready-setting"><span>${ic('microphone',17)} Microphone</span><button class="toggle ${mic?'active':''}" data-action="toggle-mic" role="switch" aria-checked="${mic}" aria-label="Record microphone audio"></button></div>
+    <p class="img-offline-ready-note">Use Start Recording to enter game and broadcast controls. No online platform is required.</p>
+   </div>
+   <div class="fixed-cta"><button class="solid-btn green" data-action="start-offline-recording">${ic('record',18)} START RECORDING</button></div></div>`;
+ }
  if(screen==='setup')return setupWizard();if(screen==='live'&&streetballActive())return streetballGlassScreen();const isLive=screen==='live';const liveLandscape=isLive&&data.options.orientation==='landscape';const setupLandscape=screen==='setup'&&useLandscapeSetup();if(liveLandscape)return `<div class="studio-page live-landscape-page">${recordingMode()?'<button class="img-v2-stop-recording" data-action="finish-broadcast">STOP RECORDING</button>':''}${liveLandscapeLayout()}</div>`;if(setupLandscape)return setupLandscapeLayout();return `<div class="studio-page ${isLive?'live-standard-page':''}">${!isLive?`<div class="setup-floating-exit"><button class="icon-btn" data-action="exit-setup" aria-label="Back to home">${ic('back',19)}</button></div>`:`<div class="studio-top"><div><p class="eyebrow">${isLive?(recordingMode()?'● RECORDING · OFFLINE':data.options.fb?(window.IMGFacebookLive?.status()?.phase==='sending'?'● SENDING TO FACEBOOK':'● FACEBOOK VIDEO DISCONNECTED'):'● GAME SESSION'):'PRE-BROADCAST'}</p><h1>${isLive?'Live game controls':'Broadcast settings'}</h1></div><button class="icon-btn" data-action="${isLive?'exit-live':'exit-setup'}" aria-label="${isLive?'End broadcast':'Leave setup'}">${ic('x',19)}</button></div>`}${camera()}${isLive&&recordingMode()?'<button class="img-v2-stop-recording" data-action="finish-broadcast">STOP RECORDING</button>':''}<div class="scroll-controls safe-pad" data-scroll="controls">${isLive?liveControls():setupOpts()}</div>${!isLive&&!fbExpanded?`<div class="fixed-cta"><button class="solid-btn orange" data-action="start-broadcast">${ic(recordOnly()?'video':'radio',17)} ${broadcastStartLabel()}</button></div>`:''}</div>`}
 
 /* Preserve phone camera and keyboard focus across UI updates.
