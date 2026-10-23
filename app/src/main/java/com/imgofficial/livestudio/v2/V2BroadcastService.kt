@@ -175,10 +175,10 @@ class V2BroadcastService:Service(),ConnectChecker {
    videoHeight=resolution
    videoFps=fps
    maxBitrate=when {
-    resolution==1080&&fps==60->12000000
-    resolution==1080->8000000
-    fps==60->5500000
-    else->4000000
+    resolution==1080&&fps==60->17000000
+    resolution==1080->14000000
+    fps==60->8000000
+    else->8000000
    }
    minBitrate=(maxBitrate*0.40f).toInt()
    videoBitrate=maxBitrate
