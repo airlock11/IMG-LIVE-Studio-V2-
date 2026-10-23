@@ -559,7 +559,10 @@ class V2BroadcastService:Service(),ConnectChecker {
     scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can be reset on
    // texture replacement in the GPU filter lifecycle.
-   filter?.setImage(picture)
+   // GL upload failure must never blank the operator's native preview.
+   try{filter?.setImage(picture)}catch(_:Exception){
+    notifyState("GL graphic upload unavailable; local preview remains visible.")
+   }
    placeGraphics()
    latestGraphics=picture
    pushPreviewGraphics(picture)
