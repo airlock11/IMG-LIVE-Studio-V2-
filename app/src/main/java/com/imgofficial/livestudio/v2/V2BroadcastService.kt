@@ -80,10 +80,20 @@ class V2BroadcastService:Service(),ConnectChecker {
   val file=currentRecordFile?:return
   currentRecordFile=null
   try{engine?.stopRecord()}catch(_:Exception){}
-  if(!file.exists()||file.length()<=0)return
+  // The Android encoder may flush the MP4 trailer after stopRecord returns.
+  // Finalize and publish on a worker, not on the UI/binder thread.
+  val finalScore=scoreboard.copy()
   if(Build.VERSION.SDK_INT>=29){
    Thread {
     try{
+     var lastLength=-1L
+     for(attempt in 0..12){
+      val length=if(file.exists())file.length() else 0L
+      if(length>0&&length==lastLength)break
+      lastLength=length
+      Thread.sleep(250)
+     }
+     if(!file.exists()||file.length()<=0)return@Thread
      val values=ContentValues().apply{
       put(MediaStore.Video.Media.DISPLAY_NAME,file.name)
       put(MediaStore.Video.Media.MIME_TYPE,"video/mp4")
@@ -100,6 +110,23 @@ class V2BroadcastService:Service(),ConnectChecker {
        put(MediaStore.Video.Media.IS_PENDING,0)
       },null,null)
       file.delete()
+      // Only recordings successfully published to the phone's MediaStore
+      // appear in My Streams. This is NOT based on merely toggling Save.
+      val prefs=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE)
+      val previous=try{org.json.JSONArray(prefs.getString("clips","[]"))}
+       catch(_:Exception){org.json.JSONArray()}
+      val clip=org.json.JSONObject()
+       .put("id",System.currentTimeMillis().toString())
+       .put("name",file.name)
+       .put("createdAt",System.currentTimeMillis())
+       .put("uri",uri.toString())
+       .put("home",finalScore.home)
+       .put("away",finalScore.away)
+       .put("scores",org.json.JSONArray().put(finalScore.homeScore).put(finalScore.awayScore))
+       .put("sport",finalScore.sport)
+       .put("platform","YouTube")
+      previous.put(clip)
+      prefs.edit().putString("clips",previous.toString()).apply()
      }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
     }catch(_:Exception){
      // Preserve recording in app-owned Movies directory on storage export failure.
