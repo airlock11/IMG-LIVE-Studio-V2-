@@ -706,6 +706,33 @@ const streetballActive=()=>activeSport()==='basketball'&&data.options.basketball
 const streetPlayerCount=()=>data.options.streetFormat==='1v1'?1:data.options.streetFormat==='2v2'?2:0;
 const streetTeamName=(side)=>data.options.broadcast[side===0?'homeName':'awayName']?.trim()||'';
 
+async function preparedLogoData(file,maxDimension=256){
+ if(!file||!file.type.startsWith('image/'))throw Error('Choose a valid image file.');
+ let image,release=()=>{};
+ if(typeof createImageBitmap==='function'){
+  image=await createImageBitmap(file);
+  release=()=>image.close?.();
+ }else{
+  const url=URL.createObjectURL(file);
+  image=await new Promise((resolve,reject)=>{
+   const pic=new Image();pic.onload=()=>resolve(pic);pic.onerror=reject;pic.src=url;
+  });
+  release=()=>URL.revokeObjectURL(url);
+ }
+ try{
+  const w=image.width||image.naturalWidth,h=image.height||image.naturalHeight;
+  if(!w||!h||w>12000||h>12000)throw Error('Unsupported image dimensions');
+  const ratio=Math.min(1,Math.max(1,maxDimension)/Math.max(w,h));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(w*ratio));
+  canvas.height=Math.max(1,Math.round(h*ratio));
+  const ctx=canvas.getContext('2d');
+  if(!ctx)throw Error('Image resize unavailable');
+  ctx.drawImage(image,0,0,canvas.width,canvas.height);
+  return canvas.toDataURL('image/png');
+ }finally{release()}
+}
+
 async function streetPhotoData(file){
  const canvas=document.createElement('canvas');canvas.width=192;canvas.height=192;
  const ctx=canvas.getContext('2d');if(!ctx)throw Error('Photo canvas unavailable');
@@ -1345,7 +1372,7 @@ if(t.dataset.upload==='sponsor-clip'){
  data.sponsors.push({name:file.name.slice(0,50),img:'',video:URL.createObjectURL(file)});
  persist();render(true);toast('Silent sponsor video added for this session.');return;
 }
-if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(!file.type.startsWith('image/')){toast('Upload an image file.');return}const r=new FileReader();r.onload=()=>{const value=String(r.result);if(t.dataset.upload==='quick-home-logo'){data.options.broadcast.homeLogo=value;persist()}else if(t.dataset.upload==='quick-away-logo'){data.options.broadcast.awayLogo=value;persist()}else if(t.dataset.upload==='quick-league-logo'){data.options.broadcast.leagueLogo=value;persist()}else if(t.dataset.upload==='league'&&draft)draft.logo=value;else if(t.dataset.upload.startsWith('team-')&&draft){const i=parseInt(t.dataset.upload.slice(5));if(draft.teams[i])draft.teams[i].logo=value}else if(t.dataset.upload.startsWith('sponsor-')){const i=parseInt(t.dataset.upload.slice(8));if(data.sponsors[i])data.sponsors[i].img=value;persist()}else if(t.dataset.upload.startsWith('saved-team-')){const id=t.dataset.upload.slice(11),tm=thisLeague()?.teams.find(x=>x.id===id);if(tm)tm.logo=value;persist()}render(true)};r.readAsDataURL(file)});
+if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(!file.type.startsWith('image/')){toast('Upload an image file.');return}try{const value=await preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256);if(t.dataset.upload==='quick-home-logo'){data.options.broadcast.homeLogo=value;persist()}else if(t.dataset.upload==='quick-away-logo'){data.options.broadcast.awayLogo=value;persist()}else if(t.dataset.upload==='quick-league-logo'){data.options.broadcast.leagueLogo=value;persist()}else if(t.dataset.upload==='league'&&draft)draft.logo=value;else if(t.dataset.upload.startsWith('team-')&&draft){const i=parseInt(t.dataset.upload.slice(5));if(draft.teams[i])draft.teams[i].logo=value}else if(t.dataset.upload.startsWith('sponsor-')){const i=parseInt(t.dataset.upload.slice(8));if(data.sponsors[i])data.sponsors[i].img=value;persist()}else if(t.dataset.upload.startsWith('saved-team-')){const id=t.dataset.upload.slice(11),tm=thisLeague()?.teams.find(x=>x.id===id);if(tm)tm.logo=value;persist()}render(true)}catch(error){toast('Unable to process image. Please choose another file.')}});
 
 function keepKeyboardFieldVisible(){
  const el=document.activeElement;
