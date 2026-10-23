@@ -109,7 +109,7 @@ test('verification failures retain session as unverified rather than falsely cla
 test('disabled staging OAuth reports a clear message without allowing login',async()=>{
  const {accounts}=controller(cmd=>({ok:false,error:'oauth_not_enabled'}));
  accounts.enableNative();
- await assert.rejects(accounts.connect('facebook'),/login is not available yet/i);
+ await assert.rejects(accounts.connect('facebook'),/expired or is disabled/i);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
 
@@ -295,7 +295,7 @@ test('main private YouTube flow requires operator audience choice and stays priv
  assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Server draft creation must reject missing audience');
  assert.ok(!studio.includes("dialog={type:'youtube-classification'}"),'No audience popup may interrupt Go Live');
  assert.ok(!studio.includes("if(d.type==='youtube-classification')"),'Remove the obsolete audience modal');
- assert.ok(studio.includes('img-wizard-sticky-preview'));
+ assert.ok(studio.includes('img-score-pinned'));
  assert.ok(studio.includes('updateWizardStickyScoreboard'));
  assert.ok(studio.includes('accounts.createYoutubePrivateDraft'));
  assert.ok(studio.includes("madeForKids:youtubeAudience==='yes'"));
@@ -319,7 +319,7 @@ test('IMG V2 Issues 1–3: scoreboard selection and size do not re-render or jum
  assert.ok(!change.includes("render(true)"),'Releasing size slider must not rebuild the page');
  assert.ok(css.includes('.img-wizard-page .img-wizard-scroll{overflow-anchor:none!important;scroll-behavior:auto!important}'));
  assert.ok(css.includes('.img-wizard-page .img-wizard-score-origin{background:transparent!important}'));
- assert.ok(studio.includes("img-wizard-sticky-preview"),'Keep the top docking preview');
+ assert.ok(studio.includes("img-score-pinned"),'Pin the original preview, not a second docking canvas');
 });
 test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confirmation',async()=>{
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
@@ -347,9 +347,14 @@ test('phone issues: one scoreboard canvas, no lineup, no animation switch, compa
  assert.ok(!wizard.includes('Lineup setup (optional)'));
  assert.ok(!wizard.includes('graphics-switch-row'));
  assert.ok(!wizard.includes('Score animation'));
- assert.ok(wizard.includes('img-wizard-sticky-preview'));
+ assert.ok(!wizard.includes('img-wizard-sticky-preview'),'No duplicate sticky preview container');
  assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
- assert.ok(studio.includes("dock.appendChild(preview)")&&studio.includes("spacer.after(preview)"));
+ assert.ok(studio.includes("preview.classList.add('img-score-pinned')"));
+ assert.ok(studio.includes("preview.classList.remove('img-score-pinned')"));
+ assert.ok(!studio.includes("dock.appendChild(preview)"));
+ assert.ok(!studio.includes("Save or update team for next matches"));
+ assert.ok(studio.includes("if(!scoreboardSizeFrame)scoreboardSizeFrame=requestAnimationFrame"));
+ assert.ok(studio.includes("marker.style.display='none'"));
  assert.ok(native.includes('android.widget.Switch(this).apply')&&native.includes('setShotClockVisible(checked)'));
  assert.ok(native.includes('shotClockDisplay=ink('));
  assert.ok(native.includes('intent.getBooleanExtra("img_autostart",false)'));
@@ -358,4 +363,10 @@ test('phone issues: one scoreboard canvas, no lineup, no animation switch, compa
  for(const old of ['heading("Graphics")','styleButtons','Score animation','Undo score','Game clock','Shot clock','heading("Fouls")'])
   assert.ok(!settings.includes(old),'Old tools panel content still present: '+old);
  assert.ok(renderer.includes('shotVisible'),'The actual native artwork should respect visibility');
+});
+
+test('phone recheck: expired OAuth is never presented as both platforms permanently unavailable',async()=>{
+ const accounts=await readFile(new URL('./account-connections.js',import.meta.url),'utf8');
+ assert.ok(!accounts.includes('Facebook and YouTube login is not available yet.'));
+ assert.ok(accounts.includes('Secure YouTube testing has expired or is disabled'));
 });
