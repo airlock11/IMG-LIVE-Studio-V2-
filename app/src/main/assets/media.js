@@ -9,6 +9,36 @@
  // Only request a new bitmap when game data or artwork changes (no 60fps
  // PNG encoding). Preview and browser recording share the same bitmap.
  let nativeScoreImage=null, nativeScoreKey='', nativeScorePending='';
+ const logoThumbs=new Map();
+ function previewLogo(source){
+  if(typeof source!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(source))return '';
+  if(source.length<=35000&&!source.startsWith('data:image/webp;'))return source;
+  const key=source.length+':'+source.slice(-32);
+  if(logoThumbs.has(key))return logoThumbs.get(key)||'';
+  logoThumbs.set(key,'');
+  const img=new Image();
+  img.onload=()=>{
+   try{
+    const c=document.createElement('canvas');c.width=64;c.height=64;
+    const ctx=c.getContext('2d');
+    if(!ctx)return;
+    const f=Math.min(60/img.naturalWidth,60/img.naturalHeight);
+    ctx.drawImage(img,32-img.naturalWidth*f/2,32-img.naturalHeight*f/2,
+     img.naturalWidth*f,img.naturalHeight*f);
+    const small=c.toDataURL('image/png');
+    if(small.length<=35000)logoThumbs.set(key,small);
+    nativeScorePending='';
+    paintBroadcastPreview();
+   }catch(_){}
+  };
+  img.onerror=()=>{nativeScorePending='';};
+  img.src=source;
+  if(logoThumbs.size>6){
+   const first=logoThumbs.keys().next().value;
+   if(first!==key)logoThumbs.delete(first);
+  }
+  return '';
+ }
  const nativeGraphicsEnabled=()=>typeof window.IMGNativeChannel?.postMessage==='function';
  window.addEventListener('img-native-graphics-frame',event=>{
   const detail=event?.detail;
@@ -31,9 +61,11 @@
    'split-box','match-cube','edge-box','legacy-tv'];
   const style=Math.max(0,styleIds.indexOf(o.overlay));
   const logoId=v=>String(v||'').length+':'+String(v||'').slice(-24);
+  const leftLogo=previewLogo(home.logo),rightLogo=previewLogo(away.logo);
   const key=[style,home.name,away.name,l.scores?.[0],l.scores?.[1],
    l.fouls?.[0],l.fouls?.[1],l.quarter,Math.floor(l.seconds??600),
-   l.shot,o.overlayOpacity,logoId(home.logo),logoId(away.logo)].join('|').slice(0,350);
+   l.shot,o.overlayOpacity,logoId(home.logo),logoId(leftLogo),
+   logoId(away.logo),logoId(rightLogo)].join('|').slice(0,350);
   if(nativeScoreKey===key||nativeScorePending===key)return true;
   nativeScorePending=key;
   nativeScoreImage=null;
@@ -46,8 +78,7 @@
    period:Math.max(1,Math.min(9,Math.round(Number(l.quarter)||1))),
    clock:formatClock(l.seconds??600),shot:Math.max(0,Math.min(99,Math.ceil(Number(l.shot??24)))),
    opacity:clamp(o.overlayOpacity??100,30,100)/100,
-   homeLogo:String(home.logo||'').slice(0,65000),
-   awayLogo:String(away.logo||'').slice(0,65000)
+   homeLogo:leftLogo,awayLogo:rightLogo
   };
   try{window.IMGNativeChannel.postMessage('native-graphics-frame:'+encodeURIComponent(JSON.stringify(game)));}
   catch(_){nativeScorePending='';}
