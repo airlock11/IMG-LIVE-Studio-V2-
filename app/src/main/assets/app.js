@@ -290,7 +290,7 @@ async function startPrivateYouTubeFromStudio(){
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
    animated:true,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
-    recordLocal:Boolean(data.options.recordLocal)
+    recordLocal:Boolean(data.options.recordLocal),shotVisible:data.options.shotVisible!==false
   }));
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
@@ -615,35 +615,36 @@ function updateWizardStickyScoreboard(){
  const dock=root?.querySelector('.img-wizard-sticky-preview');
  const card=root?.querySelector('[data-img-scoreboard-settings]');
  if(!pane||!dock||!card)return;
- // One physical preview and one real native canvas. Dock THAT element,
- // not a second preview. A fixed-size placeholder reserves its old position.
- let preview=root.querySelector('.img-wizard-score-origin');
- let spacer=card.querySelector('.img-wizard-score-placeholder');
+ // Move one existing scoreboard canvas. Never mount a cloned second preview.
+ const preview=root.querySelector('.img-wizard-score-origin');
  if(!preview)return;
+ let spacer=card.querySelector('.img-wizard-score-placeholder');
  if(!spacer){
   spacer=document.createElement('div');
   spacer.className='img-wizard-score-placeholder';
+  spacer.style.display='none';
   preview.before(spacer);
  }
- const pinned=preview.parentElement===dock;
- if(!pinned){
-  const bounds=preview.getBoundingClientRect();
-  spacer.style.height=Math.round(bounds.height)+'px';
-  spacer.style.width='100%';
- }
- const anchor=spacer.getBoundingClientRect();
  const frame=pane.getBoundingClientRect();
- const shouldPin=pinned?anchor.bottom<=frame.top+18:anchor.bottom<=frame.top+8;
- if(shouldPin&&!pinned){
-  dock.hidden=false;
-  dock.appendChild(preview);
-  root.classList.add('img-score-docked');
-  window.IMGMedia?.paintSetupScoreboard?.();
- }else if(!shouldPin&&pinned){
-  spacer.after(preview);
-  dock.hidden=true;
-  root.classList.remove('img-score-docked');
-  window.IMGMedia?.paintSetupScoreboard?.();
+ if(preview.parentElement!==dock){
+  const origin=preview.getBoundingClientRect();
+  if(origin.bottom<=frame.top+8){
+   spacer.style.height=Math.ceil(origin.height)+'px';
+   spacer.style.display='block';
+   dock.hidden=false;
+   dock.appendChild(preview);
+   root.classList.add('img-score-docked');
+   window.IMGMedia?.paintSetupScoreboard?.();
+  }
+ }else{
+  const origin=spacer.getBoundingClientRect();
+  if(origin.bottom>frame.top+20){
+   spacer.after(preview);
+   spacer.style.display='none';
+   dock.hidden=true;
+   root.classList.remove('img-score-docked');
+   window.IMGMedia?.paintSetupScoreboard?.();
+  }
  }
 }
 document.addEventListener('scroll',event=>{
