@@ -272,15 +272,15 @@ test('private draft cannot be created after signed-out session even with late re
  await accounts.signOut();
  await assert.rejects(accounts.createYoutubePrivateDraft({title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'b'.repeat(32)}),/Check YouTube Live readiness/);
 });
-test('YouTube platform selection can switch off without logging out the account',async()=>{
+test('Collapsing YouTube dropdown preserves account and stream settings',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const start=studio.indexOf("if(name==='destination-yt')");
  const end=studio.indexOf("if(name==='youtube-connect')",start);
  assert.ok(start>0&&end>start,'Destination controller missing');
  const handler=studio.slice(start,end);
- assert.ok(handler.includes('o.yt=!o.yt'));
- assert.ok(handler.includes('else {youtubeExpanded=false'));
- assert.ok(!handler.includes("accounts.disconnect("),'Turning off selection must not revoke OAuth');
+ assert.ok(handler.includes('youtubeExpanded=!youtubeExpanded'),'Header must only fold connection controls');
+ assert.ok(!handler.includes('o.yt=!o.yt'),'Collapsing must not deselect YouTube');
+ assert.ok(!handler.includes("accounts.disconnect("),'Collapsing must not revoke OAuth');
  assert.ok(studio.includes("if(name==='youtube-disconnect')"),'Explicit disconnect must remain available');
  assert.ok(studio.includes("window.IMGMedia?.stopCamera?.()"));
  assert.ok(studio.includes("native-private-video-start:"));
@@ -385,4 +385,32 @@ test('phone recheck: Step 2 slider travels under the same sticky scoreboard with
  assert.ok(studio.includes("const preview=root?.querySelector('.img-wizard-score-sticky-unit')"),'Pin the whole original preview and slider');
  assert.ok(css.includes('.img-wizard-score-sticky-unit.img-score-pinned'));
  assert.ok(css.includes('.img-wizard-score-sticky-unit .img-wizard-score-size-control'));
+});
+
+test('Step 4 provider panels stay independent of connection dropdown collapse',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ const yt=wizard.slice(wizard.indexOf('const youtubeSettings='),wizard.indexOf('const facebookSettings='));
+ const fb=wizard.slice(wizard.indexOf('const facebookSettings='),wizard.indexOf('const destinationContent='));
+ assert.ok(yt.includes('ytConnected?'),'Connected YouTube keeps settings visible');
+ assert.ok(!yt.includes('youtubeExpanded'),'YouTube settings cannot depend on dropdown expansion');
+ assert.ok(yt.includes('img-wizard-provider-title')&&yt.includes('YouTube</span>'));
+ assert.ok(yt.includes('data-youtube-audience'));
+ assert.ok(fb.includes('fbConnected?'),'Facebook settings use own connected-provider card');
+ assert.ok(!fb.includes('fbExpanded'),'Facebook settings cannot depend on dropdown expansion');
+ assert.ok(fb.includes('Facebook</span>'));
+ assert.ok(fb.includes('facebookLiveTitle')&&fb.includes('facebookLiveDescription'));
+ assert.ok(wizard.includes('youtubeSettings+facebookSettings+'),'Facebook settings follow YouTube');
+ assert.ok(!wizard.includes("card('2','Stream Details'"),'Generic heading must be removed');
+});
+test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and remove',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const block=studio.slice(studio.indexOf('function sponsorSettings(){'),studio.indexOf('// Shared public graphic'));
+ assert.ok(block.includes("data-upload='sponsor-"),'Each row has separate image input');
+ assert.ok(block.includes("s.img?")&&block.includes("<img src="),'Image thumbnail appears when set');
+ assert.ok(block.includes('Change image')&&block.includes('Add image'));
+ assert.ok(block.includes("data-action='sponsor-clear-img-"),'Remove image independently');
+ assert.ok(studio.includes("data.sponsors[i].img=''"));
+ assert.ok(studio.includes("preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256)"));
+ assert.ok(studio.includes('data.sponsors[i].img=value;persist()'));
 });
