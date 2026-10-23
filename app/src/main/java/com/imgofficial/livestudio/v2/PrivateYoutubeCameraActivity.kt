@@ -81,6 +81,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
+   if(broadcast?.prepareNextDraft(draftId)!=true){
+    status.text="This YouTube event has ended. Create a new broadcast from IMG setup."
+    refresh()
+    return
+   }
    val resolution=intent.getIntExtra("img_video_quality",720)
     val fps=intent.getIntExtra("img_video_fps",30)
     broadcast?.configureVideoProfile(resolution,fps)
