@@ -282,38 +282,14 @@ async function startPrivateYouTubeFromStudio(){
   const logoHome=await compactBadge(data.options.broadcast.homeLogo);
   const logoAway=await compactBadge(data.options.broadcast.awayLogo);
   const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
-  const namedSponsors=data.sponsors.filter(x=>String(x.name||'').trim()).slice(0,12);
-  // Send a small thumbnail for EACH named sponsor (not only the first 3).
-  // The native bridge caps this JSON extra at 60 KB. Each image is bounded,
-  // and name/image arrays retain their matching position.
-  async function compactSponsorPreview(raw){
-   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
-   try{
-    const image=new Image();
-    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=raw;});
-    if(!image.naturalWidth||!image.naturalHeight)return '';
-    for(const [dimension,quality] of [[48,.68],[36,.55],[28,.42]]){
-     const canvas=document.createElement('canvas');canvas.width=dimension;canvas.height=dimension;
-     const ctx=canvas.getContext('2d');if(!ctx)break;
-     ctx.fillStyle='#0d1a17';ctx.fillRect(0,0,dimension,dimension);
-     const factor=Math.min((dimension-2)/image.naturalWidth,(dimension-2)/image.naturalHeight);
-     ctx.drawImage(image,(dimension-image.naturalWidth*factor)/2,
-       (dimension-image.naturalHeight*factor)/2,image.naturalWidth*factor,image.naturalHeight*factor);
-     const jpeg=canvas.toDataURL('image/jpeg',quality);
-     if(jpeg.length<=3500)return jpeg;
-    }
-   }catch(_){}
-   return '';
-  }
+  const namedSponsors=data.sponsors.filter(x=>Boolean(x.img)).slice(0,12);
+  const sponsorToken=await sendNativeSponsorArtwork(namedSponsors);
   const sponsorImages=[];
-  for(const item of namedSponsors){
-   sponsorImages.push(await compactSponsorPreview(item.img||''));
-  }
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
   const game=encodeURIComponent(JSON.stringify({
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
-   sponsorNames:namedSponsors.map(x=>String(x.name).trim().slice(0,55)),sponsorImages,
+   sponsorNames:namedSponsors.map(x=>String(x.name||'SPONSOR').trim().slice(0,55)),sponsorImages,sponsorToken,
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
    animated:true,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
@@ -414,6 +390,83 @@ function recordings(){
 // Timeout and Tools controls used by native YouTube. Opening this screen does
 // not start recording or request an online streaming account.
 let offlineNativeOpening=false;
+// Original uploaded sponsor bytes live in IndexedDB, not low-res preview JSON.
+function sponsorDb(){
+ return new Promise((resolve,reject)=>{
+  if(!window.indexedDB)return reject(Error('Image storage unavailable'));
+  const request=indexedDB.open('img-live-sponsor-artwork-v2',1);
+  request.onupgradeneeded=()=>request.result.createObjectStore('originals');
+  request.onsuccess=()=>resolve(request.result);
+  request.onerror=()=>reject(request.error||Error('Image storage unavailable'));
+ });
+}
+async function saveOriginalSponsor(file){
+ const db=await sponsorDb();
+ const key=Array.from(crypto.getRandomValues(new Uint8Array(12)),n=>n.toString(16).padStart(2,'0')).join('');
+ try{
+  await new Promise((resolve,reject)=>{
+   const tx=db.transaction('originals','readwrite');
+   tx.objectStore('originals').put(file,key);
+   tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||Error('Image storage failed'));
+  });
+  return key;
+ }finally{db.close()}
+}
+async function originalSponsorData(sponsor){
+ if(sponsor.originalKey){
+  try{
+   const db=await sponsorDb();
+   const file=await new Promise((resolve,reject)=>{
+    const tx=db.transaction('originals','readonly');
+    const request=tx.objectStore('originals').get(sponsor.originalKey);
+    request.onsuccess=()=>resolve(request.result);
+    request.onerror=()=>reject(request.error);
+   });
+   db.close();
+   if(file instanceof Blob&&file.size<=2500000){
+    return await new Promise((resolve,reject)=>{
+     const reader=new FileReader();
+     reader.onload=()=>resolve(String(reader.result||''));
+     reader.onerror=()=>reject(reader.error);
+     reader.readAsDataURL(file);
+    });
+   }
+  }catch(_){}
+ }
+ return sponsor.img||'';
+}
+async function sendNativeSponsorArtwork(sponsors){
+ if(!sponsors.length)return '';
+ const channel=window.IMGNativeChannel;
+ if(typeof channel?.postMessage!=='function')throw Error('Android sponsor upload unavailable');
+ const token=Array.from(crypto.getRandomValues(new Uint8Array(8)),
+  n=>n.toString(16).padStart(2,'0')).join('');
+ const result=new Promise((resolve,reject)=>{
+  const timeout=setTimeout(()=>{
+   window.removeEventListener('img-native-sponsors-ready',received);
+   reject(Error('Sponsor image transfer timed out'));
+  },30000);
+  function received(event){
+   if(event.detail?.token!==token)return;
+   clearTimeout(timeout);
+   window.removeEventListener('img-native-sponsors-ready',received);
+   if(event.detail.ok===true)resolve(token);
+   else reject(Error('A sponsor image could not be transferred'));
+  }
+  window.addEventListener('img-native-sponsors-ready',received);
+ });
+ channel.postMessage('native-sponsor-begin:'+token+':'+sponsors.length);
+ for(let index=0;index<sponsors.length;index++){
+  const raw=await originalSponsorData(sponsors[index]);
+  if(!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))continue;
+  const b64=raw.substring(raw.indexOf(',')+1);
+  if(b64.length>3500000)throw Error('Sponsor image exceeds 2.5 MB');
+  for(let i=0;i<b64.length;i+=40000)
+   channel.postMessage('native-sponsor-chunk:'+token+':'+index+':'+b64.slice(i,i+40000));
+ }
+ channel.postMessage('native-sponsor-end:'+token);
+ return result;
+}
 async function openNativeOfflineControls(){
  if(offlineNativeOpening)return;
  if(typeof window.IMGNativeChannel?.postMessage!=='function')
@@ -440,16 +493,16 @@ async function openNativeOfflineControls(){
     return out.length<=(format==='jpeg'?3500:35000)?out:'';
    }catch(_){return ''}
   };
-  const sponsors=data.sponsors.filter(v=>String(v.name||'').trim()).slice(0,12);
+  const sponsors=data.sponsors.filter(v=>Boolean(v.img)).slice(0,12);
+  const sponsorToken=await sendNativeSponsorArtwork(sponsors);
   const sponsorImages=[];
-  for(const item of sponsors)sponsorImages.push(await compactImage(item.img||'',36,'jpeg'));
   const game={
    sport:activeSport(),home:String(o.broadcast.homeName||'HOME').slice(0,24),
    away:String(o.broadcast.awayName||'AWAY').slice(0,24),
    logoHome:await compactImage(o.broadcast.homeLogo||''),
    logoAway:await compactImage(o.broadcast.awayLogo||''),
-   sponsorNames:sponsors.map(v=>String(v.name).trim().slice(0,55)),
-   sponsorImages,graphics:normalizeGraphic(o.overlay),
+   sponsorNames:sponsors.map(v=>String(v.name||'SPONSOR').trim().slice(0,55)),
+   sponsorImages,sponsorToken,graphics:normalizeGraphic(o.overlay),
    size:Math.round(o.overlaySize),quality:o.quality,fps:o.fps,
    shotVisible:o.shotVisible!==false
   };
@@ -1669,7 +1722,7 @@ if(t.dataset.upload==='sponsor-clip'){
  data.sponsors.push({name:file.name.slice(0,50),img:'',video:URL.createObjectURL(file)});
  persist();render(true);toast('Silent sponsor video added for this session.');return;
 }
-if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(!file.type.startsWith('image/')){toast('Upload an image file.');return}try{const value=await preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256);if(t.dataset.upload==='quick-home-logo'){data.options.broadcast.homeLogo=value;persist()}else if(t.dataset.upload==='quick-away-logo'){data.options.broadcast.awayLogo=value;persist()}else if(t.dataset.upload==='quick-league-logo'){data.options.broadcast.leagueLogo=value;persist()}else if(t.dataset.upload==='league'&&draft)draft.logo=value;else if(t.dataset.upload.startsWith('team-')&&draft){const i=parseInt(t.dataset.upload.slice(5));if(draft.teams[i])draft.teams[i].logo=value}else if(t.dataset.upload.startsWith('sponsor-')){const i=parseInt(t.dataset.upload.slice(8));if(data.sponsors[i])data.sponsors[i].img=value;persist()}else if(t.dataset.upload.startsWith('saved-team-')){const id=t.dataset.upload.slice(11),tm=thisLeague()?.teams.find(x=>x.id===id);if(tm)tm.logo=value;persist()}render(true)}catch(error){toast('Unable to process image. Please choose another file.')}});
+if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(!file.type.startsWith('image/')){toast('Upload an image file.');return}try{const value=await preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256);if(t.dataset.upload==='quick-home-logo'){data.options.broadcast.homeLogo=value;persist()}else if(t.dataset.upload==='quick-away-logo'){data.options.broadcast.awayLogo=value;persist()}else if(t.dataset.upload==='quick-league-logo'){data.options.broadcast.leagueLogo=value;persist()}else if(t.dataset.upload==='league'&&draft)draft.logo=value;else if(t.dataset.upload.startsWith('team-')&&draft){const i=parseInt(t.dataset.upload.slice(5));if(draft.teams[i])draft.teams[i].logo=value}else if(t.dataset.upload.startsWith('sponsor-')){const i=parseInt(t.dataset.upload.slice(8));if(data.sponsors[i]){data.sponsors[i].img=value;try{data.sponsors[i].originalKey=await saveOriginalSponsor(file)}catch(_){data.sponsors[i].originalKey='';toast('Original image storage unavailable; using the stored preview quality.')}persist()}}else if(t.dataset.upload.startsWith('saved-team-')){const id=t.dataset.upload.slice(11),tm=thisLeague()?.teams.find(x=>x.id===id);if(tm)tm.logo=value;persist()}render(true)}catch(error){toast('Unable to process image. Please choose another file.')}});
 
 function keepKeyboardFieldVisible(){
  const el=document.activeElement;
