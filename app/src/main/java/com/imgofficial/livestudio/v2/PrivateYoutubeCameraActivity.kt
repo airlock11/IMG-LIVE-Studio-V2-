@@ -220,6 +220,65 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
   setPadding(dp(2),0,dp(2),0)
  }
+ private fun iconFor(kind:String,dark:Boolean=false):android.graphics.drawable.Drawable=
+  object:android.graphics.drawable.Drawable(){
+   private val p=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply{
+    color=if(dark)Color.rgb(6,38,24) else Color.rgb(230,245,236)
+    style=android.graphics.Paint.Style.STROKE
+    strokeWidth=2f
+    strokeCap=android.graphics.Paint.Cap.ROUND
+    strokeJoin=android.graphics.Paint.Join.ROUND
+   }
+   override fun draw(c:android.graphics.Canvas){
+    val n=c.save()
+    c.translate(bounds.left.toFloat(),bounds.top.toFloat())
+    c.scale(bounds.width()/24f,bounds.height()/24f)
+    when(kind){
+     "camera"->{
+      c.drawRoundRect(2f,6f,22f,20f,2f,2f,p)
+      c.drawCircle(12f,13f,4f,p)
+      c.drawLine(7f,6f,9f,3f,p)
+      c.drawLine(9f,3f,15f,3f,p)
+      c.drawLine(15f,3f,17f,6f,p)
+     }
+     "clock"->{
+      c.drawCircle(12f,12f,9f,p)
+      c.drawLine(12f,6f,12f,12f,p)
+      c.drawLine(12f,12f,16f,14f,p)
+     }
+     "undo"->{
+      c.drawLine(9f,5f,4f,10f,p);c.drawLine(4f,10f,9f,15f,p)
+      c.drawLine(4f,10f,14f,10f,p)
+      c.drawArc(android.graphics.RectF(8f,8f,21f,21f),-80f,195f,false,p)
+     }
+     "tools"->{
+      c.drawLine(4f,7f,20f,7f,p);c.drawLine(4f,17f,20f,17f,p)
+      c.drawCircle(9f,7f,2.5f,p);c.drawCircle(15f,17f,2.5f,p)
+     }
+     "live"->{
+      c.drawCircle(12f,12f,2.5f,p)
+      c.drawArc(android.graphics.RectF(5f,5f,19f,19f),130f,100f,false,p)
+      c.drawArc(android.graphics.RectF(5f,5f,19f,19f),310f,100f,false,p)
+     }
+     "stop"->c.drawRoundRect(5f,5f,19f,19f,2f,2f,p)
+     "close"->{c.drawLine(5f,5f,19f,19f,p);c.drawLine(19f,5f,5f,19f,p)}
+    }
+    c.restoreToCount(n)
+   }
+   override fun setAlpha(alpha:Int){p.alpha=alpha}
+   override fun setColorFilter(filter:android.graphics.ColorFilter?){p.colorFilter=filter}
+   @Deprecated("Deprecated in Java")
+   override fun getOpacity()=android.graphics.PixelFormat.TRANSLUCENT
+   override fun getIntrinsicWidth()=dp(16)
+   override fun getIntrinsicHeight()=dp(16)
+  }
+ private fun iconButton(btn:Button,kind:String,dark:Boolean=false):Button{
+  btn.setCompoundDrawablesWithIntrinsicBounds(iconFor(kind,dark),null,null,null)
+  btn.compoundDrawablePadding=dp(3)
+  btn.gravity=Gravity.CENTER
+  return btn
+ }
+
  private fun dangerButton(value:String,run:()->Unit):Button=darkButton(value,run).apply{
   background=touchSurface(Color.rgb(127,42,49),11)
   setTextColor(Color.WHITE)
@@ -345,7 +404,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    gravity=Gravity.CENTER_VERTICAL
    setTypeface(typeface,android.graphics.Typeface.BOLD)
   },LinearLayout.LayoutParams(0,dp(35),1f))
-  header.addView(darkButton("Close"){dialog.dismiss()},LinearLayout.LayoutParams(dp(66),dp(33)))
+  header.addView(iconButton(darkButton("Close"){dialog.dismiss()},"close"),LinearLayout.LayoutParams(dp(82),dp(33)))
   outer.addView(header)
   val scrolling=android.widget.ScrollView(this).apply{
    isFillViewport=false
@@ -424,10 +483,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   tools.addView(settingsToggle("Vibration",touchFeedback){
    touchFeedback=it
   },LinearLayout.LayoutParams(-1,dp(42)))
-  pair(tool("Flip camera"){broadcast?.flipCamera();refresh()},
-   tool("Undo score"){undoScore()})
+  pair(iconButton(tool("Flip camera"){broadcast?.flipCamera();refresh()},"camera"),
+   iconButton(tool("Undo score"){undoScore()},"undo"))
   heading("Game clock")
-  pair(tool("Set time"){dialog.dismiss();editClock()},
+  pair(iconButton(tool("Set time"){dialog.dismiss();editClock()},"clock"),
    tool("Reset 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
   heading("Shot clock")
   pair(tool("24s reset"){shotSeconds=24;updateGameClock()},
@@ -655,7 +714,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   footer.addView(status,LinearLayout.LayoutParams(-1,dp(16)))
   val actions=horizontal()
-  start=greenButton("▶ GO LIVE"){
+  start=greenButton("GO LIVE"){
    if(!checkPermissions())return@greenButton
    val service=broadcast
    if(service==null)status.text="Camera service is not ready."
@@ -663,10 +722,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  stop=dangerButton("■ STOP"){confirmStopUpload()}
-  undoButton=darkButton("↶ UNDO"){undoScore()}
+  stop=dangerButton("STOP"){confirmStopUpload()}
+  undoButton=iconButton(darkButton("UNDO"){undoScore()},"undo")
+  iconButton(start,"live",true)
+  iconButton(stop,"stop")
   val keys=listOf(start,stop,undoButton,
-   darkButton("⚙ TOOLS"){openOperatorSettings()},
+   iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"),
    darkButton("EXIT"){finish()})
   val widths=listOf(1.55f,.96f,.98f,1.15f,.72f)
   for((index,button) in keys.withIndex())
