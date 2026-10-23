@@ -98,7 +98,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     intent.getStringExtra("img_home")?:"HOME",
     intent.getStringExtra("img_away")?:"AWAY"
    )
-   val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
+   broadcast?.setShotClockVisible(shotClockVisible)
+    val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
     "rivalry-plate","center-dial","broadcast-classic","crown-pill",
     "split-box","match-cube","edge-box","legacy-tv")
    val graphicsIndex=ids.indexOf(intent.getStringExtra("img_graphics")).coerceAtLeast(0)
@@ -112,7 +113,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     intent.getIntExtra("img_graphics_offset_x",0),
     intent.getIntExtra("img_graphics_offset_y",0),
     intent.getIntExtra("img_graphics_margin",3),
-    intent.getBooleanExtra("img_graphics_animated",true),
+    true,
     decodeLogo(intent.getStringExtra("img_logo_home")),
     decodeLogo(intent.getStringExtra("img_logo_away"))
    )
@@ -161,7 +162,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var awayFoulsDisplay:TextView
  private lateinit var clockToggleButton:Button
  private var displayedClockPlaying:Boolean?=null
- private lateinit var undoButton:Button
+ private lateinit var resetClockButton:Button
+ private lateinit var shotClockDisplay:TextView
+ private var configuredGameSeconds=600
+ private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
@@ -208,6 +212,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   setTextColor(Color.rgb(157,191,172))
   letterSpacing=.06f
  }
+ private fun resetGameClock(){
+  gameSeconds=configuredGameSeconds
+  gameRunning=false
+  lastTick=0L
+  updateGameClock()
+ }
  private fun adjustClock(delta:Int){
   gameSeconds=(gameSeconds+delta).coerceIn(0,5999)
   gameRunning=false
@@ -252,6 +262,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    "camera"->R.drawable.img_icon_camera
    "clock"->R.drawable.img_icon_clock
    "undo"->R.drawable.img_icon_undo
+   "reset"->R.drawable.img_icon_reset
    "tools"->R.drawable.img_icon_tools
    "live"->R.drawable.img_icon_live
    "stop"->R.drawable.img_icon_stop
@@ -294,6 +305,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    }
   }
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
+  if(::shotClockDisplay.isInitialized)shotClockDisplay.text=shotSeconds.toString()
   if(broadcast?.scorecard()?.shotClock!=shotSeconds)broadcast?.setShotClock(shotSeconds)
  }
  // Compact, dark broadcast UI dialogs replace Android's generic gray system dialogs.
@@ -365,7 +377,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(m==null||m !in 0..99||sec==null||sec !in 0..59){
     android.widget.Toast.makeText(this,"Enter valid minutes and seconds",android.widget.Toast.LENGTH_SHORT).show()
    }else{
-    gameSeconds=m*60+sec;gameRunning=false;lastTick=0L
+    gameSeconds=m*60+sec;configuredGameSeconds=gameSeconds;gameRunning=false;lastTick=0L
     updateGameClock();dialog.dismiss()
    }
   },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
@@ -599,9 +611,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(savedInstanceState!=null){
    gameSeconds=savedInstanceState.getInt("v2_clock_seconds",600).coerceIn(0,5999)
    shotSeconds=savedInstanceState.getInt("v2_shot_seconds",24).coerceIn(0,99)
+    configuredGameSeconds=savedInstanceState.getInt("v2_initial_clock_seconds",600).coerceIn(0,5999)
+    shotClockVisible=savedInstanceState.getBoolean("v2_shot_visible",true)
    gameRunning=false
   }
-  autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
+  if(savedInstanceState==null)shotClockVisible=intent.getBooleanExtra("img_shot_visible",true)
+   autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
   // Operator is landscape-only; never expose portrait for normal sports.
@@ -631,6 +646,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.BLACK,11)
    clipToOutline=true
   }
+  val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
+   contentDescription="Flip camera";setPadding(0,0,0,0)
+  }
+  camera.addView(flip,FrameLayout.LayoutParams(dp(34),dp(34),Gravity.TOP or Gravity.RIGHT).apply{
+   rightMargin=dp(7);topMargin=dp(7)
+  })
   monitor=SurfaceView(this)
   camera.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   // Separate native operator preview of the *same* GL-uploaded Bitmap.
@@ -661,13 +682,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val clockCard=card()
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
-  undoButton=iconButton(darkButton(""){undoScore()},"undo").apply{
-   contentDescription="Undo last score"
+  resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset").apply{
+   contentDescription="Reset game clock to its configured starting time"
    minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
    compoundDrawablePadding=0
    setPadding(0,0,0,0)
   }
-  clockHeader.addView(undoButton,LinearLayout.LayoutParams(dp(31),dp(26)))
+  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(31),dp(26)))
   clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(28)))
   val clockMain=horizontal()
   clockDisplay=ink("10:00",26f).apply{
@@ -893,7 +914,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    button.background=touchSurface(if(active)Color.rgb(35,189,117) else Color.rgb(39,67,57),9)
    button.setTextColor(if(active)Color.rgb(8,35,27) else Color.rgb(231,247,237))
   }
-  if(::undoButton.isInitialized)undoButton.isEnabled=lastScoreChange!=null
+  if(::resetClockButton.isInitialized)resetClockButton.isEnabled=true
  }
  private fun refresh(){
   val service=broadcast
@@ -944,6 +965,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  override fun onSaveInstanceState(outState:Bundle){
   outState.putInt("v2_clock_seconds",gameSeconds)
   outState.putInt("v2_shot_seconds",shotSeconds)
+   outState.putInt("v2_initial_clock_seconds",configuredGameSeconds)
+   outState.putBoolean("v2_shot_visible",shotClockVisible)
   outState.putBoolean("v2_clock_running",gameRunning)
   super.onSaveInstanceState(outState)
  }
