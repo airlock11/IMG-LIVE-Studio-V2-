@@ -55,13 +55,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var listeners=mutableSetOf<Listener>()
  private var stream:GenericStream?=null
  private var saveLocalCopy=false
+ private var offlineOnly=false
  private var currentRecordFile:File?=null
+ fun isOfflineRecording()=offlineOnly&&stream?.isRecording==true
  fun configureLocalRecording(enabled:Boolean){
   if(running||connecting)return
   saveLocalCopy=enabled
  }
  private fun beginLocalRecording(engine:GenericStream){
-  if(!saveLocalCopy)return
+  if(!saveLocalCopy||currentRecordFile!=null)return
   try{
    val folder=getExternalFilesDir(Environment.DIRECTORY_MOVIES)?:filesDir
    if(!folder.exists()&&!folder.mkdirs())throw IllegalStateException("Recording folder unavailable")
@@ -143,7 +145,7 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("sport",finalScore.sport)
        .put("homeLogo",savedHomeLogo)
        .put("awayLogo",savedAwayLogo)
-       .put("platform","YouTube")
+       .put("platform",if(offlineOnly)"Offline Recording" else "YouTube")
       previous.put(clip)
       prefs.edit().putString("clips",previous.toString()).apply()
      }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
@@ -372,7 +374,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }catch(_:Exception){}
   publish()
  }
- fun isActive()=running||connecting
+ fun isActive()=running||connecting||(stream?.isRecording==true)
  fun isEnded()=ended
  fun isPortrait()=portrait
  fun frontCamera()=front
@@ -430,6 +432,33 @@ class V2BroadcastService:Service(),ConnectChecker {
    .setContentIntent(open).setOngoing(true)
    .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,
     "Stop Upload",stop).build()).build()
+ }
+ fun activateOfflineForeground():Boolean {
+  if(!prepareCamera())return false
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED||
+     checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
+  return try{
+   androidx.core.content.ContextCompat.startForegroundService(this,
+    Intent(this,V2BroadcastService::class.java).setAction(actionActivate))
+   if(!foreground){
+    val n=notification()
+    if(Build.VERSION.SDK_INT>=29)startForeground(notificationId,n,
+     ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+    else startForeground(notificationId,n)
+    foreground=true
+   }
+   true
+  }catch(_:Exception){notifyState("Unable to start local camera recording service.");false}
+ }
+ fun startOfflineRecording():Boolean {
+  if(ended||running||connecting||stream?.isRecording==true||!foreground||!prepareCamera())return false
+  offlineOnly=true;saveLocalCopy=true
+  val encoder=stream?:return false
+  beginLocalRecording(encoder)
+  if(currentRecordFile==null){offlineOnly=false;return false}
+  running=true;connecting=false
+  notifyState("Recording locally • no streaming platform")
+  return true
  }
  fun activateForeground():Boolean {
   refreshNetwork()
