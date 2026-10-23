@@ -40,3 +40,12 @@
 ## Live Cloudflare findings, October 23
 Live Worker `img-live-studio-oauth` has `OAUTH_ENABLED=false`, `YOUTUBE_TEST_ENABLED=true`, `YOUTUBE_DRAFT_ENABLED=true`, and `YOUTUBE_INGEST_TEST_ENABLED=true`, but the test expiry `YOUTUBE_TEST_EXPIRES_AT` was `2026-10-23T11:27:17.678Z`; when checked after 12:50Z, it had expired.
 Code gate `youtubeTestActive()` denies YouTube auth and draft creation after expiry even if other flags say true. **The Cloudflare settings were READ-ONLY inspected; no production flags or secret bindings were changed.** Production `OAUTH_ENABLED` intentionally remains false until hardening. The next safe controlled-test step is to extend a short explicit, time-bounded test window without globally enabling production authentication, then validate channel eligibility and upload with a permitted test account. Do not enable general production OAuth or public/unlisted publishing merely to bypass this safety gate.
+
+## Verified October 23 build and emulator results
+- Native Android APK from SHA `203f82d8bed0faa4a60993390aea37472fda30e7` built successfully via GitHub Actions run `39958190804`.
+- The V2 emulator smoke run `39958190684` **passed 11 instrumentation tests**, including actual WebView 16:9 scoreboard canvas, scroll docking/un-docking, wizard, and other native graphic tests.
+- JS/Cloudflare fast OAuth checks passed on earlier code; UI changed after that point only for viewport constraint. Build remains an Android debug/test APK, not a signed production release.
+- Code fix cause: nested `.img-wizard-scroll` pane was expanding to content height (`scrollTop=0,maxScroll=0`) instead of being bounded to Android viewport; CSS now forces constrained flex scroll container and native instrumentation passed.
+- Test APK from V2 GitHub Actions `IMG-LIVE-Studio-V2-debug-apk`, run `39958190804`, artifact ID `12502939151`.
+- Physical Android YouTube login/session/live stream quality **NOT yet verified**; backend OAuth limited testing window expired, no Cloudflare prod setting changed.
+- PR #12 stays draft/unmerged, so no production update until user's review and backend/live tests.
