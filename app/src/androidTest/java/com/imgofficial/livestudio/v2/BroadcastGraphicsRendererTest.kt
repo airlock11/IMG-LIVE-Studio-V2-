@@ -121,6 +121,44 @@ class BroadcastGraphicsRendererTest {
    }finally{twentyFour.recycle();fourteen.recycle()}
   }
  }
+ @Test fun threeDigitScoreRendersInAllTwelveNativeStyles(){
+  val high=sample.copy(homeScore=100,awayScore=999)
+  val low=sample.copy(homeScore=0,awayScore=9)
+  for(i in 0..11){
+   val a=V2BroadcastGraphicsRenderer.render(low,1f,null,i,null,null)
+   val b=V2BroadcastGraphicsRenderer.render(high,1f,null,i,null,null)
+   try{
+    var changes=0
+    for(y in 0 until a.height step 2)
+     for(x in 0 until a.width step 2)
+      if(a.getPixel(x,y)!=b.getPixel(x,y))changes++
+    assertTrue("Both 100 and 999 must paint inside style $i",changes>10)
+   }finally{a.recycle();b.recycle()}
+  }
+ }
+ @Test fun threeDigitScoresCannotOverflowExistingReferenceScoreWindows(){
+  // These are the original image score boxes; do not resize or move them.
+  val boxes=mapOf(
+   0 to intArrayOf(252,17,333,98),
+   3 to intArrayOf(335,37,437,105),
+   9 to intArrayOf(49,181,187,274)
+  )
+  for((style,box) in boxes){
+   val baseline=V2BroadcastGraphicsRenderer.render(sample.copy(homeScore=0),1f,null,style,null,null)
+   val triple=V2BroadcastGraphicsRenderer.render(sample.copy(homeScore=999),1f,null,style,null,null)
+   try{
+    var changes=0
+    for(y in 0 until baseline.height)
+     for(x in 0 until baseline.width){
+      if(baseline.getPixel(x,y)==triple.getPixel(x,y))continue
+      changes++
+      assertTrue("Score overflow at $x,$y in style $style",
+       x>=box[0]&&x<box[2]&&y>=box[1]&&y<box[3])
+     }
+    assertTrue("Three-digit score visible in style $style",changes>15)
+   }finally{baseline.recycle();triple.recycle()}
+  }
+ }
  @Test fun invisibleGraphicHasTransparentPixels(){
   for(i in intArrayOf(0,1,3,8,9,11)){
    val bmp=V2BroadcastGraphicsRenderer.render(sample,0f,null,i,null,null)
