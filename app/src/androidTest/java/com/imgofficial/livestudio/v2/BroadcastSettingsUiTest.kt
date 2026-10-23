@@ -101,7 +101,12 @@ class BroadcastSettingsUiTest {
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
     "(function(){const p=document.querySelector('.img-wizard-scroll'),c=document.querySelector('[data-img-scoreboard-settings]');if(!p||!c)return false;p.scrollTop=c.offsetTop+90;return true})()"))
    SystemClock.sleep(700)
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
+   assertEquals("Sticky preview must preserve native 16:9 space","true",js(activity,web,
+    "(function(){const c=document.querySelector('.img-wizard-sticky-preview canvas');return !!c&&c.width===1280&&c.height===720})()"))
    capture(activity,2,"scoreboard")
+   js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&e.hidden})()")
 
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
