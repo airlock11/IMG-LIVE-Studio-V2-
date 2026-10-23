@@ -96,11 +96,37 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var connectedAtLeastOnce=false
  private var recoveryQueued=false
  // Prefer sustainable phone temperature over maximum quality.
- // Hardware H.264, 30 FPS, adaptive bitrate and sensible capture resolution.
- private var videoBitrate=1250000
- private val minBitrate=450000
- private val maxBitrate=1250000
- private var thermalBitrateCap=1250000
+ // Hardware H.264 with the selected resolution/FPS and adaptive bitrate.
+ private var videoWidth=1280
+  private var videoHeight=720
+  private var videoFps=30
+  private var videoBitrate=4000000
+  private var minBitrate=1600000
+  private var maxBitrate=4000000
+  private var thermalBitrateCap=4000000
+  /** Select the actual H.264 capture/encoder profile before preparing the camera. */
+  fun configureVideoProfile(resolution:Int,fps:Int):Boolean {
+   if(resolution !in listOf(720,1080)||fps !in listOf(30,60))return false
+   if(running||connecting||stream?.isStreaming==true)return false
+   if(stream!=null){
+    try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
+    try{stream?.release()}catch(_:Exception){}
+    stream=null;scoreFilter=null;latestGraphics=null;lastScorecardImageState=null
+   }
+   videoWidth=if(resolution==1080)1920 else 1280
+   videoHeight=resolution
+   videoFps=fps
+   maxBitrate=when {
+    resolution==1080&&fps==60->12000000
+    resolution==1080->8000000
+    fps==60->5500000
+    else->4000000
+   }
+   minBitrate=(maxBitrate*0.40f).toInt()
+   videoBitrate=maxBitrate
+   thermalBitrateCap=maxBitrate
+   return true
+  }
  private var thermalSeverity=0
  private var thermalMonitorRegistered=false
  private val thermalListener=if(android.os.Build.VERSION.SDK_INT>=29)
@@ -116,8 +142,8 @@ class V2BroadcastService:Service(),ConnectChecker {
    return
   }
   thermalBitrateCap=when{
-   android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_SEVERE->550000
-   android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_MODERATE->800000
+   android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_SEVERE->(maxBitrate*0.45f).toInt()
+    android.os.Build.VERSION.SDK_INT>=29 && state>=PowerManager.THERMAL_STATUS_MODERATE->(maxBitrate*0.7f).toInt()
    else->maxBitrate
   }
   if(videoBitrate>thermalBitrateCap){
@@ -283,7 +309,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    val engine=GenericStream(this,this)
    // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
    // Streetball portrait uses a future separate mode/profile.
-   if(!engine.prepareVideo(960,540,videoBitrate,30,2,0)||
+   if(!engine.prepareVideo(videoWidth,videoHeight,videoBitrate,videoFps,2,0)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     notifyState("This phone cannot prepare the video/audio codec.")
@@ -295,7 +321,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     stream=engine
     applyFraming()
     applyScorecard()
-    notifyState("Camera and microphone ready • landscape 16:9.")
+    notifyState("Camera and microphone ready • "+videoWidth+"×"+videoHeight+" / "+videoFps+" FPS")
     true
    }
   }catch(_:Exception){notifyState("Camera preparation failed on this device.");false}
@@ -433,7 +459,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
   val size=graphicsSize/60f
   var pw=(if(compact)31f else 84f)*size
-  var ph=pw*(960f/540f)*
+  var ph=pw*(videoWidth.toFloat()/videoHeight.toFloat())*
    V2BroadcastGraphicsRenderer.height(graphicsStyle)/
    V2BroadcastGraphicsRenderer.width(graphicsStyle)
   val factor=minOf(1f,85f/ph,95f/pw)
