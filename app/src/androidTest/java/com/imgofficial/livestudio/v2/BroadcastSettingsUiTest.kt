@@ -68,7 +68,13 @@ class BroadcastSettingsUiTest {
     const root=document.querySelector('.headerless-setup-app');
     const c=root?.querySelector('.preview-wrap .camera');
     const wrap=root?.querySelector('.preview-wrap');
+    const primary=root?.querySelector('button[data-action="start-broadcast"]');
+    const actionRect=primary?.getBoundingClientRect();
     return JSON.stringify({
+     startButtonVisible:!!actionRect&&actionRect.width>=100&&actionRect.height>=36&&
+      actionRect.top>=0&&actionRect.bottom<=window.innerHeight,
+     startButtonBottom:actionRect?.bottom||0,
+     viewportHeight:window.innerHeight,
      cameraHeight:c?.getBoundingClientRect().height||0,
      wrapHeight:wrap?.getBoundingClientRect().height||0,
      cameraDisplay:c?getComputedStyle(c).display:'missing',
@@ -84,6 +90,7 @@ class BroadcastSettingsUiTest {
    val json=org.json.JSONObject(org.json.JSONTokener(metric).nextValue().toString())
    assertTrue("Camera viewport collapsed: "+metric,json.optDouble("cameraHeight")>=120.0)
    assertTrue("Preview wrapper collapsed: "+metric,json.optDouble("wrapHeight")>=120.0)
+   assertTrue("Start/Record button must stay on screen: "+metric,json.optBoolean("startButtonVisible"))
    assertEquals("none of the old Position buttons",false,json.optBoolean("hasPositionControl"))
    assertEquals("no old X/Y offset sliders",false,json.optBoolean("hasXYControl"))
    assertEquals("no separate width/height knobs",false,json.optBoolean("hasWidthHeight"))
