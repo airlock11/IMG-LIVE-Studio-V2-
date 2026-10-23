@@ -2219,3 +2219,8 @@ body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:c
 .img-wizard-footer>.solid-btn{width:100%}
 .img-wizard-card .helper{display:none}
 .img-wizard-scroll{padding-top:17px}
+
+/* Keep normal setup panels editorially quiet; runtime errors remain visible. */
+.img-wizard-page .img-wizard-sport small,
+.img-wizard-page .dropdown-body>.hint,
+.img-wizard-page .sponsor-list .hint{display:none!important}
