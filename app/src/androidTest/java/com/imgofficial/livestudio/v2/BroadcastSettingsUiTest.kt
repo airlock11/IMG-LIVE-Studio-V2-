@@ -140,6 +140,43 @@ class BroadcastSettingsUiTest {
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&e.hidden})()")
 
+   // Issue 1: selecting another original on-air graphic never scrolls the pane.
+   assertEquals("Choosing a scoreboard must preserve exact scrolling","true",js(activity,web,
+    """(function(){
+      const p=document.querySelector('.img-wizard-scroll');
+      const library=document.querySelector('.graphics-library');
+      if(!p||!library)return false;
+      p.scrollTop=Math.min(300,p.scrollHeight-p.clientHeight);
+      const before=p.scrollTop;
+      const selected=library.querySelector('[data-set="overlay:courtside-a"]');
+      if(!selected)return false;
+      selected.click();
+      return p.scrollTop===before&&selected.classList.contains('active')
+       &&document.querySelector('.img-wizard-page')!==null;
+     })()"""))
+   // Issue 2: both dragging and releasing the Size slider avoid DOM rebuild.
+   assertEquals("Scoreboard slider input and change must preserve scroll","true",js(activity,web,
+    """(function(){
+      const p=document.querySelector('.img-wizard-scroll');
+      const slider=document.querySelector('[data-score-range="size"]');
+      if(!p||!slider)return false;
+      p.scrollTop=Math.min(300,p.scrollHeight-p.clientHeight);
+      const before=p.scrollTop,original=slider;
+      slider.value='75';
+      slider.dispatchEvent(new Event('input',{bubbles:true}));
+      slider.dispatchEvent(new Event('change',{bubbles:true}));
+      return p.scrollTop===before&&document.querySelector('[data-score-range="size"]')===original
+       &&document.querySelector('[data-score-range-output="size"]')?.textContent==='75%';
+     })()"""))
+   assertEquals("Scoreboard frame must have no dark side fill","true",js(activity,web,
+    """(function(){
+      const a=document.querySelector('.img-wizard-score-origin'),c=a?.querySelector('canvas');
+      if(!a||!c)return false;
+      const back=getComputedStyle(a).backgroundColor;
+      return (back==='rgba(0, 0, 0, 0)'||back==='transparent')&&c.width===1280&&c.height===720;
+    })()"""))
+
+
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
