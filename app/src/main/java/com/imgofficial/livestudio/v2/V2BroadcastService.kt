@@ -962,6 +962,9 @@ class V2BroadcastService:Service(),ConnectChecker {
   },delay)
  }
  fun stopBroadcast(){
+  // Android may call both explicit Stop and onDestroy during a fast restart.
+  // Never tear down a camera, recorder or microphone twice.
+  if(ended&&stream==null&&!foreground&&currentRecordFile==null)return
   generation++
   connecting=false;running=false;ended=true
   ingestDestination=null
