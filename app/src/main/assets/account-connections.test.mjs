@@ -390,17 +390,17 @@ test('phone recheck: Step 2 slider travels under the same sticky scoreboard with
 test('Step 4 provider panels stay independent of connection dropdown collapse',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
- const yt=wizard.slice(wizard.indexOf('const youtubeSettings='),wizard.indexOf('const facebookSettings='));
- const fb=wizard.slice(wizard.indexOf('const facebookSettings='),wizard.indexOf('const destinationContent='));
- assert.ok(yt.includes('ytConnected?'),'Connected YouTube keeps settings visible');
+ const yt=wizard.slice(wizard.indexOf('  (ytConnected?'),wizard.indexOf('  (fbConnected?'));
+ const fb=wizard.slice(wizard.indexOf('  (fbConnected?'),wizard.indexOf('  card(String(2+Number'));
+ assert.ok(yt.startsWith('  (ytConnected?'),'Connected YouTube keeps settings visible');
  assert.ok(!yt.includes('youtubeExpanded'),'YouTube settings cannot depend on dropdown expansion');
  assert.ok(yt.includes('img-wizard-provider-title')&&yt.includes('YouTube</span>'));
  assert.ok(yt.includes('data-youtube-audience'));
- assert.ok(fb.includes('fbConnected?'),'Facebook settings use own connected-provider card');
+ assert.ok(fb.startsWith('  (fbConnected?'),'Facebook settings use own connected-provider card');
  assert.ok(!fb.includes('fbExpanded'),'Facebook settings cannot depend on dropdown expansion');
  assert.ok(fb.includes('Facebook</span>'));
  assert.ok(fb.includes('facebookLiveTitle')&&fb.includes('facebookLiveDescription'));
- assert.ok(wizard.includes('youtubeSettings+facebookSettings+'),'Facebook settings follow YouTube');
+ assert.ok(wizard.indexOf('  (ytConnected?')<wizard.indexOf('  (fbConnected?'),'Facebook settings follow YouTube');
  assert.ok(!wizard.includes("card('2','Stream Details'"),'Generic heading must be removed');
 });
 test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and remove',async()=>{
