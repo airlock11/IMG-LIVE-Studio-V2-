@@ -133,8 +133,8 @@ class BroadcastSettingsUiTest {
      })()""")
     throw AssertionError("Original in-place sticky preview: "+debug,ex)
    }
-   assertEquals("Exactly one physical scoreboard preview","1",js(activity,web,
-    "String(document.querySelectorAll('canvas[data-setup-scoreboard]').length)"))
+   assertEquals("Exactly one physical scoreboard preview","true",js(activity,web,
+    "document.querySelectorAll('canvas[data-setup-scoreboard]').length===1"))
    assertEquals("Native 16:9 bitmap stays in original Scoreboard card","true",js(activity,web,
     "(function(){const c=document.querySelector('[data-img-scoreboard-settings] .img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
    assertEquals("No duplicate preview container","false",js(activity,web,
