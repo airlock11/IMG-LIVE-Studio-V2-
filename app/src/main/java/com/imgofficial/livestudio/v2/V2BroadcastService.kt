@@ -1083,6 +1083,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   },delay)
  }
  fun stopBroadcast(){
+  val wasOffline=offlineRecording
   ui.removeCallbacks(sponsorAdvance)
   sponsorShowing=false;transparentSponsor()
   offlineRecording=false;offlinePaused=false
@@ -1106,7 +1107,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   lastScoreAlpha=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
-  notifyState(if(saveLocalCopy&&ingestDestination==null)"Recording ended; saved to phone when MP4 completes." else "Upload stopped. Your YouTube account remains connected.")
+  notifyState(if(wasOffline)"Recording ended; MP4 is finalizing on this device." else "Upload stopped. Your YouTube account remains connected.")
   if(foreground){
    stopForeground(STOP_FOREGROUND_REMOVE)
    foreground=false
