@@ -109,13 +109,15 @@ class BroadcastGraphicsRendererTest {
    val fourteen=V2BroadcastGraphicsRenderer.render(
     sample.copy(shotClock=14),1f,null,i,null,null)
    try{
-    var changed=0
-    for(x in 0 until twentyFour.width step 3){
-     for(y in 0 until twentyFour.height step 3){
-      if(twentyFour.getPixel(x,y)!=fourteen.getPixel(x,y))changed++
-     }
-    }
-    assertTrue("Shot clock text must track live value, style $i",changed>3)
+    // Tiny text in the corner styles can fall between grid samples;
+    // compare all pixels as contiguous arrays instead of sampling every 3px.
+    val n=twentyFour.width*twentyFour.height
+    val a=IntArray(n)
+    val b=IntArray(n)
+    twentyFour.getPixels(a,0,twentyFour.width,0,0,twentyFour.width,twentyFour.height)
+    fourteen.getPixels(b,0,fourteen.width,0,0,fourteen.width,fourteen.height)
+    val changed=a.indices.count{a[it]!=b[it]}
+    assertTrue("Shot clock text must track live value, style $i",changed>0)
    }finally{twentyFour.recycle();fourteen.recycle()}
   }
  }
