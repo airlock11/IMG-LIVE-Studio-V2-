@@ -406,6 +406,15 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
   panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
  }
+ private fun resumeFromTimeout(){
+  timeoutActive=false
+  broadcast?.showSponsorSlides(false)
+  gameRunning=gameWasRunningBeforeTimeout
+  lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+  gameWasRunningBeforeTimeout=false
+  updateGameClock()
+  timeoutPreview?.dismiss()
+ }
  private fun showTimeoutPreview(anchor:View){
   timeoutPreview?.dismiss()
   val content=LinearLayout(this).apply{
@@ -413,7 +422,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.rgb(17,30,27),13)
    setPadding(dp(12),dp(10),dp(12),dp(10))
   }
-  content.addView(smallLabel("TIMEOUT"),LinearLayout.LayoutParams(-1,dp(24)))
+  content.addView(smallLabel("TIMEOUT · GAME CLOCK PAUSED"),LinearLayout.LayoutParams(-1,dp(24)))
   content.addView(iconButton(darkButton("Sponsor slideshow preview"){
    timeoutPreview?.dismiss()
    val (dialog,panel)=customSheet("SPONSOR SLIDESHOW")
@@ -449,13 +458,33 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    panel.addView(darkButton("CLOSE"){dialog.dismiss()},
     LinearLayout.LayoutParams(-1,dp(42)).apply{topMargin=dp(9)})
   },"play"),LinearLayout.LayoutParams(-1,dp(45)))
-  val pop=android.widget.PopupWindow(content,dp(285),dp(92),true).apply{
+  content.addView(greenButton("RESUME GAME"){resumeFromTimeout()},
+   LinearLayout.LayoutParams(-1,dp(40)).apply{topMargin=dp(7)})
+  val pop=android.widget.PopupWindow(content,dp(285),dp(145),true).apply{
    setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
    isOutsideTouchable=true
    elevation=dp(12).toFloat()
   }
   timeoutPreview=pop
-  pop.showAsDropDown(anchor,0,-dp(92)-anchor.height-dp(9),Gravity.CENTER_HORIZONTAL)
+  pop.showAsDropDown(anchor,0,-dp(145)-anchor.height-dp(9),Gravity.CENTER_HORIZONTAL)
+ }
+ private fun confirmStopRecording(){
+  val (dialog,panel)=customSheet("STOP RECORDING?")
+  panel.addView(text("Resume keeps your current local recording running. End finalizes and saves it on this phone.",12f))
+  val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  actions.addView(greenButton("RESUME"){dialog.dismiss()},
+   LinearLayout.LayoutParams(0,dp(50),1f))
+  actions.addView(dangerButton("END"){
+   dialog.dismiss()
+   if(broadcast?.isOfflineRecording()==true){
+    broadcast?.stopBroadcast()
+    setResult(Activity.RESULT_OK,Intent()
+     .putExtra("img_native_stream_ended",true)
+     .putExtra("img_local_recording_requested",true))
+    finish()
+   }else refresh()
+  },LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
+  panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})
  }
  private fun confirmStopUpload(){
   val (dialog,panel)=customSheet("END STREAM?")
@@ -631,6 +660,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   clockMain.addView(clockDisplay,LinearLayout.LayoutParams(0,-1,1f))
   clockToggleButton=greenButton("START"){
+   if(timeoutActive)return@greenButton
    gameRunning=!gameRunning
    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
    updateGameClock()
@@ -786,8 +816,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   footer.addView(status,LinearLayout.LayoutParams(-1,dp(16)))
   val actions=horizontal()
-  start=greenButton("GO LIVE"){
+  start=greenButton(if(offlineMode)"RECORD" else "GO LIVE"){
    val service=broadcast
+   if(offlineMode){
+    if(service?.isOfflineRecording()==true){confirmStopRecording();return@greenButton}
+    if(!checkPermissions()||!videoProfileReady){refresh();return@greenButton}
+    if(service==null)status.text="Camera service is not ready."
+    else if(!service.activateOfflineForeground())status.text="Unable to start offline camera service."
+    else if(!service.startOfflineRecording())status.text="Unable to record local MP4 video."
+    refresh()
+    return@greenButton
+   }
    if(service?.isActive()==true){confirmStopUpload();return@greenButton}
    if(!checkPermissions())return@greenButton
    if(!draftReady||!videoProfileReady){refresh();return@greenButton}
@@ -901,7 +940,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val liveNow=service?.isActive()==true
   val starting=service?.isStarting()==true
   start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true&&!starting
-  val label=when{liveNow->"STOP STREAMING";starting->"STARTING STREAM…";else->"GO LIVE"}
+  val label=if(offlineMode){
+   if(service?.isOfflineRecording()==true)"STOP" else "RECORD"
+  }else when{liveNow->"STOP STREAMING";starting->"STARTING STREAM…";else->"GO LIVE"}
   if(start.text.toString()!=label){
    start.text=label
    if(liveNow){
@@ -913,16 +954,19 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     start.background=touchSurface(Color.rgb(30,220,130),11)
     start.setTextColor(Color.rgb(7,36,27))
     if(starting)start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
-    else iconButton(start,"live",true)
+    else if(!offlineMode)iconButton(start,"live",true)
    }
   }
   if(service!=null) {
    status.text=when{
     !draftReady->"This YouTube event has ended. Create a new broadcast from IMG setup."
     !videoProfileReady->"Selected video quality is unavailable. Return to setup and choose a supported profile."
-    else->service.getStatus()+" • "+service.connectionSummary()
+    else->if(offlineMode)service.getStatus() else service.getStatus()+" • "+service.connectionSummary()
    }
    refreshScoreboard()
+   if(::graphicsPreview.isInitialized){
+    graphicsPreview.visibility=if(service.isSponsorSlidesVisible())View.INVISIBLE else View.VISIBLE
+   }
   }
  }
  override fun onBroadcastStatus(status:String,active:Boolean,connecting:Boolean,
