@@ -84,6 +84,36 @@ class MainActivity : Activity() {
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
   }catch(_:Exception){null}
  }
+ // Probe real AVC encoder profiles on the Android device. Results are
+ // advisory until camera permission is granted; native prepareCamera also
+ // enforces capture/encoder support and never silently changes resolution.
+ private fun reportVideoCapabilities(){
+  Thread {
+   val supported=JSONArray()
+   try{
+    val avc=android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+     .codecInfos.filter{it.isEncoder&&it.supportedTypes.any{type->type.equals("video/avc",true)}}
+    for(height in listOf(720,1080))for(fps in listOf(30,60)){
+     val width=height*16/9
+     val ok=avc.any{codec->
+      try{codec.getCapabilitiesForType("video/avc").videoCapabilities
+       .areSizeAndRateSupported(width,height,fps.toDouble())
+      }catch(_:Exception){false}
+     }
+     if(ok)supported.put(height.toString()+"p:"+fps)
+    }
+   }catch(_:Exception){
+    // Unknown capability is not proof a profile is unsupported; the encoder
+    // performs the final check when starting the actual camera.
+    return@Thread
+   }
+   val detail=JSONObject().put("supported",supported).toString()
+   runOnUiThread {
+    if(!isFinishing&&::browser.isInitialized)browser.evaluateJavascript(
+     "window.dispatchEvent(new CustomEvent('img-native-video-capabilities',{detail:"+detail+"}));",null)
+   }
+  }.start()
+ }
  private fun nativeGraphicFrame(encoded:String){
   if(encoded.length !in 3..140000)return
   val epoch=++frameRequestEpoch
@@ -261,6 +291,8 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action=="img-video-capabilities"){
+        reportVideoCapabilities()
        } else if(action=="native-graphics-gallery"){
         // Preview generation is on demand only, not during app launch or stream.
         runOnUiThread { generateGraphicsGallery() }
