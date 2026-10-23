@@ -35,6 +35,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var autoLaunchAllowed=false
  private val offlineMode by lazy {intent.getBooleanExtra("img_offline_recording",false)}
  private var timeoutActive=false
+ private var timeoutSlideshowEnabled=false
+ private var gameWasRunningBeforeTimeout=false
  private var draftReady=true
  private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
@@ -318,7 +320,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
   if(::clockToggleButton.isInitialized){
-   clockToggleButton.text=if(gameRunning)"PAUSE" else "START"
+   clockToggleButton.text=if(timeoutActive)"PAUSED" else if(gameRunning)"PAUSE" else "START"
+   clockToggleButton.isEnabled=!timeoutActive
    if(displayedClockPlaying!=gameRunning){
     iconButton(clockToggleButton,if(gameRunning)"pause" else "play",true)
     displayedClockPlaying=gameRunning
@@ -404,14 +407,22 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
  }
  private fun setTimeoutMode(enabled:Boolean){
+  if(enabled==timeoutActive)return
   timeoutActive=enabled
   if(enabled){
-   // Match the operator's expectation: the game AND shot clocks stop, while
-   // H.264/AAC camera upload or local recording remain uninterrupted.
+   // Both game and shot clocks count down only while gameRunning is true.
+   // Keep video upload and local MP4 recording continuous through timeout.
+   gameWasRunningBeforeTimeout=gameRunning
    gameRunning=false;lastTick=0L
-   broadcast?.setSponsorSlideshow(true)
-  }else{
+   timeoutSlideshowEnabled=false
    broadcast?.setSponsorSlideshow(false)
+  }else{
+   // A timeout does not implicitly start a previously stopped clock.
+   timeoutSlideshowEnabled=false
+   broadcast?.setSponsorSlideshow(false)
+   gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0
+   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+   gameWasRunningBeforeTimeout=false
   }
   updateGameClock()
  }
@@ -423,21 +434,41 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.rgb(17,30,27),13)
    setPadding(dp(12),dp(10),dp(12),dp(10))
   }
-  content.addView(smallLabel("TIMEOUT  •  CLOCK PAUSED"),LinearLayout.LayoutParams(-1,dp(26)))
-  content.addView(iconButton(darkButton("NEXT SPONSOR"){
+  content.addView(smallLabel("TIMEOUT  •  CLOCKS PAUSED"),LinearLayout.LayoutParams(-1,dp(28)))
+  // Slideshow has no separate preview box: the native GL compositor
+  // displays sponsors directly over the camera in the actual on-air video.
+  val nextSponsor=iconButton(darkButton("NEXT SPONSOR"){
    broadcast?.nextSponsorSlide()
-  },"play"),LinearLayout.LayoutParams(-1,dp(40)))
+  },"play").apply{isEnabled=timeoutSlideshowEnabled}
+  val showRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+  }
+  showRow.addView(ink("Show Slideshow",14f),LinearLayout.LayoutParams(0,dp(45),1f))
+  val toggle=android.widget.Switch(this).apply{
+   isChecked=timeoutSlideshowEnabled
+   isEnabled=broadcast?.hasSponsorSlides()==true
+   thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(225,245,233))
+   trackTintList=android.content.res.ColorStateList(
+    arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
+    intArrayOf(Color.rgb(35,170,112),Color.rgb(74,91,80)))
+   setOnCheckedChangeListener{_,checked->
+    timeoutSlideshowEnabled=checked&&broadcast?.hasSponsorSlides()==true
+    broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)
+    nextSponsor.isEnabled=timeoutSlideshowEnabled
+   }
+  }
+  showRow.addView(toggle,LinearLayout.LayoutParams(dp(56),dp(45)))
+  content.addView(showRow,LinearLayout.LayoutParams(-1,dp(48)))
+  if(broadcast?.hasSponsorSlides()==true){
+   content.addView(nextSponsor,LinearLayout.LayoutParams(-1,dp(40)))
+  }else{
+   content.addView(smallLabel("Add sponsors in Step 3 to enable the slideshow."),
+    LinearLayout.LayoutParams(-1,dp(34)))
+  }
   content.addView(iconButton(greenButton("RESUME GAME"){
    timeoutPreview?.dismiss();timeoutPreview=null
    setTimeoutMode(false)
-   // Resuming the GAME clock is deliberate after Timeout.
-   gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
-   updateGameClock()
   },"play"),LinearLayout.LayoutParams(-1,dp(40)).apply{topMargin=dp(6)})
-  if(broadcast?.hasSponsorSlides()!=true){
-   content.addView(smallLabel("No sponsor slides added in Step 3."),
-    LinearLayout.LayoutParams(-1,dp(24)))
-  }
   val popup=android.widget.PopupWindow(content,dp(285),-2,true).apply{
    setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
    isOutsideTouchable=true
@@ -654,9 +685,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   clockMain.addView(clockDisplay,LinearLayout.LayoutParams(0,-1,1f))
   clockToggleButton=greenButton("START"){
-   gameRunning=!gameRunning
-   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
-   updateGameClock()
+   if(!timeoutActive){
+    gameRunning=!gameRunning
+    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+    updateGameClock()
+   }
   }.apply{textSize=11f}
   clockMain.addView(clockToggleButton,LinearLayout.LayoutParams(dp(76),dp(38)))
   clockCard.addView(clockMain,LinearLayout.LayoutParams(-1,0,1f))
