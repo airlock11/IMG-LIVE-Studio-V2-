@@ -448,6 +448,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  private fun confirmStopOfflineRecording(){
   if(broadcast?.isOfflineRecording()!=true)return
+  val wasClockRunning=gameRunning
+  gameRunning=false;lastTick=0L;updateGameClock()
   broadcast?.pauseOfflineRecording()
   refresh()
   val (dialog,panel)=customSheet("STOP RECORDING?")
@@ -455,7 +457,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    LinearLayout.LayoutParams(-1,dp(48)))
   val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   buttons.addView(greenButton("RESUME"){
-   if(broadcast?.resumeOfflineRecording()==true)dialog.dismiss()
+   if(broadcast?.resumeOfflineRecording()==true){
+    dialog.dismiss()
+    if(wasClockRunning&&!timeoutActive){
+     gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
+    }
+    updateGameClock()
+   }
    refresh()
   },LinearLayout.LayoutParams(0,dp(49),1f))
   buttons.addView(dangerButton("END"){
@@ -468,8 +476,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   },LinearLayout.LayoutParams(0,dp(49),1f).apply{leftMargin=dp(10)})
   panel.addView(buttons)
   dialog.setOnCancelListener{
-   broadcast?.resumeOfflineRecording()
-   refresh()
+   if(broadcast?.resumeOfflineRecording()==true&&wasClockRunning&&!timeoutActive){
+    gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
+   }
+   updateGameClock();refresh()
   }
  }
  private fun confirmStopUpload(){
