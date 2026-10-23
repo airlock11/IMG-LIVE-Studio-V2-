@@ -412,16 +412,13 @@ internal object V2BroadcastGraphicsRenderer {
      val nx=if(i==0){if(logo==null)159f else 205f}
       else {if(logo==null)794f else 757f}
      label(c,p,code,nx,91f,50f,WHITE,Paint.Align.CENTER,159f)
-     val scoreX=if(i==0)335f else 578f
+     // Symmetrical score windows clear the existing raised center dial
+     // (x=404..556) by 6 px on either side. Keep its exact style and layers.
+     val scoreX=if(i==0)296f else 562f
      shape(c,p,scoreX,37f,102f,68f,
       if(i==0)0xFF214A70.toInt() else 0xFF795029.toInt())
-     // Arena Glass' raised center clock occupies x=409..551. Keep the
-     // left number entirely left of the clock without moving the reference
-     // plate, rim or central time dial. Three digits remain fitted.
-     val readableW=if(i==0)70f else 102f
-     val readableCenter=if(i==0)scoreX+35f else scoreX+51f
-     scoreText(c,p,points[i],readableCenter,93f,
-      if(i==0)54f else 68f,WHITE,scoreX,37f,readableW,68f)
+     scoreText(c,p,points[i],scoreX+51f,93f,68f,
+      WHITE,scoreX,37f,102f,68f)
      pointsFlash(c,p,a,i,scoreX,38f,102f,67f,accent,id)
      if(a?.team==i){
       val wipeX=if(i==0)110f else 690f
