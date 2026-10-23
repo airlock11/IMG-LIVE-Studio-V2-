@@ -209,10 +209,11 @@ function youtubeDestination(){
  const logo='<svg class="img-wizard-platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="5" fill="#FF0033"/><path d="M10 8.6L16 12l-6 3.4Z" fill="#fff"/></svg>';
  return '<div class="img-wizard-platform" id="youtube-destination">'+
  '<button type="button" class="img-wizard-platform-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'">'+
- logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(data.options.yt?'active':'')+'" aria-hidden="true"></span></button>'+
+ logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(connected?'active':'')+'" aria-hidden="true"></span></button>'+
  '<div class="img-wizard-platform-body" '+(youtubeExpanded?'':'hidden')+'>'+
  '<button type="button" class="'+(connected?'outline-btn':'solid-btn')+'" data-action="'+(connected?'youtube-disconnect':'youtube-connect')+'" '+(loading?'disabled':'')+'>'+
- (connected?'Disconnect':loading?'Connecting…':'Connect')+'</button></div></div>';
+ (connected?'Disconnect':loading?'Connecting…':state==='authorization-pending'?'Verify connection':'Connect')+'</button>'+ 
+  (state==='authorization-pending'?'<p class="img-wizard-platform-pending" role="status">Finish Google sign-in, then tap Verify connection.</p>':'')+'</div></div>';
 }
 function youtubeTitle(){
  const requested=String(data.options.broadcast.liveTitle||'').trim();
@@ -237,7 +238,7 @@ async function startPrivateYouTubeFromStudio(){
   if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
   // GO LIVE NOW deliberately creates a new private event configured to
   // auto-start once Android begins RTMPS. No manually scheduled draft choice.
-  if(!youtubeAudience)throw Error('Choose Made for kids or Not made for kids in Step 4, Stream Details before going live.');
+  if(!youtubeAudience)throw Error('Choose the YouTube audience classification before going live.');
   if(!check.canCreatePrivateDraft)
    throw Error('YouTube private live creation is not enabled on the IMG server.');
   const title=youtubeTitle();
@@ -307,7 +308,7 @@ function facebookDestination(){
  const logo='<svg class="img-wizard-platform-logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1877F2"/><path d="M13.6 22.9v-9.3h3.1l.5-3.6h-3.6V7.7c0-1 .3-1.7 1.8-1.7h1.9V2.8a24 24 0 0 0-2.8-.2c-2.8 0-4.7 1.7-4.7 4.8V10H6.7v3.6h3.1v9.1Z" fill="#fff"/></svg>';
  return '<div class="img-wizard-platform facebook-destination">'+
  '<button type="button" class="img-wizard-platform-trigger" data-action="setup-destination-facebook" aria-expanded="'+fbExpanded+'">'+
- logo+'<strong>Facebook</strong><span class="img-wizard-mini-switch '+(data.options.fb?'active':'')+'" aria-hidden="true"></span></button>'+
+ logo+'<strong>Facebook</strong><span class="img-wizard-mini-switch '+(connected?'active':'')+'" aria-hidden="true"></span></button>'+
  '<div class="img-wizard-platform-body" '+(fbExpanded?'':'hidden')+'>'+
  '<label class="form-group"><span class="small-label">Stream key</span>'+
  '<input class="input" type="password" autocomplete="off" data-facebook-field="streamKey" placeholder="Facebook stream key" value="'+esc(fbFields.streamKey)+'"></label>'+
@@ -598,7 +599,7 @@ function setupWizard(){
    card('2','Stream Details',`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
     <label class="form-group"><span class="small-label">Description</span><textarea class="input" rows="3" data-quick="liveDescription" placeholder="Description">${esc(b.liveDescription||'')}</textarea></label>
     ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
-      <fieldset class="img-wizard-audience"><legend>Audience · Is this video made for kids?</legend><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="no" ${youtubeAudience==='no'?'checked':''}> Not made for kids</label><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="yes" ${youtubeAudience==='yes'?'checked':''}> Made for kids</label></fieldset>\n      <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
+      <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
   card('3','Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
    <div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${fps===v?'active':''}" data-set="fps:${v}" ${ytSelected&&!profileSupported('720p',v)&&!profileSupported('1080p',v)?'disabled':''}>${v} FPS</button>`).join('')}</div></div>
    ${ytSelected&&!profileSupported(quality,fps)?'<p class="img-wizard-quality-warning">Selected quality is unsupported by this phone.</p>':''}</div>`)+
@@ -1308,13 +1309,14 @@ if(name==='youtube-connect'){
   .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
 }
 if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
-if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;return render(true)}
+if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;persist();render(true);return startPrivateYouTubeFromStudio()}
 if(name==='youtube-disconnect'){
  if(!confirm('Disconnect YouTube from IMG LIVE Studio?'))return;
  return window.IMGAccounts?.disconnect('youtube').then(()=>{o.yt=false;persist();render(true)}).catch(e=>toast(e.message))
 }
 if(name.startsWith('destination-')){const p=name.slice(12);if(p==='tiktok')return toast('TikTok broadcasting is not available yet.');if(p==='fb')return; return toast('This platform is unavailable.')}
 if(name==='start-broadcast'){
+ if(o.yt&&!youtubeAudience){dialog={type:'youtube-classification'};return render(true)}
  if(o.yt&&!profileSupported(o.quality,Number(o.fps))){
   return toast('Selected video quality is unsupported by this phone’s H.264 encoder.');
  }
