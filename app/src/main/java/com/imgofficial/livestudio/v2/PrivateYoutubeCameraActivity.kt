@@ -84,6 +84,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val resolution=intent.getIntExtra("img_video_quality",720)
     val fps=intent.getIntExtra("img_video_fps",30)
     broadcast?.configureVideoProfile(resolution,fps)
+    broadcast?.configureLocalRecording(intent.getBooleanExtra("img_record_local",false))
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
     intent.getStringExtra("img_home")?:"HOME",
