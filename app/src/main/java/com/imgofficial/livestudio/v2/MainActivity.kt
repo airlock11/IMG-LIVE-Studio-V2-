@@ -314,12 +314,16 @@ class MainActivity : Activity() {
          }
          if(requestedOrientation!=requested)requestedOrientation=requested
         }
-       } else if (action.startsWith("native-private-video-start:")) {
-        val payload=action.removePrefix("native-private-video-start:")
-        val draftId=payload.substringBefore(':')
-        val encodedGame=payload.substringAfter(':',"")
-        if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
-           encodedGame.length<=100000&&BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+       } else if (action.startsWith("native-private-video-start:")||
+                  action.startsWith("native-offline-video-start:")) {
+        val offlineMode=action.startsWith("native-offline-video-start:")
+        val payload=action.removePrefix(if(offlineMode)
+         "native-offline-video-start:" else "native-private-video-start:")
+        val draftId=if(offlineMode)"" else payload.substringBefore(':')
+        val encodedGame=if(offlineMode)payload else payload.substringAfter(':',"")
+        if((offlineMode||Regex("^[a-f0-9]{32}$").matches(draftId))&&
+           encodedGame.length in 2..100000&&
+           (offlineMode||BuildConfig.OAUTH_BACKEND_URL.isNotBlank())){
          // Safely bounded team names/sport are NON-SECRET game metadata.
          // The Worker still checks private event ownership before RTMPS.
          val game=try{JSONObject(Uri.decode(encodedGame))}catch(_:Exception){JSONObject()}
@@ -330,12 +334,13 @@ class MainActivity : Activity() {
          runOnUiThread {
           startActivityForResult(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
            .putExtra("draftRequestId",draftId)
-           .putExtra("img_autostart",true)
+           .putExtra("img_offline_mode",offlineMode)
+           .putExtra("img_autostart",!offlineMode)
            .putExtra("img_sport",sport)
             .putExtra("img_video_quality",if(game.optString("quality")=="1080p")1080 else 720)
             .putExtra("img_video_fps",if(game.optInt("fps")==60)60 else 30)
             .putExtra("img_shot_visible",game.optBoolean("shotVisible",true))
-            .putExtra("img_record_local",game.optBoolean("recordLocal",false))
+            .putExtra("img_record_local",offlineMode||game.optBoolean("recordLocal",false))
            .putExtra("img_home",team("home"))
            .putExtra("img_away",team("away"))
            .putExtra("img_graphics",game.optString("graphics").take(30))
