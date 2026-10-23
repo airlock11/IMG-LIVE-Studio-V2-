@@ -12,6 +12,7 @@ android {
   applicationId = if (sideBySideTest) "com.imgofficial.livestudio.v2.test" else "com.imgofficial.livestudio.v2"
   minSdk = 26
   targetSdk = 35
+  testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   versionCode = if (sideBySideTest) 10 else 9
   versionName = if (sideBySideTest) "0.9.1-v2-preview-fix" else "0.9.1-v2-preview-fix"
   manifestPlaceholders["imgAppLabel"] = if (sideBySideTest) "IMG LIVE Studio V2 Test" else "IMG LIVE Studio"
@@ -45,4 +46,6 @@ dependencies {
  implementation("androidx.webkit:webkit:1.12.1")
  implementation("androidx.browser:browser:1.8.0")
  implementation("com.github.pedroSG94.RootEncoder:library:2.8.1")
+ androidTestImplementation("androidx.test:runner:1.6.2")
+ androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
