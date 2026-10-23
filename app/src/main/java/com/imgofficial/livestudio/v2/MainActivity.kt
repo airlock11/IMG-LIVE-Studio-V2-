@@ -291,6 +291,11 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action=="img-saved-recordings"){
+        runOnUiThread{publishNativeRecordings()}
+       } else if(action.startsWith("native-open-recording:")){
+        val key=action.removePrefix("native-open-recording:")
+        if(key.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{openSavedRecording(key)}
        } else if(action=="img-video-capabilities"){
         reportVideoCapabilities()
        } else if(action=="native-graphics-gallery"){
@@ -323,7 +328,7 @@ class MainActivity : Activity() {
          }
          val sport=if(game.optString("sport")=="pickleball")"pickleball" else "basketball"
          runOnUiThread {
-          startActivity(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+          startActivityForResult(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
            .putExtra("draftRequestId",draftId)
            .putExtra("img_autostart",true)
            .putExtra("img_sport",sport)
@@ -343,7 +348,12 @@ class MainActivity : Activity() {
            .putExtra("img_graphics_margin",game.optInt("margin",3))
            .putExtra("img_graphics_animated",game.optBoolean("animated",true))
            .putExtra("img_logo_home",game.optString("logoHome").take(35000))
-           .putExtra("img_logo_away",game.optString("logoAway").take(35000)))
+           .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
+            (0 until minOf(12,items.length())).joinToString("\n"){index->
+             items.optString(index).take(55)
+            }
+           }?:""),7206)
          }
         }
        } else if (action.startsWith("native-private-video:")) {
@@ -454,6 +464,41 @@ class MainActivity : Activity() {
   }
  }
 
+ private fun publishNativeRecordings(){
+  if(!::browser.isInitialized||isFinishing)return
+  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
+  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
+  browser.evaluateJavascript(
+   "window.dispatchEvent(new CustomEvent('img-native-recordings',{detail:{clips:"+clips.toString()+"}}));",null)
+ }
+ private fun openSavedRecording(key:String){
+  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
+  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
+  for(index in 0 until clips.length()){
+   val clip=clips.optJSONObject(index)?:continue
+   if(clip.optString("id")!=key)continue
+   val uri=try{Uri.parse(clip.optString("uri"))}catch(_:Exception){return}
+   if(uri.scheme!="content"||uri.authority!="media")return
+   try{
+    startActivity(Intent(Intent.ACTION_VIEW).apply{
+     setDataAndType(uri,"video/mp4")
+     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    })
+   }catch(_:Exception){
+    Toast.makeText(this,"No video player is available for this saved recording.",Toast.LENGTH_LONG).show()
+   }
+   return
+  }
+ }
+ @Deprecated("Deprecated in Java")
+ override fun onActivityResult(requestCode:Int,resultCode:Int,resultData:Intent?){
+  super.onActivityResult(requestCode,resultCode,resultData)
+  if(requestCode==7206&&resultCode==RESULT_OK&&resultData?.getBooleanExtra("img_native_stream_ended",false)==true){
+   if(::browser.isInitialized)browser.evaluateJavascript(
+    "window.dispatchEvent(new Event('img-native-stream-ended'));",null)
+   publishNativeRecordings()
+  }
+ }
  private fun handleNativeAction(action: String) {
     when(action) {
      "camera" -> {
@@ -484,8 +529,10 @@ class MainActivity : Activity() {
  }
  override fun onResume() {
   super.onResume()
-  if(::browser.isInitialized && browser.url?.startsWith("$origin/assets/")==true)
+  if(::browser.isInitialized && browser.url?.startsWith("$origin/assets/")==true){
    browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
+   publishNativeRecordings()
+  }
  }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {
