@@ -292,6 +292,7 @@ export default {async fetch(req,env){
    if(Number(req.headers.get("content-length")||0)>4096)return withCors(json({error:"request_too_large"},413),req);
    const body=await req.json().catch(()=>null);
    const title=typeof body?.title==="string"?body.title.trim():"";
+   const description=typeof body?.description==="string"?body.description.trim():"";
    const startNow=body?.startNow===true;
    // YouTube liveBroadcasts.insert requires scheduledStartTime even for
    // instant broadcasts. The user never schedules this: it begins when the
@@ -302,6 +303,7 @@ export default {async fetch(req,env){
    if(body?.operatorConfirmed!==true||typeof body?.madeForKids!=="boolean"||
       typeof requestId!=="string"||!/^[a-f0-9]{32}$/.test(requestId)||
       title.length<5||title.length>100||/[\u0000-\u001f\u007f]/.test(title)||
+      description.length>1800||/[\u0000-\u001f\u007f]/.test(description)||
       typeof schedule!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(schedule)||
       !Number.isFinite(started)||new Date(started).toISOString()!==schedule||
       (!startNow&&(started<now()+10*60000||started>now()+7*86400000)))
@@ -310,7 +312,7 @@ export default {async fetch(req,env){
    // retry with the same request ID must not look like a conflicting request.
    const inputHash=await digest(JSON.stringify({
     title,...(startNow?{startNow:true}:{scheduledStartTime:schedule}),
-    madeForKids:body.madeForKids
+    madeForKids:body.madeForKids,...(description?{description}:{})
    }));
    // Atomic idempotency claim plus small per-session quota. An unknown result
    // from YouTube cannot be replayed under the same request ID.
@@ -349,7 +351,7 @@ export default {async fetch(req,env){
      method:"POST",redirect:"manual",
      headers:{Authorization:"Bearer "+token.access_token,"Content-Type":"application/json",Accept:"application/json"},
      body:JSON.stringify({
-      snippet:{title,scheduledStartTime:schedule},
+      snippet:{title,scheduledStartTime:schedule,...(description?{description}:{})},
       status:{privacyStatus:"private",selfDeclaredMadeForKids:body.madeForKids},
       contentDetails:{enableAutoStart:startNow,enableAutoStop:startNow}
      })
