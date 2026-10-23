@@ -575,7 +575,7 @@ function setupWizard(){
  const card=(n,title,content)=>`<section class="img-wizard-card" ${step===1&&n==='3'?'data-img-scoreboard-settings="true"':''}><div class="img-wizard-card-head"><span class="img-wizard-number">${n}</span><h2>${title}</h2></div>${content}</section>`;
  const upload=(key,title)=>`<label class="img-wizard-logo-upload">${b[key+'Logo']?`<img src="${esc(b[key+'Logo'])}" alt="${title} logo">`:ic('upload',21)}<span>${b[key+'Logo']?'Change logo':'Add logo'}</span><input type="file" accept="image/*" data-upload="quick-${key}-logo" hidden></label>`;
  const saved=Array.isArray(data.savedTeams)?data.savedTeams.filter(t=>t.sport===activeSport()).slice(0,8):[];
- const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div><button type="button" class="img-wizard-save-team" data-action="save-team-${key}">${ic('check-circle',16)} Save or update team for next matches</button>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
+ const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
  const sportContent=card('1','Choose your sport',`<div class="img-wizard-sports">${SPORTS.map(s=>`<button class="img-wizard-sport ${activeSport()===s.id?'selected':''}" data-action="setup-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="img-wizard-sport-icon">${ic(s.icon,30)}</span><span><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?ic('check-circle',20):ic('chevron',18)}</button>`).join('')}</div>`) +
  (activeSport()==='basketball'?card('2','Game format',`<div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div>`):'');
  const selected=normalizeGraphic(o.overlay);
@@ -607,48 +607,58 @@ function setupWizard(){
   card('4','Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
   <div class="img-wizard-switch-row"><button type="button" class="img-wizard-offline-btn" data-action="setup-record-offline">${ic('video',18)} Offline Recording ${ic('arrow',17)}</button></div>`);
  const content=step===0?sportContent:step===1?teamContent:step===2?sponsorContent:destinationContent;
- return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div>${step===1?`<aside class="img-wizard-sticky-preview" hidden aria-label="Docked original scoreboard preview"></aside>`:''}<main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
+ return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div><main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
 }
 function updateWizardStickyScoreboard(){
  const root=document.querySelector('.img-wizard-page');
  const pane=root?.querySelector('.img-wizard-scroll');
- const dock=root?.querySelector('.img-wizard-sticky-preview');
- const card=root?.querySelector('[data-img-scoreboard-settings]');
- if(!pane||!dock||!card)return;
- // Move one existing scoreboard canvas. Never mount a cloned second preview.
- const preview=root.querySelector('.img-wizard-score-origin');
- if(!preview)return;
- let spacer=card.querySelector('.img-wizard-score-placeholder');
- if(!spacer){
-  spacer=document.createElement('div');
-  spacer.className='img-wizard-score-placeholder';
-  spacer.style.display='none';
-  preview.before(spacer);
+ // The original preview stays inside its ORIGINAL Step 2 Scoreboard card.
+ // No dock, portal, copy, clone, floating second card or replacement canvas.
+ const preview=pane?.querySelector('[data-img-scoreboard-settings] .img-wizard-score-origin');
+ if(!pane||!preview)return;
+ let marker=preview.previousElementSibling;
+ if(!marker?.classList?.contains('img-wizard-score-anchor')){
+  marker=document.createElement('div');
+  marker.className='img-wizard-score-anchor';
+  marker.hidden=true;preview.before(marker);
  }
- const frame=pane.getBoundingClientRect();
- if(preview.parentElement!==dock){
-  const origin=preview.getBoundingClientRect();
-  if(origin.bottom<=frame.top+8){
-   spacer.style.height=Math.ceil(origin.height)+'px';
-   spacer.style.display='block';
-   dock.hidden=false;
-   dock.appendChild(preview);
-   root.classList.add('img-score-docked');
-   window.IMGMedia?.paintSetupScoreboard?.();
-  }
+ const boundary=pane.getBoundingClientRect();
+ const pinned=preview.classList.contains('img-score-pinned');
+ if(!pinned){
+  const box=preview.getBoundingClientRect();
+  if(box.top>=boundary.top+3)return;
+  // Reserve the original slot invisibly; never draw another scoreboard.
+  marker.style.height=Math.ceil(box.height)+'px';
+  marker.hidden=false;
+  marker.style.display='block';
+  preview.style.setProperty('--img-score-top',Math.round(boundary.top)+'px');
+  preview.style.setProperty('--img-score-left',Math.round(box.left)+'px');
+  preview.style.setProperty('--img-score-width',Math.round(box.width)+'px');
+  preview.style.setProperty('--img-score-height',Math.round(box.height)+'px');
+  preview.classList.add('img-score-pinned');
  }else{
-  const origin=spacer.getBoundingClientRect();
-  if(origin.bottom>frame.top+20){
-   spacer.after(preview);
-   spacer.style.display='none';
-   dock.hidden=true;
-   root.classList.remove('img-score-docked');
-   window.IMGMedia?.paintSetupScoreboard?.();
+  const original=marker.getBoundingClientRect();
+  // The SAME original element is put back by lifting the fixed style.
+  if(original.top>=boundary.top+3){
+   preview.classList.remove('img-score-pinned');
+   marker.hidden=true;marker.style.display='none';
+   preview.style.removeProperty('--img-score-top');
+   preview.style.removeProperty('--img-score-left');
+   preview.style.removeProperty('--img-score-width');
+   preview.style.removeProperty('--img-score-height');
+  }else{
+   const pos=marker.getBoundingClientRect();
+   preview.style.setProperty('--img-score-top',Math.round(boundary.top)+'px');
+   preview.style.setProperty('--img-score-left',Math.round(pos.left)+'px');
+   preview.style.setProperty('--img-score-width',Math.round(pos.width)+'px');
   }
  }
 }
+let scoreboardStickyTick=false;
 document.addEventListener('scroll',event=>{
- if(event.target?.classList?.contains('img-wizard-scroll'))updateWizardStickyScoreboard();
+ if(!event.target?.classList?.contains('img-wizard-scroll')||scoreboardStickyTick)return;
+ scoreboardStickyTick=true;
+ requestAnimationFrame(()=>{scoreboardStickyTick=false;updateWizardStickyScoreboard();});
 },true);
 function setupOpts(){const o=data.options,b=o.broadcast;const ev=selectedEvent();const icons=['home','away'];return `<section class="control-section instant-intro"><span class="sport-setup-tag">${ic(activeSport(),15)} ${sportName().toUpperCase()}</span><h3>${ev?'Scheduled game':'Instant broadcast'}</h3><p class="helper">${ev?'Game selected from your schedule. You can adjust the on-air labels below.':'Set up the teams and select where to broadcast.'}</p>${upcoming().length?`<label class="form-group"><span class="small-label">Optional scheduled game</span><select class="input" data-input="selected-event"><option value="">Instant game (no league)</option>${upcoming().map(e=>{const league=data.leagues.find(l=>l.id===e.leagueId);const home=league?.teams.find(t=>t.id===e.home),away=league?.teams.find(t=>t.id===e.away);return `<option value="${e.id}" ${selectedEventId===e.id?'selected':''}>${esc(home?.name)} vs ${esc(away?.name)} · ${datestr(e.date)}</option>`}).join('')}</select></label>`:''}</section>${activeSport()==='basketball'?`<section class="control-section basketball-broadcast-mode"><h3>Basketball broadcast mode</h3><div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div><p class="helper">Streetball uses a custom portrait scoreboard with players on opposite sides.</p></section>`:''}${streetballActive()?streetballSettings():''}${streetballActive()?'':`<section class="control-section setup-teams-editor"><h3>Team names & logos</h3><p class="helper">Both teams are editable even without creating a league.</p>${[0,1].map(i=>{const home=i===0,key=home?'home':'away',name=home?b.homeName:b.awayName,logo=home?b.homeLogo:b.awayLogo;return `<div class="broadcast-team-edit"><div class="setup-team-heading"><span class="small-label">${home?'HOME':'AWAY'} TEAM</span>${logo?`<button class="text-link" data-action="clear-brand-${key}-logo">Remove logo</button>`:''}</div><div class="row" style="gap:12px"><label class="quick-logo-upload" title="Upload ${key} team logo">${logo?`<img alt="${key} logo" src="${esc(logo)}">`:ic('upload',21)}<input type="file" accept="image/*" data-upload="quick-${key}-logo" aria-label="Upload ${key} team logo" hidden></label><label class="grow"><span class="sr-only">${key} team name</span><input class="input" data-quick="${key}Name" maxlength="40" placeholder="${home?'Home':'Away'} team name" value="${esc(name)}"></label></div></div>`}).join('')}</section>` }<section class="control-section broadcast-destinations-section"><h3 class="broadcast-primary-heading">Destinations</h3>${youtubeDestination()}${facebookDestination()}<div class="broadcast-quick-note"></div></section><details class="broadcast-advanced" id="img-production-advanced" ${advancedOpen?'open':''}><summary>${ic('sliders',17)} Advanced</summary><div class="broadcast-advanced-content">${remoteHostPanel()}<section class="control-section"><h3>League branding <span class="subtle-title">optional</span></h3><div class="broadcast-team-edit"><label class="form-group"><span class="small-label">League name (can be left blank)</span><input class="input" data-quick="leagueName" maxlength="55" placeholder="e.g. City Basketball Cup" value="${esc(b.leagueName)}"></label><div class="row" style="gap:12px;align-items:center"><label class="quick-logo-upload" title="Upload league logo">${b.leagueLogo?`<img alt="League logo" src="${esc(b.leagueLogo)}">`:ic('upload',21)}<input type="file" data-upload="quick-league-logo" accept="image/*" aria-label="Upload league logo" hidden></label><div class="grow"><div class="main">League logo</div><p class="helper">Displayed over video only when uploaded.</p></div>${b.leagueLogo?`<button class="text-link" data-action="clear-brand-league-logo">Remove</button>`:''}</div></div><div class="setting-row"><span class="main">Show league name<span class="sub">Turn off for a clean broadcast without a league title</span></span><button class="toggle ${b.showLeagueName?'active':''}" data-action="toggle-league-name" role="switch" aria-checked="${b.showLeagueName}" aria-label="Show league name"></button></div></section>${activeSport()==='pickleball'?`<section class="control-section pickle-rules-setup"><h3>Official Pickleball scoring · 2026</h3><p class="helper">USA Pickleball standard side-out scoring is the default; rally scoring is a provisional 2026 option. Tap the winning side after each rally and the app calculates the scores and serve.</p>
 <div class="pickle-rule-grid">
@@ -1428,6 +1438,7 @@ if(activeSport()==='pickleball'&&target.hasAttribute('data-score')){
 }
 if(target.hasAttribute('data-score')||target.hasAttribute('data-foul')){const raw=target.dataset.score||target.dataset.foul,[i,d]=raw.split(':').map(Number);if(target.hasAttribute('data-score')){scoreFlashTeam=i;scoreFlashAt=Date.now()}pushUndo();const arr=target.hasAttribute('data-score')?data.live.scores:data.live.fouls;arr[i]=Math.max(0,arr[i]+d);persist();return render(true)}
 });
+let scoreboardSizeFrame=0;
 document.addEventListener('input',e=>{const t=e.target;
  if(t.dataset.facebookField==='streamKey'){
   fbFields.streamKey=t.value;
@@ -1458,7 +1469,26 @@ document.addEventListener('input',e=>{const t=e.target;
   document.querySelectorAll('[data-street-vertical-output]').forEach(el=>el.textContent=Math.round(y*100)+'%');
   persist();window.IMGMedia?.paintStreetballPreview?.();return;
  }
-if(t.dataset.scoreRange){const street=streetballActive(),prop=t.dataset.scoreRange==='size'?(street?'streetOverlaySize':'overlaySize'):(street?'streetOverlayOpacity':'overlayOpacity'),v=Math.round(Number(t.value));data.options[prop]=v;persist();document.querySelectorAll('[data-score-range-output="'+t.dataset.scoreRange+'"]').forEach(el=>el.textContent=v+'%');document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--overlay-size':'--overlay-opacity',v/100));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--street-size':'--street-alpha',t.dataset.scoreRange==='size'?Math.max(.32,Math.min(1.45,v/60)):v/100));window.IMGMedia?.paintStreetballPreview?.();window.IMGMedia?.paintBroadcastPreview?.();return}
+if(t.dataset.scoreRange){
+ const street=streetballActive(),isSize=t.dataset.scoreRange==='size';
+ const prop=isSize?(street?'streetOverlaySize':'overlaySize'):(street?'streetOverlayOpacity':'overlayOpacity');
+ const v=Math.round(Number(t.value));data.options[prop]=v;
+ document.querySelectorAll('[data-score-range-output="'+t.dataset.scoreRange+'"]').forEach(el=>el.textContent=v+'%');
+ if(screen==='setup'&&setupStep===1){
+  // One screen-owned bitmap; repaint at most once per animation frame.
+  // Don't force localStorage writes, camera repaints or DOM rebuilds on drag.
+  if(!scoreboardSizeFrame)scoreboardSizeFrame=requestAnimationFrame(()=>{
+   scoreboardSizeFrame=0;window.IMGMedia?.paintSetupScoreboard?.();
+  });
+  return;
+ }
+ persist();
+ document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty(isSize?'--overlay-size':'--overlay-opacity',v/100));
+ document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty(isSize?'--street-size':'--street-alpha',isSize?Math.max(.32,Math.min(1.45,v/60)):v/100));
+ window.IMGMedia?.paintStreetballPreview?.();
+ window.IMGMedia?.paintBroadcastPreview?.();
+ return;
+}
 if(t.dataset.scoreColor){data.options[streetballActive()?'streetOverlayColor':'overlayColor']=t.value;persist();document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty('--overlay-accent',t.value));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty('--street-accent',t.value));window.IMGMedia?.paintStreetballPreview?.();return}
 if(t.dataset.streetPlayer){
  const [side,slot]=t.dataset.streetPlayer.split(':').map(Number),p=data.options.streetPlayers?.[side]?.[slot];
