@@ -290,7 +290,9 @@
     scoreboard is overlaid on a live camera. During streaming/recording, copy
     the encoded source canvas instead of compositing an extra 720p frame. */
  function paintBroadcastPreview(){
-  if(!isCameraOn()||!overlayReader)return;
+  // Show the selected ACTUAL native scoreboard even before camera permission;
+  // no invented court/silhouette or stale HTML scorebar on the V2 monitor.
+  if(!overlayReader)return;
   const canvases=document.querySelectorAll('canvas[data-broadcast-preview]');
   if(!canvases.length)return;
   let state;try{state=overlayReader()}catch(_){return}
