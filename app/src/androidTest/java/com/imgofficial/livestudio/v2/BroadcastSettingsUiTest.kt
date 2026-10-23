@@ -94,6 +94,8 @@ class BroadcastSettingsUiTest {
       body:rect(document.body)});
    })()""")
    File(context.filesDir,"img-v2-wizard-viewport.txt").writeText(viewport)
+   assertEquals("Wizard must fill the real Android WebView viewport","true",js(activity,web,
+    "(function(){const a=document.querySelector('.app'),w=document.querySelector('.img-wizard-page');return !!a&&!!w&&a.getBoundingClientRect().height>=window.innerHeight*0.85&&w.getBoundingClientRect().height>=window.innerHeight*0.85})()"))
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art'))")
    SystemClock.sleep(600)
