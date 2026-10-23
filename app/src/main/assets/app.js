@@ -614,10 +614,11 @@ function updateWizardStickyScoreboard(){
  const pane=root?.querySelector('.img-wizard-scroll');
  // The original preview stays inside its ORIGINAL Step 2 Scoreboard card.
  // No dock, portal, copy, clone, floating second card or replacement canvas.
- const preview=pane?.querySelector('[data-img-scoreboard-settings] .img-wizard-score-origin');
- if(!pane||!preview)return;
- let marker=preview.previousElementSibling;
- if(!marker?.classList?.contains('img-wizard-score-anchor')){
+ const card=pane?.querySelector('[data-img-scoreboard-settings]');
+ const preview=root?.querySelector('.img-wizard-score-origin');
+ if(!pane||!card||!preview)return;
+ let marker=card.querySelector('.img-wizard-score-anchor');
+ if(!marker){
   marker=document.createElement('div');
   marker.className='img-wizard-score-anchor';
   marker.hidden=true;preview.before(marker);
@@ -635,12 +636,16 @@ function updateWizardStickyScoreboard(){
   preview.style.setProperty('--img-score-left',Math.round(box.left)+'px');
   preview.style.setProperty('--img-score-width',Math.round(box.width)+'px');
   preview.style.setProperty('--img-score-height',Math.round(box.height)+'px');
+  // Lift the SAME element above the scroll container's clipping boundary.
+  // No second preview, image, canvas or extra visual frame is created.
+  root.appendChild(preview);
   preview.classList.add('img-score-pinned');
  }else{
   const original=marker.getBoundingClientRect();
   // The SAME original element is put back by lifting the fixed style.
   if(original.top>=boundary.top+3){
    preview.classList.remove('img-score-pinned');
+   marker.after(preview);
    marker.hidden=true;marker.style.display='none';
    preview.style.removeProperty('--img-score-top');
    preview.style.removeProperty('--img-score-left');
