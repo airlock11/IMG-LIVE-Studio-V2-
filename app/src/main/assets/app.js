@@ -906,6 +906,7 @@ function render(keep=false){if(needsRender)return;
  const holder=priorVideo&&document.createDocumentFragment?.();
  if(holder)holder.appendChild(priorVideo);
  document.body?.classList?.toggle('img-physical-portrait',!isPhysicalLandscape());
+ document.body?.classList?.toggle('img-wizard-active',screen==='setup');
  const oldScroll=keep?Object.fromEntries([...document.querySelectorAll('[data-scroll]')].map(x=>[x.dataset.scroll,x.scrollTop])):{};const isStudio=['setup','live'].includes(screen);const showNav=['home','leagues','schedule','settings','recordings'].includes(screen);
  const remoteConsole=screen==='remote'&&remoteApi()?.status().role==='scorer'&&remoteApi()?.status().approved;
  document.documentElement.classList.toggle('img-remote-console-active',!!remoteConsole);const immersiveStreet=screen==='live'&&streetballActive();const immersiveLive=screen==='live'&&(data.options.orientation==='landscape'||immersiveStreet);const immersiveSetup=screen==='setup'&&useLandscapeSetup();const headerlessSetup=screen==='setup';const isAppLandscape=isPhysicalLandscape()&&window.innerWidth>=570&&!immersiveLive&&!immersiveSetup;let body='';switch(screen){case'home':body=home();break;case'leagues':body=leagues();break;case'schedule':body=schedule();break;case'settings':body=settings();break;case'remote':body=remoteScreen();break;case'recordings':body=recordings();break;case'create':body=createPage();break;case'league-detail':body=leagueDetail();break;case'league-teams':body=leagueTeams();break;case'league-games':body=leagueGames();break;case'add-game':body=addGame();break;case'standings':body=standings();break;case'setup':case'live':body=studio();break;default:body=home()}
@@ -1057,8 +1058,19 @@ if(name==='appearance-toggle'){
  o.appearance=o.appearance==='dark'?'light':'dark';
  persist();applyAppearance();return render(true);
 }
-if(name==='setup-prev'){setupStep=Math.max(0,setupStep-1);return render(false)}
-if(name==='setup-next'){setupStep=Math.min(3,setupStep+1);return render(false)}
+if(name==='setup-prev'||name==='setup-next'){
+ setupStep=Math.max(0,Math.min(3,setupStep+(name==='setup-next'?1:-1)));
+ document.activeElement?.blur?.();
+ render(false);
+ const reset=()=>{
+  const pane=document.querySelector('.img-wizard-scroll');
+  if(pane)pane.scrollTop=0;
+  try{window.scrollTo(0,0)}catch(_){}
+ };
+ reset();
+ requestAnimationFrame(reset);
+ return;
+}
 if(name.startsWith('setup-sport-')){
  const id=name.slice('setup-sport-'.length);
  if(!SPORTS.some(s=>s.id===id))return;
