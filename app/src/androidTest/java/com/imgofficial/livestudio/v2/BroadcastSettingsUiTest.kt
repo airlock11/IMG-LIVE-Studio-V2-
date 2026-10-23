@@ -193,7 +193,7 @@ class BroadcastSettingsUiTest {
       slider.dispatchEvent(new Event('input',{bubbles:true}));
       slider.dispatchEvent(new Event('change',{bubbles:true}));
       return p.scrollTop===before&&document.querySelector('[data-score-range="size"]')===original
-       &&document.querySelector('[data-score-range-output="size"]')?.textContent==='75%';
+       &&!document.querySelector('[data-score-range-output="size"]')&&slider.value==='75';
      })()"""))
    assertEquals("Scoreboard frame must have no dark side fill","true",js(activity,web,
     """(function(){
