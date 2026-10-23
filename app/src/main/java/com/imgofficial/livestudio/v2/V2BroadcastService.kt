@@ -198,15 +198,35 @@ class V2BroadcastService:Service(),ConnectChecker {
    videoWidth=if(resolution==1080)1920 else 1280
    videoHeight=resolution
    videoFps=fps
+   // H.264 profile stays at the operator's selected *real* resolution and FPS.
+   // Starting straight at YouTube's 17 Mbps 1080p60 ceiling frequently floods
+   // mobile uplinks before congestion feedback can stabilize the connection.
+   // Begin at a viable cellular-friendly target; ramp only on a healthy RTMPS
+   // connection, rather than pretending the phone has 17 Mbps of upload speed.
    maxBitrate=when {
     resolution==1080&&fps==60->17000000
     resolution==1080->14000000
-    fps==60->8000000
     else->8000000
    }
-   minBitrate=(maxBitrate*0.40f).toInt()
-   videoBitrate=maxBitrate
+   minBitrate=when {
+    resolution==1080&&fps==60->6000000
+    resolution==1080->5000000
+    else->3000000
+   }
+   videoBitrate=when {
+    resolution==1080&&fps==60->9000000
+    resolution==1080->7000000
+    fps==60->5000000
+    else->4000000
+   }
    thermalBitrateCap=maxBitrate
+   lastMeasuredSendKbps=-1
+   measuredSendAtMs=0L
+   previousUploadedBytes=0L
+   lastBitrateChangeAtMs=0L
+   congestedSamples=0
+   healthySamples=0
+   stalledUploadSamples=0
    return true
   }
  private var thermalSeverity=0
@@ -240,6 +260,13 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var previousDropped=0L
  private var previousUploadedBytes=0L
  private var stalledUploadSamples=0
+ // getBytesSend is bytes sent over the RTMPS socket, not an internet speedtest.
+ // Distinguish observed outbound traffic from the target encoder bitrate.
+ private var lastMeasuredSendKbps=-1
+ private var measuredSendAtMs=0L
+ private var lastBitrateChangeAtMs=0L
+ internal fun configuredVideoKbps()=videoBitrate/1000
+ internal fun minimumVideoKbps()=minBitrate/1000
  private var qualityPolling=false
  private val qualityTick=object:Runnable {
   override fun run(){
@@ -273,7 +300,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   publish()
  }
- fun connectionSummary()=networkLabel+" • "+(videoBitrate/1000)+" kbps"
+ fun connectionSummary():String{
+  val sent=if(running&&lastMeasuredSendKbps>=0)
+   " • sent ~"+lastMeasuredSendKbps+" kbps" else ""
+  return networkLabel+" • video target "+(videoBitrate/1000)+" kbps"+sent
+ }
  private var portrait=false // Basketball/Pickleball V2 always broadcasts in landscape; Streetball portrait comes later.
  private var front=false
  private var title="Camera and microphone ready"
@@ -884,6 +915,9 @@ class V2BroadcastService:Service(),ConnectChecker {
   healthySamples=0;congestedSamples=0
   previousDropped=stream?.getStreamClient()?.getDroppedVideoFrames()?:0L
   previousUploadedBytes=stream?.getStreamClient()?.getBytesSend()?:0L
+  measuredSendAtMs=android.os.SystemClock.elapsedRealtime()
+  lastMeasuredSendKbps=-1
+  lastBitrateChangeAtMs=measuredSendAtMs
   stalledUploadSamples=0
   pollQuality()
   notifyState("RTMPS accepted • check YouTube Studio Stream health")
