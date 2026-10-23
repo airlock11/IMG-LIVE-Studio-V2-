@@ -503,3 +503,30 @@ test('V2 Timeout sponsor artwork is unframed, image only, original quality and c
  assert.ok(bridge.includes('receiveSponsorTransfer(action)')&&bridge.includes('imgsponsor_'));
  assert.ok(native.includes('decodeSponsorFile(token,i)'));
 });
+
+test('V2 home offline recording cards, truthful platform marks and single-tap timeout fade',async()=>{
+ const [app,service,native,css]=await Promise.all([
+  readFile(new URL('./app.js',import.meta.url),'utf8'),
+  readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8'),
+  readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8'),
+  readFile(new URL('./app.css',import.meta.url),'utf8')
+ ]);
+ assert.ok(!app.includes('function recordings(){'),'Remove dedicated recordings page');
+ assert.ok(!app.includes("case'recordings':body="),'Remove recordings route');
+ assert.ok(app.includes('id="home-offline-recordings"'),'Offline records live on Home');
+ assert.ok(app.includes('const streams=clips.filter(x=>recordedPlatforms(x).length>0)'),'My Streams excludes offline MP4');
+ assert.ok(app.includes('const offlineRecordings=clips.filter(x=>!recordedPlatforms(x).length)'));
+ assert.ok(app.includes("const action=(clip.native?'open-native-recording-':'play-recording-')"),'Saved clips remain playable');
+ assert.ok(app.includes('function platformMarks(values)')&&app.includes('recording-platform-logos'));
+ assert.ok(app.includes('youtube:')&&app.includes('facebook:'),'Both real destination logos supported');
+ assert.ok(app.includes('clip.native?[]:'),'Legacy forced YouTube metadata is not trusted');
+ assert.ok(service.includes('.put("platform",if(wasOffline)"Offline" else "YouTube")'));
+ assert.ok(service.includes('.put("platforms",if(wasOffline)org.json.JSONArray()'),'Offline recordings have zero platform marks');
+ assert.ok(native.includes('android.media.ExifInterface'),'Portrait source EXIF respected');
+ assert.ok(service.includes('val factor=minOf(w*.92f/bitmap.width,h*.90f/bitmap.height,1f)'),'Original aspect ratio maintained without crop');
+ assert.ok(native.includes('broadcast?.setScorecardVisible(false)'),'Timeout fades scoreboard out');
+ assert.ok(native.includes('broadcast?.setScorecardVisible(scoreWasVisibleBeforeTimeout)'),'Resume fades scoreboard back');
+ assert.ok(native.includes('timeoutPreview?.dismiss();timeoutPreview=null'),'Resume immediately closes settings');
+ assert.ok(native.includes('PopupWindow(content,dp(230),-2,false)'),'Popup must not capture the first tap on Resume');
+ assert.ok(css.includes('.img-offline-recording-card')&&css.includes('.record-platform-icon'));
+});
