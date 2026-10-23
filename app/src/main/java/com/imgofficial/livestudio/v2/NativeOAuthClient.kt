@@ -130,15 +130,18 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
      "verifyPairing","cancelPending" -> JSONObject().put("pairingCode", code).toString()
      "createYoutubePrivateDraft" -> {
       val title=command.optString("title")
+      val description=command.optString("description","")
       val scheduled=command.optString("scheduledStartTime")
+      val startNow=command.opt("startNow") === true
       val requestId=command.optString("draftRequestId")
       val madeForKids=command.opt("madeForKids")
-      if(title.length !in 5..100 || scheduled.length !in 20..35 ||
+      if(title.length !in 5..100 || description.length>1800 || description.any{it.code<32||it.code==127} || (!startNow && scheduled.length !in 20..35) ||
          !Regex("^[a-f0-9]{32}$").matches(requestId) || madeForKids !is Boolean ||
          command.opt("operatorConfirmed") !== true)
        return JSONObject().put("ok",false).put("error","Invalid private draft fields")
-      JSONObject().put("title",title).put("scheduledStartTime",scheduled)
-       .put("requestId",requestId).put("madeForKids",madeForKids)
+      JSONObject().put("title",title).put("startNow",startNow)
+       .put("scheduledStartTime",if(startNow)JSONObject.NULL else scheduled)
+       .put("description",description).put("requestId",requestId).put("madeForKids",madeForKids)
        .put("operatorConfirmed",true).toString()
      }
      else -> "{}"
@@ -206,6 +209,19 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
        .put("hasStream",item.opt("hasStream") === true))
      }
      safe.put("broadcasts",safeBroadcasts)
+     val draftRecords=data.optJSONArray("privateDrafts")?:org.json.JSONArray()
+     if(draftRecords.length()>3)return JSONObject().put("ok",false).put("error","Invalid owned draft list")
+     val safeOwned=org.json.JSONArray()
+     for(index in 0 until draftRecords.length()){
+      val d=draftRecords.optJSONObject(index)?:return JSONObject().put("ok",false).put("error","Invalid owned draft")
+      val id=d.optString("requestId")
+      val title=d.optString("title")
+      if(!Regex("^[a-f0-9]{32}$").matches(id)||title.length !in 5..100)
+       return JSONObject().put("ok",false).put("error","Invalid owned draft data")
+      safeOwned.put(JSONObject().put("requestId",id).put("title",title)
+       .put("scheduledStartTime",d.optString("scheduledStartTime").take(40)))
+     }
+     safe.put("privateDrafts",safeOwned)
      safe.put("canCreatePrivateDraft",accessible === true && data.opt("canCreatePrivateDraft") === true)
     }
     "createYoutubePrivateDraft" -> {
@@ -255,6 +271,88 @@ internal class NativeOAuthClient(context: Context, private val baseUrl: String) 
    return JSONObject().put("ok",true).put("data",safe)
   } finally { connection.disconnect() }
  }
+
+
+ /**
+  * Delivers the private RTMPS destination ONLY to native Android.
+  * This method never uses the IMGNativeChannel JS reply and never persists
+  * any ingest key, URL, Google access token or IMG session cookie in WebView.
+  */
+ fun preparePrivateIngest(draftId:String, callback:(String?,String?)->Unit) {
+  executor.execute {
+   val answer=try { fetchPrivateIngest(draftId) }
+   catch (_:Exception) { Pair<String?,String?>(null,"Private video setup unavailable") }
+   callback(answer.first,answer.second)
+  }
+ }
+
+ private fun fetchPrivateIngest(draftId:String):Pair<String?,String?> {
+  if(!Regex("^[a-f0-9]{32}$").matches(draftId))return Pair(null,"Invalid private draft")
+  val connection=(URL(baseUrl.trimEnd('/')+"/api/connections/youtube/private-ingest")
+   .openConnection() as HttpURLConnection)
+  try {
+   connection.instanceFollowRedirects=false
+   connection.connectTimeout=15000
+   connection.readTimeout=15000
+   connection.useCaches=false
+   connection.setRequestProperty("Origin",appOrigin)
+   connection.setRequestProperty("Accept","application/json")
+   connection.setRequestProperty("Content-Type","application/json")
+   connection.setRequestProperty("Cache-Control","no-store")
+   if(sessionCookie==null)sessionCookie=loadSession()
+   val session=sessionCookie?:return Pair(null,"Connect YouTube in V2 first")
+   connection.setRequestProperty("Cookie","__Host-img_session=$session")
+   connection.requestMethod="POST"
+   connection.doOutput=true
+   val payload=JSONObject().put("draftRequestId",draftId).put("operatorConfirmed",true)
+    .put("clientProtocolVersion",2)
+   connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+   val code=connection.responseCode
+   if(code !in 200..299) {
+    // A missing Worker route and a missing session-owned draft can both
+    // return HTTP 404. Read only a bounded, allowlisted error code; never
+    // display arbitrary server text, tokens or streaming destinations.
+    val upstream=try {
+     val raw=connection.errorStream?.bufferedReader()?.use{it.readText().take(256)}?:"{}"
+     JSONObject(raw).optString("error").take(80)
+    }catch(_:Exception){""}
+    val explanation=when {
+     code==404&&upstream=="not_found" ->
+      "IMG private video backend is not deployed yet. The YouTube draft is not missing."
+     code==404&&upstream=="private_draft_not_owned" ->
+      "This private YouTube draft belongs to a different or expired V2 login session."
+     code==503&&upstream=="youtube_private_ingest_disabled" ->
+      "Private video uploading is disabled on the IMG test server."
+     code==401 -> "Your YouTube session needs authorization."
+     code==409&&upstream=="private_ingest_already_attempted" ->
+      "Private video preparation was already attempted for this draft."
+     code==409 -> "This private feed cannot be prepared in its current state."
+     code==503 -> "IMG private video service is unavailable."
+     else -> "Private YouTube video preparation failed. No video was uploaded."
+    }
+    return Pair(null,explanation)
+   }
+   val body=connection.inputStream.bufferedReader().use { it.readText().take(2048) }
+   val data=JSONObject(body)
+   if(data.opt("prepared")!==true || data.optString("privacy")!="private" ||
+      data.opt("autoStart") !is Boolean)return Pair(null,"Unverified private feed response")
+   val secret=data.optString("rtmpsUrl")
+   if(!isPrivateYouTubeRtmps(secret))return Pair(null,"Unsafe video destination rejected")
+   return Pair(secret,null)
+  }finally{connection.disconnect()}
+ }
+
+ private fun isPrivateYouTubeRtmps(input:String):Boolean=try {
+  if(input.length !in 35..700 || input.any { it.isWhitespace() })false
+  else {
+   val uri=java.net.URI(input)
+   uri.scheme?.lowercase()=="rtmps"&&
+    uri.host?.lowercase() in setOf("a.rtmps.youtube.com","b.rtmps.youtube.com")&&
+    (uri.port==-1||uri.port==443)&&uri.rawUserInfo==null&&
+    uri.rawQuery==null&&uri.rawFragment==null&&
+    uri.path?.startsWith("/live2/")==true
+  }
+ }catch(_:Exception){false}
 
  fun close() { executor.shutdownNow() }
 }

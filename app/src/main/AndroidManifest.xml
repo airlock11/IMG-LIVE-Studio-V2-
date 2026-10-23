@@ -1,12 +1,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
  <uses-permission android:name="android.permission.CAMERA"/>
  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+ <uses-permission android:name="android.permission.WAKE_LOCK"/>
  <uses-feature android:name="android.hardware.camera" android:required="false"/>
  <uses-feature android:name="android.hardware.microphone" android:required="false"/>
- <application android:label="IMG LIVE Studio" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
-  <activity android:name=".MainActivity" android:exported="true">
+ <application android:label="${imgAppLabel}" android:theme="@android:style/Theme.Material.NoActionBar" android:usesCleartextTraffic="false">
+  <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize">
    <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="imglivestudiov2" android:host="oauth-complete"/></intent-filter>
   </activity>
+  <activity android:name=".PrivateYoutubeCameraActivity" android:exported="false" />
+  <service android:name=".V2BroadcastService" android:exported="false"
+   android:foregroundServiceType="camera|microphone" android:stopWithTask="false" />
  </application>
 </manifest>

@@ -41,6 +41,18 @@ test('login remains unavailable until native transport is enabled',async()=>{
  await assert.rejects(accounts.connect('facebook'),/not configured/i);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
+test('V2 checks saved YouTube session without displaying a false sign-out',async()=>{
+ const {accounts}=controller(cmd=>{
+  assert.equal(cmd.action,'refresh');
+  return {data:{facebook:{connected:false},youtube:{connected:true}}};
+ });
+ assert.equal(accounts.getStatus().youtube,'verifying');
+ assert.notEqual(accounts.getStatus().youtube,'connected');
+ accounts.enableNative();
+ const result=await accounts.refresh();
+ assert.equal(result.youtube,'connected');
+});
+
 test('refresh only trusts native account verification response',async()=>{
  const {accounts,outbound}=controller(cmd=>{
   assert.equal(cmd.action,'refresh');
@@ -80,7 +92,7 @@ test('native-confirmed pairing transitions to connected',async()=>{
  assert.equal(await accounts.verifyPairing('youtube'),'complete');
  assert.equal(accounts.getStatus().youtube,'connected');
 });
-test('verification errors clear previous connected status',async()=>{
+test('verification failures retain session as unverified rather than falsely claiming logout',async()=>{
  let fail=false;
  const {accounts}=controller(cmd=>{
   if(cmd.action==='refresh'&&fail)return {ok:false,error:'upstream_unavailable'};
@@ -91,7 +103,7 @@ test('verification errors clear previous connected status',async()=>{
  assert.equal(accounts.getStatus().facebook,'connected');
  fail=true;
  await assert.rejects(accounts.refresh(),/upstream_unavailable/);
- assert.equal(accounts.getStatus().facebook,'disconnected');
+ assert.equal(accounts.getStatus().facebook,'verification-unavailable');
 });
 
 test('disabled staging OAuth reports a clear message without allowing login',async()=>{
@@ -163,20 +175,22 @@ test('global logout ignores a stale account status response after the session is
  assert.equal(accounts.getStatus().youtube,'disconnected');
 });
 
-test('YouTube staging screen script parses and Facebook is disabled',async()=>{
+test('main V2 broadcast destinations replace standalone readiness and do not fake Android system bars',async()=>{
  const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
- const scriptStart=html.indexOf('<script>');
- const scriptEnd=html.indexOf('</script>',scriptStart);
- assert.ok(scriptStart>0 && scriptEnd>scriptStart,'Expected embedded account page controller');
- assert.doesNotThrow(()=>new Script(html.slice(scriptStart+8,scriptEnd)));
- assert.ok(html.includes('<button id="facebook-button" type="button" disabled>Coming soon</button>'));
- assert.ok(html.includes('<button id="youtube-verify-button" type="button" hidden>Verify</button>'));
- assert.ok(html.includes('img-native-resume'));
- for(const id of ['facebook-button','youtube-button','youtube-verify-button','signout-button']){
-  assert.equal(html.split('id="'+id+'"').length-1,1);
- }
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const main=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ assert.doesNotThrow(()=>new Script(studio));
+ assert.ok(!html.includes('youtube-readiness-button'));
+ assert.ok(!html.includes('youtube-draft-form'));
+ assert.ok(studio.includes('function youtubeDestination()'));
+ assert.ok(studio.includes('async function startPrivateYouTubeFromStudio()'));
+ assert.ok(studio.includes('Broadcast Settings'));
+ assert.ok(!studio.includes('9:41'));
+ assert.ok(!studio.includes('START DEMO'));
+ assert.ok(css.includes('html.img-native-app .app{'));
+ assert.ok(main.includes('window.statusBarColor'));
 });
-
 test('read-only live check runs only after verified YouTube login and returns sanitized information',async()=>{
  const {accounts,outbound}=controller(cmd=>{
   if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
@@ -209,14 +223,17 @@ test('live readiness cannot be used after confirmed native logout',async()=>{
  await accounts.signOut();
  await assert.rejects(accounts.checkYoutubeLiveReadiness(),/Connect your YouTube/);
 });
-test('read-only live panel is gated by verified YouTube login and does not display a go-live button',async()=>{
+test('YouTube readiness is automatic and never exposed as an operator button',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
- assert.ok(html.includes('id="youtube-readiness"'));
- assert.ok(html.includes('id="youtube-readiness-button"'));
- assert.ok(html.includes('checkYoutubeLiveReadiness()'));
- assert.ok(!html.includes('youtube-start-live-button'));
+ assert.ok(studio.includes('await accounts.checkYoutubeLiveReadiness()'));
+ assert.ok(studio.includes('await accounts.createYoutubePrivateDraft({'));
+ assert.ok(studio.includes('startNow:true'));
+ assert.ok(!studio.includes('check.privateDrafts||[]'));
+ assert.ok(!html.includes('Check live readiness'));
+ assert.ok(!studio.includes('youtube-start-live-button'));
+ assert.ok(studio.includes('native-private-video-start:'));
 });
-
 test('private YouTube draft requires a verified connected channel and live-readiness gate',async()=>{
  const {accounts,outbound}=controller(cmd=>{
   if(cmd.action==='refresh')return {data:{facebook:{connected:false},youtube:{connected:true}}};
@@ -255,15 +272,39 @@ test('private draft cannot be created after signed-out session even with late re
  await accounts.signOut();
  await assert.rejects(accounts.createYoutubePrivateDraft({title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'b'.repeat(32)}),/Check YouTube Live readiness/);
 });
-test('private-draft panel requires separate YouTube readiness result and explicit confirmation',async()=>{
- const html=await readFile(new URL('./connections.html',import.meta.url),'utf8');
- assert.ok(html.includes('id="youtube-draft-panel" hidden'));
- assert.ok(html.includes('id="youtube-draft-form"'));
- assert.ok(html.includes('id="youtube-draft-kids"'));
- assert.ok(html.includes('canCreatePrivateDraft'));
- assert.ok(html.includes("confirm('Create a PRIVATE YouTube broadcast draft"));
- assert.ok(!html.includes('youtube-start-live-button'));
- const start=html.indexOf('<script>');
- const end=html.indexOf('</script>',start);
- assert.doesNotThrow(()=>new Script(html.slice(start+8,end)));
+test('YouTube platform selection can switch off without logging out the account',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const start=studio.indexOf("if(name==='destination-yt')");
+ const end=studio.indexOf("if(name==='youtube-connect')",start);
+ assert.ok(start>0&&end>start,'Destination controller missing');
+ const handler=studio.slice(start,end);
+ assert.ok(handler.includes('o.yt=!o.yt'));
+ assert.ok(handler.includes('else {youtubeExpanded=false'));
+ assert.ok(!handler.includes("accounts.disconnect("),'Turning off selection must not revoke OAuth');
+ assert.ok(studio.includes("if(name==='youtube-disconnect')"),'Explicit disconnect must remain available');
+ assert.ok(studio.includes("window.IMGMedia?.stopCamera?.()"));
+ assert.ok(studio.includes("native-private-video-start:"));
+});
+test('main private YouTube flow requires operator audience choice and stays private',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ assert.ok(wizard.includes('data-youtube-audience'),'Step 4 Stream Details should contain audience choices');
+ assert.ok(wizard.includes('Not made for kids'));
+ assert.ok(wizard.includes('Made for kids'));
+ assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Audience is required before YouTube draft creation');
+ assert.ok(!studio.includes("dialog={type:'youtube-classification'};render(true);return;"),'No GO LIVE classification pop-up');
+ assert.ok(studio.includes('youtube-classification-yes'));
+ assert.ok(studio.includes('youtube-classification-no'));
+ assert.ok(studio.includes('Made for kids?'));
+ assert.ok(studio.includes('img-wizard-sticky-preview'));
+ assert.ok(studio.includes('updateWizardStickyScoreboard'));
+ assert.ok(studio.includes('accounts.createYoutubePrivateDraft'));
+ assert.ok(studio.includes("madeForKids:youtubeAudience==='yes'"));
+ assert.ok(studio.includes("check.canCreatePrivateDraft"));
+ assert.ok(studio.includes("native-private-video-start:"));
+ assert.ok(native.includes('Regex("^[a-f0-9]{32}$")'));
+ assert.ok(native.includes('img_autostart'));
+ assert.ok(!studio.includes('startPublicBroadcast'));
+ assert.doesNotThrow(()=>new Script(studio));
 });

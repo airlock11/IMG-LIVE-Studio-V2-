@@ -6,12 +6,16 @@ on:
       - 'app/src/main/assets/account-connections.js'
       - 'app/src/main/assets/account-connections.test.mjs'
       - 'app/src/main/assets/connections.html'
+      - 'app/src/main/assets/index.html'
+      - 'app/src/main/assets/app.js'
       - '.github/workflows/oauth-fast-check.yml'
   pull_request:
     paths:
       - 'backend/oauth-worker/**'
       - 'app/src/main/assets/account-connections.js'
       - 'app/src/main/assets/connections.html'
+      - 'app/src/main/assets/index.html'
+      - 'app/src/main/assets/app.js'
       - '.github/workflows/oauth-fast-check.yml'
   workflow_dispatch:
 permissions:
@@ -32,16 +36,49 @@ jobs:
         run: |
           node --check backend/oauth-worker/src/index.js
           node --check app/src/main/assets/account-connections.js
+          node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/media.js
+          node --check app/src/main/assets/facebook-live.js
+          node --check app/src/main/assets/remote-scoring.js
+          node --check app/src/main/assets/pickleball-rules.js
       - name: Run OAuth Worker and native bridge tests
         run: node --test backend/oauth-worker/oauth.test.mjs app/src/main/assets/account-connections.test.mjs
+      - name: Verify selectable live capture frame rates
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const media=fs.readFileSync('app/src/main/assets/media.js','utf8');
+          const start=media.indexOf('async function startLiveCapture(');
+          if(start<0)throw Error('Facebook/relay capture function missing');
+          const capture=media.slice(start);
+          if(!capture.includes('stream=canvas.captureStream(rate)'))
+            throw Error('Stream capture no longer uses selected frame rate');
+          if(capture.includes('captureStream(clamp(fps,15,30))'))
+            throw Error('60 FPS silently capped to 30 in relay');
+          if(!capture.includes('Number(fps)===60?60:30'))
+            throw Error('Relay 60 FPS selector not connected');
+          if(!media.includes("if(microphone&&!nativeMp4)"))
+            throw Error('Offline MP4 may silently drop requested microphone audio');
+          if(!media.includes("if(microphone)throw new Error('MP4 encoder with microphone could not start"))
+            throw Error('Silent MP4 fallback still allowed after audio encoder failure');
+          if(capture.includes('if(active&&e.data?.size)onChunk(e.data)'))
+            throw Error('Last relay video chunk discarded during stop');
+
+          console.log('Requested 30 / 60 FPS relay capture is wired');
+          NODE
       - name: Verify trusted client integration
         run: |
           node - <<'NODE'
           const fs=require('node:fs');
-          const html=fs.readFileSync('app/src/main/assets/connections.html','utf8');
+          const html=fs.readFileSync('app/src/main/assets/index.html','utf8');
+          const studio=fs.readFileSync('app/src/main/assets/app.js','utf8');
+          const retired=fs.readFileSync('app/src/main/assets/connections.html','utf8');
           const js=fs.readFileSync('app/src/main/assets/account-connections.js','utf8');
-          if(!html.includes('account-connections.js'))throw Error('Account controller not loaded');
-          if(/URLSearchParams\(location\.search\)|[?&]service=/.test(html))throw Error('Untrusted backend URL override');
+          if(!html.includes('account-connections.js'))throw Error('Account controller missing from main V2');
+          if(!studio.includes('function youtubeDestination()'))throw Error('YouTube dropdown missing');
+          if(!studio.includes('await accounts.checkYoutubeLiveReadiness()'))throw Error('Private streaming preflight missing');
+          if(retired.includes('Check live readiness'))throw Error('Old manual readiness UI still visible');
+          if(/[?&]service=/.test(html+studio))throw Error('Untrusted backend URL override');
           if(!js.includes('oauth-open:'))throw Error('Native OAuth browser handoff missing');
           console.log('OAuth integration static checks passed');
           NODE

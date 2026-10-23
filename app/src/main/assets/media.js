@@ -5,24 +5,155 @@
  'use strict';
  let cameraStream=null, microphoneStream=null, sourceVideo=null, recorder=null, recorderStream=null;
  let drawCanvas=null, chunks=[], startedAt=0, latestClip=null, stateReader=null, overlayReader=null, previewRaf=0, lastPreviewFrame=0, liveCapture=null, broadcastPreviewRaf=0, lastBroadcastPreviewFrame=0;
+ // The WebView monitor asks Android for the REAL bitmap that RootEncoder uses.
+ // Only request a new bitmap when game data or artwork changes (no 60fps
+ // PNG encoding). Preview and browser recording share the same bitmap.
+ let nativeScoreImage=null, nativeScoreKey='', nativeScorePending='';
+ const logoThumbs=new Map();
+ function previewLogo(source){
+  if(typeof source!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(source))return '';
+  if(source.length<=35000&&!source.startsWith('data:image/webp;'))return source;
+  const key=source.length+':'+source.slice(-32);
+  if(logoThumbs.has(key))return logoThumbs.get(key)||'';
+  logoThumbs.set(key,'');
+  const img=new Image();
+  img.onload=()=>{
+   try{
+    const c=document.createElement('canvas');c.width=64;c.height=64;
+    const ctx=c.getContext('2d');
+    if(!ctx)return;
+    const f=Math.min(60/img.naturalWidth,60/img.naturalHeight);
+    ctx.drawImage(img,32-img.naturalWidth*f/2,32-img.naturalHeight*f/2,
+     img.naturalWidth*f,img.naturalHeight*f);
+    const small=c.toDataURL('image/png');
+    if(small.length<=35000)logoThumbs.set(key,small);
+    nativeScorePending='';
+    paintBroadcastPreview();
+   }catch(_){}
+  };
+  img.onerror=()=>{nativeScorePending='';};
+  img.src=source;
+  if(logoThumbs.size>6){
+   const first=logoThumbs.keys().next().value;
+   if(first!==key)logoThumbs.delete(first);
+  }
+  return '';
+ }
+ const nativeGraphicsEnabled=()=>typeof window.IMGNativeChannel?.postMessage==='function';
+ window.addEventListener('img-native-graphics-frame',event=>{
+  const detail=event?.detail;
+  if(!detail||detail.key!==nativeScorePending||typeof detail.src!=='string'||
+     !detail.src.startsWith('data:image/png;base64,'))return;
+  const picture=new Image();
+  picture.onload=()=>{
+   if(nativeScorePending!==detail.key)return;
+   nativeScoreImage=picture;nativeScoreKey=detail.key;
+   paintBroadcastPreview();
+   paintSetupScoreboard();
+  };
+  picture.src=detail.src;
+ });
+ function syncNativeGraphic(s){
+  if(!nativeGraphicsEnabled())return false;
+  const o=s.options||{},l=s.live||{},t=s.teams||[];
+  const home=t[0]||{},away=t[1]||{};
+  const styleIds=['prime-tv','courtside-a','courtside-b','arena-glass',
+   'rivalry-plate','center-dial','broadcast-classic','crown-pill',
+   'split-box','match-cube','edge-box','legacy-tv'];
+  const style=Math.max(0,styleIds.indexOf(o.overlay));
+  const logoId=v=>String(v||'').length+':'+String(v||'').slice(-24);
+  const leftLogo=previewLogo(home.logo),rightLogo=previewLogo(away.logo);
+  const key=[style,home.name,away.name,l.scores?.[0],l.scores?.[1],
+   l.fouls?.[0],l.fouls?.[1],l.quarter,Math.floor(l.seconds??600),
+   l.shot,o.overlayOpacity,logoId(home.logo),logoId(leftLogo),
+   logoId(away.logo),logoId(rightLogo)].join('|').slice(0,350);
+  if(nativeScoreKey===key||nativeScorePending===key)return true;
+  nativeScorePending=key;
+  // Keep the previous frame visible until the new native bitmap decodes.
+  const game={
+   key,style,home:home.name||'HOME',away:away.name||'AWAY',
+   homeScore:Math.max(0,Math.min(999,Math.round(Number(l.scores?.[0])||0))),
+   awayScore:Math.max(0,Math.min(999,Math.round(Number(l.scores?.[1])||0))),
+   homeFouls:Math.max(0,Math.min(99,Math.round(Number(l.fouls?.[0])||0))),
+   awayFouls:Math.max(0,Math.min(99,Math.round(Number(l.fouls?.[1])||0))),
+   period:Math.max(1,Math.min(9,Math.round(Number(l.quarter)||1))),
+   clock:formatClock(l.seconds??600),shot:Math.max(0,Math.min(99,Math.ceil(Number(l.shot??24)))),
+   opacity:clamp(o.overlayOpacity??100,30,100)/100,
+   homeLogo:leftLogo,awayLogo:rightLogo
+  };
+  try{window.IMGNativeChannel.postMessage('native-graphics-frame:'+encodeURIComponent(JSON.stringify(game)));}
+  catch(_){nativeScorePending='';}
+  return true;
+ }
+ function paintSetupScoreboard(){
+  const canvases=document.querySelectorAll('canvas[data-setup-scoreboard]');
+  if(!canvases.length)return;
+  let state;try{state=overlayReader?.()}catch(_){return}
+  if(!state)return;
+  // Use the exact Android on-air scoreboard bitmap, not a placeholder.
+  syncNativeGraphic(state);
+  for(const canvas of canvases){
+   if(canvas.width!==1280)canvas.width=1280;
+   if(canvas.height!==720)canvas.height=720;
+   const ctx=canvas.getContext('2d');
+   if(!ctx)continue;
+   ctx.clearRect(0,0,canvas.width,canvas.height);
+   if(!nativeScoreImage||!nativeScoreImage.naturalWidth)continue;
+   // Use exactly the same output-space placement and scale as the live
+   // compositor. Both the normal and the sticky 16:9 previews call this.
+   drawNativeGraphic(ctx,state,canvas.width,canvas.height);
+   canvas.parentElement?.classList.add('img-wizard-score-ready');
+  }
+ }
+ function drawNativeGraphic(ctx,s,w,h){
+  if(!syncNativeGraphic(s))return false;
+  // When a bitmap is loading, never show an unrelated legacy scoreboard.
+  if(!nativeScoreImage)return true;
+  const o=s.options||{},id=['prime-tv','courtside-a','courtside-b','arena-glass',
+   'rivalry-plate','center-dial','broadcast-classic','crown-pill',
+   'split-box','match-cube','edge-box','legacy-tv'].indexOf(o.overlay);
+  const compact=id>=8;
+  // One size slider with locked natural proportions and automatic placement.
+ const size=clamp(o.overlaySize??60,15,115)/60;
+ let pw=(compact?31:84)*size;
+ let ph=pw*(960/540)*(compact?1:144/960);
+ const factor=Math.min(1,85/ph,95/pw);pw*=factor;ph*=factor;
+ const safe=3;
+ const px=compact?100-pw-safe:(100-pw)/2;
+ const py=100-ph-safe;
+ ctx.drawImage(nativeScoreImage,w*px/100,h*py/100,w*pw/100,h*ph/100);
+  return true;
+ }
  const DB='img-live-offline-clips', STORE='clips';
  const canCamera=()=>Boolean(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
  const isCameraOn=()=>Boolean(cameraStream&&cameraStream.getVideoTracks().some(t=>t.readyState==='live'));
+ let cameraOpening=null;
  const isRecording=()=>Boolean(recorder&&recorder.state==='recording');
  const readableError=e=>e?.name==='NotAllowedError'?'Camera permission was denied. Allow access in Chrome site settings.':
   e?.name==='NotFoundError'?'No camera was found on this device.':
   e?.name==='NotReadableError'?'The camera is currently in use by another app.':
   e?.name==='OverconstrainedError'?'This camera does not support the requested resolution.':
   e?.message||'Camera or recording could not start.';
- async function openCamera({quality='720p',facingMode='environment'}={}){
-  if(isCameraOn()){attach();return cameraStream;}
-  if(!canCamera())throw new Error('Camera is unavailable. Open IMG LIVE Studio in HTTPS Chrome and allow camera access.');
-  const high=quality==='1080p';
-  const requested={audio:false,video:{facingMode:{ideal:facingMode},width:{ideal:high?1920:1280},height:{ideal:high?1080:720}}};
-  try{cameraStream=await navigator.mediaDevices.getUserMedia(requested);}
-  catch(e){if(e.name!=='OverconstrainedError'&&e.name!=='NotFoundError')throw e;
-   cameraStream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}
-  sourceVideo=document.createElement('video');sourceVideo.muted=true;sourceVideo.autoplay=true;
+ async function openCamera({quality='720p',fps=30,facingMode='environment'}={}){
+   if(isCameraOn()){attach();return cameraStream;}
+   if(!canCamera())throw new Error('Camera is unavailable. Open IMG LIVE Studio in HTTPS Chrome and allow camera access.');
+   const high=quality==='1080p',rate=Number(fps)===60?60:30;
+   const requested={audio:false,video:{facingMode:{ideal:facingMode},
+    width:{min:high?1920:1280,ideal:high?1920:1280},
+    height:{min:high?1080:720,ideal:high?1080:720},
+    frameRate:{min:rate===60?59:29,ideal:rate}}};
+   if(cameraOpening)return cameraOpening;
+   cameraOpening=navigator.mediaDevices.getUserMedia(requested);
+   try{cameraStream=await cameraOpening;}finally{cameraOpening=null;}
+   const measured=cameraStream.getVideoTracks()[0]?.getSettings?.()||{};
+   const width=Math.max(Number(measured.width)||0,Number(measured.height)||0);
+   const height=Math.min(Number(measured.width)||0,Number(measured.height)||0);
+   if(width<(high?1920:1280)||height<(high?1080:720)||
+    (Number(measured.frameRate)>0&&Number(measured.frameRate)<(rate===60?58:28))){
+    cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;
+    throw new Error('This camera cannot capture '+quality+' at '+rate+' FPS. Select a supported profile.');
+   }
+   sourceVideo=document.createElement('video');sourceVideo.muted=true;sourceVideo.autoplay=true;
   sourceVideo.playsInline=true;sourceVideo.srcObject=cameraStream;
   try{sourceVideo.play().catch(()=>{});}catch(e){/* Playback can resume after a user interaction. */}
   cameraStream.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>{if(!isRecording())stopCamera();}));
@@ -43,6 +174,7 @@
   document.querySelectorAll('.camera').forEach(el=>el.classList.toggle('camera-real',active));
   paintStreetballPreview();
   paintBroadcastPreview();
+  paintSetupScoreboard();
   if(active){startStreetballPreviewLoop();startBroadcastPreviewLoop();}
  }
  function stopCamera(){
@@ -72,7 +204,7 @@
  async function listClips(){
   try{const db=await openDB();return await new Promise((resolve,reject)=>{
    const tx=db.transaction(STORE,'readonly'),r=tx.objectStore(STORE).getAll();
-   r.onsuccess=()=>{db.close();resolve(r.result.map(x=>({id:x.id,name:x.name,size:x.size,mime:x.mime,createdAt:x.createdAt,duration:x.duration})).sort((a,b)=>b.createdAt-a.createdAt));};
+   r.onsuccess=()=>{db.close();resolve(r.result.map(x=>({id:x.id,name:x.name,size:x.size,mime:x.mime,createdAt:x.createdAt,duration:x.duration,metadata:x.metadata||null,saved:true})).sort((a,b)=>b.createdAt-a.createdAt));};
    r.onerror=()=>{db.close();reject(r.error);};
   });}catch(e){return [];}
  }
@@ -189,11 +321,14 @@
     scoreboard is overlaid on a live camera. During streaming/recording, copy
     the encoded source canvas instead of compositing an extra 720p frame. */
  function paintBroadcastPreview(){
-  if(!isCameraOn()||!overlayReader)return;
+  // Show the selected ACTUAL native scoreboard even before camera permission;
+  // no invented court/silhouette or stale HTML scorebar on the V2 monitor.
+  if(!overlayReader)return;
   const canvases=document.querySelectorAll('canvas[data-broadcast-preview]');
   if(!canvases.length)return;
   let state;try{state=overlayReader()}catch(_){return}
   if(state?.sport!=='basketball'||state.options?.basketballMode==='streetball')return;
+  syncNativeGraphic(state);
   const high=state.options?.quality==='1080p';
   const portrait=state.options?.orientation==='portrait';
   const w=portrait?(high?1080:720):(high?1920:1280);
@@ -215,7 +350,7 @@
    if(!isCameraOn()||!document.querySelector('canvas[data-broadcast-preview]')){
     broadcastPreviewRaf=0;return;
    }
-   if(now-lastBroadcastPreviewFrame>=60){
+   if(now-lastBroadcastPreviewFrame>=32){
     lastBroadcastPreviewFrame=now;
     paintBroadcastPreview();
    }
@@ -412,6 +547,26 @@
   text(ctx,call,x+ww*.95,y+hh*.91,hh*.14,'900','right','#fff',ww*.37);
   ctx.restore();
  }
+ const sponsorVideos=new Map();
+ function videoFor(uri){
+  if(typeof uri!=='string'||!uri.startsWith('blob:'))return null;
+  if(!sponsorVideos.has(uri)){
+   const v=document.createElement('video');v.muted=true;v.defaultMuted=true;v.volume=0;
+   v.autoplay=true;v.loop=true;v.playsInline=true;v.preload='auto';
+   v.src=uri;v.addEventListener('loadeddata',()=>{v.play().catch(()=>{});}, {once:true});
+   v.play().catch(()=>{});
+   sponsorVideos.set(uri,v);
+  }
+  return sponsorVideos.get(uri);
+ }
+ function releaseSponsorVideo(uri){
+  const video=sponsorVideos.get(uri);
+  if(!video)return;
+  video.pause();
+  video.removeAttribute('src');
+  try{video.load()}catch(_){}
+  sponsorVideos.delete(uri);
+ }
  function drawSponsor(ctx,s,w,h){
   const live=s.live||{},sp=s.sponsors?.[live.slideIndex]||{name:'SPONSOR'};
   ctx.fillStyle='#102c2b';ctx.fillRect(0,0,w,h);
@@ -419,18 +574,24 @@
   block(ctx,w*.08,h*.15,w*.84,h*.7,color(accent,.2),Math.min(35,w*.03));
   const img=imageFor(sp.img);
   if(img){const limW=w*.24,limH=h*.25,m=Math.min(limW/img.width,limH/img.height);ctx.drawImage(img,(w-img.width*m)/2,h*.22,img.width*m,img.height*m);}
+   const sponsorVideo=videoFor(sp.video);
+   if(sponsorVideo&&sponsorVideo.readyState>=2&&sponsorVideo.videoWidth){
+    const limW=w*.62,limH=h*.37,m=Math.min(limW/sponsorVideo.videoWidth,limH/sponsorVideo.videoHeight);
+    ctx.drawImage(sponsorVideo,(w-sponsorVideo.videoWidth*m)/2,h*.24,sponsorVideo.videoWidth*m,sponsorVideo.videoHeight*m);
+   }
   text(ctx,'IMG LIVE STUDIO  •  OFFICIAL PARTNER',w/2,h*.20,Math.max(16,w*.015),'850','center','#e6faef');
   text(ctx,sp.name||'SPONSOR',w/2,h*.58,Math.max(24,w*.055),'900','center','#fff',w*.87);
  }
  function drawFrame(ctx,s,w,h){
+  // Local recording and livestreams use the same real scoreboard graphics.
   if(s.live?.slides)drawSponsor(ctx,s,w,h);
   else{
    drawVideo(ctx,sourceVideo,w,h);
    if(s.sport==='pickleball')drawPickleballBar(ctx,s,w,h);
    else if(s.sport==='basketball'&&s.options?.basketballMode==='streetball')drawStreetball(ctx,s,w,h);
-   else drawGameBar(ctx,s,w,h);
+   else if(!drawNativeGraphic(ctx,s,w,h))drawGameBar(ctx,s,w,h);
    if(!(s.sport==='basketball'&&s.options?.basketballMode==='streetball')){
-    if(s.live?.timeout){block(ctx,w*.42,h*.04,w*.16,h*.053,'rgba(191,74,57,.88)',10);text(ctx,'TIMEOUT',w*.5,h*.067,Math.max(16,w*.014),'900','center');}
+    /* Timeout is an operator control only; never burn a timeout banner into the outgoing video. */
     if(s.options?.broadcast?.showLeagueName&&s.options.broadcast.leagueName)text(ctx,s.options.broadcast.leagueName,w/2,h*.08,Math.max(15,w*.015),'900','center','#fff',w*.7);
    }
   }
@@ -443,11 +604,11 @@
    ['video/mp4;codecs="avc1.42E01E"','video/mp4;codecs=h264','video/mp4'];
   return types.find(type=>MediaRecorder.isTypeSupported(type))||'';
  }
- async function storeMp4(blob){
+ async function storeMp4(blob,metadata={}){
   if(!(blob instanceof Blob)||blob.size<1)throw new Error('No encoded MP4 video was produced.');
   const createdAt=Date.now(),name='IMG-LIVE-'+new Date(createdAt).toISOString().replace(/[:.]/g,'-')+'.mp4';
   const clip={id:String(createdAt)+'-'+Math.random().toString(36).slice(2,7),name,createdAt,blob,mime:'video/mp4',size:blob.size,
-   duration:Math.max(0,Math.round((createdAt-startedAt)/1000))};
+   duration:Math.max(0,Math.round((createdAt-startedAt)/1000)),metadata};
   latestClip=clip;let saved=false,error='';
   try{await saveClip(clip);saved=true}catch(e){error=readableError(e);}
   return {...clip,saved,error};
@@ -463,16 +624,37 @@
   drawCanvas=canvas;stateReader=readState;
   const mime=chooseMime(microphone);
   const nativeMp4=Boolean(!forceWebCodecs&&mime&&HTMLCanvasElement.prototype.captureStream);
+  // Never claim a recording includes commentary when the device can only
+  // produce video-only MP4. A false-success silent MP4 cannot be repaired.
+  if(microphone&&!nativeMp4){
+   drawCanvas=null;stateReader=null;
+   throw new Error('This device cannot record MP4 with microphone audio at the selected quality. Try a supported phone or change audio settings before recording.');
+  }
   if(nativeMp4){
    const stream=canvas.captureStream(rate);recorderStream=stream;
    if(microphone){
-    try{microphoneStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    try{
+     for(let attempt=0;attempt<3;attempt++){
+      try{microphoneStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});break;}
+      catch(error){if(error?.name!=='NotReadableError'||attempt===2)throw error;await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));}
+     }
      for(const track of microphoneStream.getAudioTracks())stream.addTrack(track);}
-    catch(e){microphoneStream=null;}
+    catch(e){
+     stream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});
+     microphoneStream=null;recorderStream=null;drawCanvas=null;stateReader=null;
+     throw new Error('Microphone access failed. Offline recording was not started: '+(e?.name==='NotReadableError'?'Microphone is busy. Close other recording apps, then retry.':readableError(e)));
+    }
+    if(!microphoneStream?.getAudioTracks().some(track=>track.readyState==='live')){
+     stream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});
+     microphoneStream=null;recorderStream=null;drawCanvas=null;stateReader=null;
+     throw new Error('No active microphone audio track. Recording cancelled to prevent a silent MP4.');
+    }
    }
-   try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?7000000:3500000});}
+   try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000)});}
    catch(e){stream.getTracks().forEach(t=>t.stop());recorderStream=null;
     if(microphoneStream){microphoneStream.getTracks().forEach(t=>t.stop());microphoneStream=null;}
+    drawCanvas=null;stateReader=null;
+    if(microphone)throw new Error('MP4 encoder with microphone could not start: '+readableError(e));
     return startRecording(readState,{quality,orientation,fps,microphone:false,forceWebCodecs:true});}
    chunks=[];startedAt=Date.now();let running=true,drawFrameId=0;
    const draw=()=>{
@@ -497,7 +679,7 @@
   let config=null;
   const levelCandidates=high?['avc1.64002a','avc1.42002a','avc1.42E01F']:['avc1.42E01F','avc1.42002a','avc1.64002a'];
   for(const codec of levelCandidates){
-   const test={codec,width:outputW,height:outputH,bitrate:high?6500000:3000000,framerate:rate,hardwareAcceleration:'prefer-hardware'};
+   const test={codec,width:outputW,height:outputH,bitrate:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000),framerate:rate,hardwareAcceleration:'prefer-hardware'};
    try{if((await VideoEncoderImpl.isConfigSupported(test)).supported){config=test;break}}catch(e){}
   }
   if(!config)throw new Error('This phone cannot encode H.264 MP4 at '+quality+' / '+rate+' FPS. Try 720p / 30 FPS.');
@@ -531,7 +713,7 @@
   drawFrameId=requestAnimationFrame(draw);
   return {mime:'video/mp4',fps:rate,audio:false,method:'webcodecs-mp4'};
  }
- async function stopRecording(){
+ async function stopRecording(metadata={}){
   const r=recorder;if(!r)return null;
   recorder=null;
   if(r._webCodecs){
@@ -542,14 +724,14 @@
     r.muxer.finalize();
     const buffer=r.muxer.target.buffer;
     r._close();
-    return await storeMp4(new Blob([buffer],{type:'video/mp4'}));
+    return await storeMp4(new Blob([buffer],{type:'video/mp4'}),metadata);
    }catch(e){r._close();return {saved:false,error:'MP4 recording could not finish: '+readableError(e)};}
   }
   return new Promise(resolve=>{
    r.addEventListener('stop',async()=>{
     r._cleanup?.();
     const data=chunks;chunks=[];
-    try{resolve(await storeMp4(new Blob(data,{type:'video/mp4'})));}
+    try{resolve(await storeMp4(new Blob(data,{type:'video/mp4'}),metadata));}
     catch(e){resolve({saved:false,error:readableError(e)});}
    },{once:true});
    try{if(r.state!=='inactive'){r.requestData();r.stop();}else r.dispatchEvent(new Event('stop'));}
@@ -570,6 +752,7 @@
    .find(m=>MediaRecorder.isTypeSupported(m));
   if(!mime)throw new Error('Chrome WebM live encoding is unavailable on this device.');
   const portrait=orientation==='portrait',high=quality==='1080p';
+  const rate=Number(fps)===60?60:30;
   const canvas=document.createElement('canvas');
   canvas.width=portrait?(high?1080:720):(high?1920:1280);
   canvas.height=portrait?(high?1920:1280):(high?1080:720);
@@ -585,11 +768,12 @@
    if(microphone){
     mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
    }
-   stream=canvas.captureStream(clamp(fps,15,30));
+   stream=canvas.captureStream(rate);
    for(const track of mic?.getAudioTracks()||[])stream.addTrack(track);
-   mediaRecorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?4500000:2500000,
+   mediaRecorder=new MediaRecorder(stream,{mimeType:mime,
+    videoBitsPerSecond:high?(rate===60?12000000:8000000):(rate===60?6000000:4000000),
     audioBitsPerSecond:128000});
-   mediaRecorder.addEventListener('dataavailable',e=>{if(active&&e.data?.size)onChunk(e.data)});
+   mediaRecorder.addEventListener('dataavailable',e=>{if(e.data?.size)onChunk(e.data)});
    mediaRecorder.addEventListener('error',e=>{if(active){const err=e?.error||new Error('Live video encoder failed.');if(typeof onError==='function')onError(err);else console.warn('Live capture failed',err?.name||'encoding error')}});
    liveCapture={canvas,stop:()=>{
     if(!active)return;
@@ -611,5 +795,5 @@
  }
  function stopLiveCapture(){liveCapture?.stop();}
 
- window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintStreetballPreview,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
+ window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintSetupScoreboard,paintStreetballPreview,releaseSponsorVideo,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
 })();

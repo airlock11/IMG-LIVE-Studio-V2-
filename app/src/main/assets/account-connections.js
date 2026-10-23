@@ -5,7 +5,10 @@
 (function () {
  "use strict";
  const providers = Object.freeze({facebook:"www.facebook.com",youtube:"accounts.google.com"});
- const statuses = {facebook:"disconnected",youtube:"disconnected"};
+ // Before the first native status check, do not tell the operator that a
+ // previously connected account has signed out. Never claim Connected until
+ // the Keystore-backed Android client verifies it with the server.
+ const statuses = {facebook:"disconnected",youtube:window.IMGNativeChannel?.postMessage?"verifying":"disconnected"};
  const listeners = new Set();
  const pairingCodes = Object.create(null);
  const pending = new Map();
@@ -57,8 +60,12 @@
    catch(e){clearTimeout(timeout);pending.delete(requestId);reject(e);}
   });
  }
+ // A network timeout, app returning from native camera, or expired staging gate
+ // is NOT a Google sign-out. Only an explicit revoke or verified server status
+ // is allowed to label an account disconnected.
  function failClosed(error) {
-  for(const p of Object.keys(providers)) statuses[p]="disconnected";
+  for(const p of Object.keys(providers))
+   if(statuses[p]==="connected")statuses[p]="verification-unavailable";
   privateDraftAvailable=false;
   publish();
   throw error;
@@ -83,7 +90,7 @@
   try{return await refreshPending;}finally{refreshPending=null;}
  }
  async function checkYoutubeLiveReadiness(){
-  if(statuses.youtube!=="connected")throw Error("Connect your YouTube account first");
+  if(statuses.youtube!=="connected")throw Error(statuses.youtube==="verification-unavailable"?"YouTube status check unavailable. Retry verification; your login was not deleted.":"Connect your YouTube account first");
   const revision=sessionRevision;
   const data=await nativeRequest("youtubeLiveReadiness");
   if(revision!==sessionRevision||statuses.youtube!=="connected")
@@ -91,7 +98,8 @@
   if(!data||typeof data.liveApiAccessible!=="boolean"||
      !(typeof data.liveEnabled==="boolean"||data.liveEnabled===null)||
      data.publishingConfigured!==false||!Array.isArray(data.broadcasts)||
-     data.broadcasts.length>12)
+     data.broadcasts.length>12||!Array.isArray(data.privateDrafts||[])||
+   (data.privateDrafts||[]).length>3)
     throw Error("Invalid live readiness response");
   privateDraftAvailable=data.canCreatePrivateDraft===true && data.liveApiAccessible===true;
   return {
@@ -100,6 +108,8 @@
    reason:String(data.reason||""),
    publishingConfigured:false,
    canCreatePrivateDraft:data.canCreatePrivateDraft===true,
+   privateDrafts:(data.privateDrafts||[]).filter(item=>/^[a-f0-9]{32}$/.test(item?.requestId)&&
+      typeof item?.title==="string").map(item=>({requestId:item.requestId,title:item.title.slice(0,100)})),
    broadcasts:data.broadcasts.map(item=>({
     title:String(item.title||"Untitled broadcast").slice(0,150),
     status:String(item.status||""),
@@ -111,20 +121,22 @@
  }
  // Only available after a successful native/YouTube readiness check.
  // The UI must explicitly confirm the private event; no live stream starts.
- async function createYoutubePrivateDraft({title,scheduledStartTime,madeForKids,draftRequestId}){
+ async function createYoutubePrivateDraft({title,description='',scheduledStartTime,madeForKids,draftRequestId,startNow=false}){
   if(statuses.youtube!=="connected"||!privateDraftAvailable)
    throw Error("Check YouTube Live readiness before creating a private draft");
   if(typeof title!=="string"||title.trim().length<5||title.trim().length>100)
    throw Error("Enter a broadcast title between 5 and 100 characters");
-  if(typeof scheduledStartTime!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(scheduledStartTime)||
-     !Number.isFinite(Date.parse(scheduledStartTime)))
+  if(!startNow&&(typeof scheduledStartTime!=="string"||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}T/.test(scheduledStartTime)||
+     !Number.isFinite(Date.parse(scheduledStartTime))))
    throw Error("Select a valid scheduled start");
   if(typeof madeForKids!=="boolean"||typeof draftRequestId!=="string"||
      !/^[a-f0-9]{32}$/.test(draftRequestId))
    throw Error("Invalid private draft request");
+  if(typeof description!=="string"||description.length>1800||/[\u0000-\u001f\u007f]/.test(description))throw Error("Invalid stream description");
   const revision=sessionRevision;
   const result=await nativeRequest("createYoutubePrivateDraft",undefined,undefined,{
-   title:title.trim(),scheduledStartTime,madeForKids,draftRequestId,operatorConfirmed:true
+   title:title.trim(),...(description.trim()?{description:description.trim()}:{}),scheduledStartTime:startNow?null:scheduledStartTime,startNow:!!startNow,
+   madeForKids,draftRequestId,operatorConfirmed:true
   });
   if(revision!==sessionRevision||statuses.youtube!=="connected")
    throw Error("Account changed while creating the private draft");

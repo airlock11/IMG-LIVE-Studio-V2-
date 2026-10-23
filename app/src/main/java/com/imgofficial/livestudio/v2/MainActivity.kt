@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
 import org.json.JSONObject
+import org.json.JSONArray
 import android.webkit.ValueCallback
 import android.webkit.WebSettings
 import androidx.webkit.WebViewCompat
@@ -21,12 +22,152 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.CookieManager
 import android.view.View
+import androidx.browser.customtabs.CustomTabsIntent
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.webkit.WebViewAssetLoader
 
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
+ private var graphicsGalleryPayload:String?=null
+ @Volatile private var graphicsGalleryBusy=false
+ // The picker shows snapshots produced by THE ACTUAL native H.264 overlay
+ // renderer. No fabricated CSS thumbnails: the operator sees true artwork.
+ private fun generateGraphicsGallery(){
+  val existing=graphicsGalleryPayload
+  if(existing!=null){
+   browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-graphics-gallery',{detail:"+existing+"}));",null)
+   return
+  }
+  if(graphicsGalleryBusy)return
+  graphicsGalleryBusy=true
+  Thread{
+   val items=JSONArray()
+   val example=V2Scorecard.State(home="HOME",away="AWAY",homeScore=82,awayScore=89,
+    homeFouls=3,awayFouls=4,period=3,clock="3:01")
+   try{
+    for(i in V2BroadcastGraphicsRenderer.names.indices){
+     val full=V2BroadcastGraphicsRenderer.render(example,1f,null,i,null,null)
+     val compact=V2BroadcastGraphicsRenderer.compact(i)
+     val thumb=android.graphics.Bitmap.createScaledBitmap(full,
+      if(compact)126 else 360,if(compact)126 else 54,true)
+     val bytes=java.io.ByteArrayOutputStream()
+     thumb.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+     val encoded=android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP)
+     if(encoded.length<100000)items.put(JSONObject().put("id",i)
+      .put("src","data:image/png;base64,"+encoded))
+     if(thumb!==full)thumb.recycle()
+     full.recycle()
+    }
+    val result=JSONObject().put("items",items).toString()
+    graphicsGalleryPayload=result
+    runOnUiThread{
+     if(!isFinishing && ::browser.isInitialized)
+      browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-graphics-gallery',{detail:"+result+"}));",null)
+    }
+   }catch(_:Exception){}finally{graphicsGalleryBusy=false}
+  }.start()
+ }
+ // Camera previews in Broadcast Settings use the actual same native graphic
+ // renderer as the H.264 GL filter, rather than WebView's legacy scorebar.
+ @Volatile private var frameRequestEpoch=0
+ private fun decodeGraphicLogo(data:String?):android.graphics.Bitmap?{
+  if(data.isNullOrBlank()||data.length>65000||
+   !(data.startsWith("data:image/png;base64,")||
+     data.startsWith("data:image/jpeg;base64,")))return null
+  return try{
+   val bytes=android.util.Base64.decode(data.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..48000)return null
+   val opts=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,opts)
+   if(opts.outWidth !in 1..256||opts.outHeight !in 1..256)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
+ // Probe real AVC encoder profiles on the Android device. Results are
+ // advisory until camera permission is granted; native prepareCamera also
+ // enforces capture/encoder support and never silently changes resolution.
+ private fun reportVideoCapabilities(){
+  Thread {
+   val supported=JSONArray()
+   try{
+    val avc=android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+     .codecInfos.filter{it.isEncoder&&it.supportedTypes.any{type->type.equals("video/avc",true)}}
+    for(height in listOf(720,1080))for(fps in listOf(30,60)){
+     val width=height*16/9
+     val ok=avc.any{codec->
+      try{codec.getCapabilitiesForType("video/avc").videoCapabilities
+       .areSizeAndRateSupported(width,height,fps.toDouble())
+      }catch(_:Exception){false}
+     }
+     if(ok)supported.put(height.toString()+"p:"+fps)
+    }
+   }catch(_:Exception){
+    // Unknown capability is not proof a profile is unsupported; the encoder
+    // performs the final check when starting the actual camera.
+    return@Thread
+   }
+   val detail=JSONObject().put("supported",supported).toString()
+   runOnUiThread {
+    if(!isFinishing&&::browser.isInitialized)browser.evaluateJavascript(
+     "window.dispatchEvent(new CustomEvent('img-native-video-capabilities',{detail:"+detail+"}));",null)
+   }
+  }.start()
+ }
+ private fun nativeGraphicFrame(encoded:String){
+  if(encoded.length !in 3..140000)return
+  val epoch=++frameRequestEpoch
+  Thread {
+   var homeLogo:android.graphics.Bitmap?=null
+   var awayLogo:android.graphics.Bitmap?=null
+   try{
+    val json=JSONObject(Uri.decode(encoded))
+    val id=json.optInt("style",0).coerceIn(0,11)
+    val key=json.optString("key").take(360)
+    if(key.isBlank())return@Thread
+    homeLogo=decodeGraphicLogo(json.optString("homeLogo"))
+    awayLogo=decodeGraphicLogo(json.optString("awayLogo"))
+    val state=V2Scorecard.State(
+     sport="basketball",
+     home=json.optString("home","HOME").trim().take(18).ifEmpty{"HOME"},
+     away=json.optString("away","AWAY").trim().take(18).ifEmpty{"AWAY"},
+     homeScore=json.optInt("homeScore",0).coerceIn(0,999),
+     awayScore=json.optInt("awayScore",0).coerceIn(0,999),
+     homeFouls=json.optInt("homeFouls",0).coerceIn(0,99),
+     awayFouls=json.optInt("awayFouls",0).coerceIn(0,99),
+     period=json.optInt("period",1).coerceIn(1,9),
+     clock=json.optString("clock","10:00").take(7),
+     shotClock=json.optInt("shot",24).coerceIn(0,99)
+    )
+    val bmp=V2BroadcastGraphicsRenderer.render(state,
+     json.optDouble("opacity",1.0).toFloat().coerceIn(0f,1f),
+     null,id,homeLogo,awayLogo)
+    // The browser needs only a small preview; retain full native resolution
+    // for the actual encoder filter. Resize its exact artwork before PNG IPC.
+    val compact=V2BroadcastGraphicsRenderer.compact(id)
+    val targetWidth=if(compact)256 else 640
+    val scale=minOf(1f,targetWidth.toFloat()/bmp.width)
+    val reduced=if(scale<1f)android.graphics.Bitmap.createScaledBitmap(
+     bmp,targetWidth,(bmp.height*scale).toInt().coerceAtLeast(1),true)else bmp
+    val bytes=java.io.ByteArrayOutputStream()
+    reduced.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+    if(reduced!==bmp)reduced.recycle()
+    bmp.recycle()
+    if(epoch!=frameRequestEpoch||bytes.size()>145000)return@Thread
+    val src="data:image/png;base64,"+
+     android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP)
+    val detail=JSONObject().put("key",key).put("src",src).toString()
+    runOnUiThread{
+     if(epoch==frameRequestEpoch && !isFinishing && ::browser.isInitialized)
+      browser.evaluateJavascript(
+       "window.dispatchEvent(new CustomEvent('img-native-graphics-frame',{detail:"+detail+"}));",null)
+    }
+   }catch(_:Exception){}finally{
+    homeLogo?.recycle();awayLogo?.recycle()
+   }
+  }.start()
+ }
+
  private lateinit var browser: WebView
  private var oauthClient: NativeOAuthClient? = null
  private lateinit var root: FrameLayout
@@ -44,6 +185,15 @@ class MainActivity : Activity() {
 
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
+  // Real system clock, signal and battery; keep usable Android navigation.
+  // Let Android fit the content to safe system-bar insets.
+  window.statusBarColor = android.graphics.Color.rgb(16,23,27)
+  window.navigationBarColor = android.graphics.Color.rgb(16,23,27)
+  window.decorView.systemUiVisibility = 0
+  // Layout is explicitly inset by the real system bars (including cutouts)
+  // instead of relying on WebView CSS vh, which can extend beneath the
+  // status icons on phones running edge-to-edge Android.
+  androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
   if (BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) oauthClient = NativeOAuthClient(this, BuildConfig.OAUTH_BACKEND_URL)
   browser = WebView(this).apply {
    settings.javaScriptEnabled = true
@@ -61,9 +211,14 @@ class MainActivity : Activity() {
    webViewClient = object : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
      super.onPageFinished(view, url)
-     if(url == "$origin/assets/connections.html" && BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
-      // Native transport is enabled only for signed builds with a pinned HTTPS backend.
-      view.evaluateJavascript("window.IMGAccounts?.enableNative(); window.IMGAccounts?.refresh().catch(()=>{});", null)
+     val localPage=url?.substringBefore('#')?.substringBefore('?')
+     if(localPage == "$origin/assets/index.html" || localPage == "$origin/assets/connections.html") {
+      view.evaluateJavascript("document.documentElement.classList.add('img-native-app');", null)
+      if(BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+       // Verified YouTube account state is available directly in Broadcast
+       // Settings, without navigating to a separate diagnostics page.
+       view.evaluateJavascript("window.IMGAccounts?.enableNative(); window.IMGAccounts?.refresh().catch(()=>{});",null)
+      }
      }
     }
     override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -136,6 +291,81 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action=="img-saved-recordings"){
+        runOnUiThread{publishNativeRecordings()}
+       } else if(action.startsWith("native-open-recording:")){
+        val key=action.removePrefix("native-open-recording:")
+        if(key.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{openSavedRecording(key)}
+       } else if(action=="img-video-capabilities"){
+        reportVideoCapabilities()
+       } else if(action=="native-graphics-gallery"){
+        // Preview generation is on demand only, not during app launch or stream.
+        runOnUiThread { generateGraphicsGallery() }
+       } else if(action.startsWith("native-graphics-frame:")){
+        nativeGraphicFrame(action.removePrefix("native-graphics-frame:"))
+       } else if(action in setOf("img-orientation:landscape","img-orientation:portrait","img-orientation:auto")) {
+        // Only fixed, origin-checked orientation values are accepted. Avoid
+        // WebView fullscreen tricks: native system bars remain real/visible.
+        runOnUiThread {
+         val requested=when(action){
+          "img-orientation:landscape" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+          "img-orientation:portrait" -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+          else -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+         }
+         if(requestedOrientation!=requested)requestedOrientation=requested
+        }
+       } else if (action.startsWith("native-private-video-start:")) {
+        val payload=action.removePrefix("native-private-video-start:")
+        val draftId=payload.substringBefore(':')
+        val encodedGame=payload.substringAfter(':',"")
+        if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
+           encodedGame.length<=100000&&BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
+         // Safely bounded team names/sport are NON-SECRET game metadata.
+         // The Worker still checks private event ownership before RTMPS.
+         val game=try{JSONObject(Uri.decode(encodedGame))}catch(_:Exception){JSONObject()}
+         fun team(key:String):String=game.optString(key).trim().take(18).ifEmpty{
+          if(key=="home")"HOME" else "AWAY"
+         }
+         val sport=if(game.optString("sport")=="pickleball")"pickleball" else "basketball"
+         runOnUiThread {
+          startActivityForResult(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+           .putExtra("draftRequestId",draftId)
+           .putExtra("img_autostart",true)
+           .putExtra("img_sport",sport)
+            .putExtra("img_video_quality",if(game.optString("quality")=="1080p")1080 else 720)
+            .putExtra("img_video_fps",if(game.optInt("fps")==60)60 else 30)
+            .putExtra("img_record_local",game.optBoolean("recordLocal",false))
+           .putExtra("img_home",team("home"))
+           .putExtra("img_away",team("away"))
+           .putExtra("img_graphics",game.optString("graphics").take(30))
+           .putExtra("img_graphics_position",game.optString("position").take(32))
+           .putExtra("img_graphics_size",game.optInt("size",60))
+           .putExtra("img_graphics_opacity",game.optInt("opacity",100))
+           .putExtra("img_graphics_width",game.optInt("width",100))
+           .putExtra("img_graphics_height",game.optInt("height",100))
+           .putExtra("img_graphics_offset_x",game.optInt("offsetX",0))
+           .putExtra("img_graphics_offset_y",game.optInt("offsetY",0))
+           .putExtra("img_graphics_margin",game.optInt("margin",3))
+           .putExtra("img_graphics_animated",game.optBoolean("animated",true))
+           .putExtra("img_logo_home",game.optString("logoHome").take(35000))
+           .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_images",game.optJSONArray("sponsorImages")?.toString()?.take(60000)?:"")
+           .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
+            (0 until minOf(12,items.length())).joinToString("\n"){index->
+             items.optString(index).take(55)
+            }
+           }?:""),7206)
+         }
+        }
+       } else if (action.startsWith("native-private-video:")) {
+        val draftId=action.removePrefix("native-private-video:")
+        if(Regex("^[a-f0-9]{32}$").matches(draftId) &&
+           BuildConfig.OAUTH_BACKEND_URL.isNotBlank()) {
+         runOnUiThread {
+          startActivity(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+           .putExtra("draftRequestId",draftId))
+         }
+        }
        } else if (action.startsWith("oauth-open:")) {
         runOnUiThread { openOAuthBrowser(action.removePrefix("oauth-open:")) }
        } else if (action in setOf("camera", "microphone", "broadcast", "record", "replay"))
@@ -147,8 +377,18 @@ class MainActivity : Activity() {
   }
   if(savedInstanceState != null) browser.restoreState(savedInstanceState)
   root = FrameLayout(this)
+  root.setBackgroundColor(android.graphics.Color.rgb(16,23,27))
   root.addView(browser, FrameLayout.LayoutParams(-1,-1))
+  androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { view,insets ->
+   val bars=insets.getInsets(
+    androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+    androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+   )
+   view.setPadding(bars.left,bars.top,bars.right,bars.bottom)
+   insets
+  }
   setContentView(root)
+  androidx.core.view.ViewCompat.requestApplyInsets(root)
   window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
  }
 
@@ -176,6 +416,12 @@ class MainActivity : Activity() {
  @Deprecated("Deprecated in Java")
  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
   super.onActivityResult(requestCode, resultCode, data)
+  if(requestCode==7206&&resultCode==RESULT_OK&&data?.getBooleanExtra("img_native_stream_ended",false)==true){
+   if(::browser.isInitialized)browser.evaluateJavascript(
+    "window.dispatchEvent(new Event('img-native-stream-ended'));",null)
+   publishNativeRecordings()
+   return
+  }
   if(requestCode == fileChooserRequest) {
    val callback = pendingFileChooser ?: return
    pendingFileChooser = null
@@ -209,12 +455,48 @@ class MainActivity : Activity() {
     Toast.makeText(this,"Untrusted authorization link",Toast.LENGTH_LONG).show()
     return
    }
-   startActivity(Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE))
+   // Google OAuth must use a trusted browser surface, NOT an embedded WebView.
+   // Chrome Custom Tabs runs as an in-app sheet and retains Google's browser
+   // authentication security; once it closes, V2 verifies the pairing.
+   try{
+    CustomTabsIntent.Builder()
+     .setShowTitle(true)
+     .setToolbarColor(android.graphics.Color.rgb(16,23,27))
+     .build().launchUrl(this,uri)
+   }catch(_:Exception){
+    startActivity(Intent(Intent.ACTION_VIEW,uri).addCategory(Intent.CATEGORY_BROWSABLE))
+   }
   } catch (_: Exception) {
    Toast.makeText(this,"Unable to open account authorization",Toast.LENGTH_LONG).show()
   }
  }
 
+ private fun publishNativeRecordings(){
+  if(!::browser.isInitialized||isFinishing)return
+  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
+  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
+  browser.evaluateJavascript(
+   "window.dispatchEvent(new CustomEvent('img-native-recordings',{detail:{clips:"+clips.toString()+"}}));",null)
+ }
+ private fun openSavedRecording(key:String){
+  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
+  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
+  for(index in 0 until clips.length()){
+   val clip=clips.optJSONObject(index)?:continue
+   if(clip.optString("id")!=key)continue
+   val uri=try{Uri.parse(clip.optString("uri"))}catch(_:Exception){return}
+   if(uri.scheme!="content"||uri.authority!="media")return
+   try{
+    startActivity(Intent(Intent.ACTION_VIEW).apply{
+     setDataAndType(uri,"video/mp4")
+     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    })
+   }catch(_:Exception){
+    Toast.makeText(this,"No video player is available for this saved recording.",Toast.LENGTH_LONG).show()
+   }
+   return
+  }
+ }
  private fun handleNativeAction(action: String) {
     when(action) {
      "camera" -> {
@@ -235,10 +517,20 @@ class MainActivity : Activity() {
  // Returning from the system Google login browser doesn't always fire WebView
  // visibilitychange. Explicitly prompt the existing page to verify pairing;
  // the connection badge still changes only after confirmed backend status.
+ override fun onNewIntent(newIntent:Intent) {
+  super.onNewIntent(newIntent)
+  if(newIntent.data?.scheme=="imglivestudiov2"&&newIntent.data?.host=="oauth-complete"){
+   // The deep link transports no account, token, code or pairing secret.
+   // Only the original encrypted native cookie can establish connection.
+   browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
+  }
+ }
  override fun onResume() {
   super.onResume()
-  if(::browser.isInitialized && browser.url == "$origin/assets/connections.html")
+  if(::browser.isInitialized && browser.url?.startsWith("$origin/assets/")==true){
    browser.evaluateJavascript("window.dispatchEvent(new Event('img-native-resume'));",null)
+   publishNativeRecordings()
+  }
  }
  @Deprecated("Deprecated in Java")
  override fun onBackPressed() {

@@ -1767,3 +1767,523 @@ button.facebook-destination-trigger.setting-row{
 .camera.broadcast-canvas-camera.camera-real .video-timeout-ribbon,
 .camera.broadcast-canvas-camera.camera-real .onair-league{display:none!important}
 .camera.broadcast-canvas-camera.camera-real .camera-chip{z-index:9!important}
+
+/* IMG V2 production shell: native Android owns the REAL clock, signal,
+   battery, gesture inset and notification shade. Never draw fake chrome. */
+.status{display:none!important}
+html.img-native-app,html.img-native-app body{height:100%;width:100%;margin:0;padding:0;overflow:hidden}
+html.img-native-app .app{
+ width:100%!important;max-width:none!important;height:100dvh!important;
+ min-height:0!important;margin:0!important;border:0!important;
+ border-radius:0!important;box-shadow:none!important;
+}
+html.img-native-app .app::after{display:none!important}
+html.img-native-app .topbar{min-height:52px;height:clamp(52px,8dvh,68px);padding:7px clamp(12px,4vw,24px)}
+html.img-native-app .bottom{max-width:none}
+html.img-native-app .page{min-width:0;max-width:100%;width:100%}
+html.img-native-app .content{min-height:0;min-width:0;flex:1}
+html.img-native-app .camera{max-width:100%;min-width:0}
+html.img-native-app .scroll-controls{min-width:0;overflow-x:hidden}
+html.img-native-app .studio-page{min-width:0}
+html.img-native-app .settings-compact-note{font-size:12px;color:var(--sub);line-height:1.5}
+html.img-native-app .fab{box-shadow:0 5px 16px rgba(0,0,0,.16)}
+@media (min-width:600px){
+ html.img-native-app body{display:block!important;place-items:unset!important;background:var(--bg)!important}
+ html.img-native-app .app{max-width:none!important}
+}
+@media (orientation:landscape) and (max-height:570px){
+ html.img-native-app .app{height:100dvh!important}
+ html.img-native-app .topbar{height:46px;min-height:46px}
+ html.img-native-app .page{max-height:100%;overflow-y:auto}
+}
+@media (max-width:380px){
+ html.img-native-app .topbar{padding-inline:12px}
+ html.img-native-app .page{padding-inline:14px}
+ html.img-native-app .setting-row{gap:10px}
+ html.img-native-app .quality-group{gap:6px}
+}
+@media (max-height:620px) and (orientation:portrait){
+ html.img-native-app .topbar{height:50px;min-height:50px}
+ html.img-native-app .bottom{height:70px}
+}
+/* Single-purpose, progressively disclosed broadcast settings. */
+.broadcast-destination,.broadcast-advanced{width:100%;min-width:0}
+.broadcast-destination{border:1px solid var(--line);border-radius:16px;padding:11px 12px;margin:12px 0;background:var(--surface)}
+.broadcast-destination button{min-height:42px}
+.broadcast-destination-trigger{
+ appearance:none;border:0;background:transparent;color:var(--ink);
+ display:flex;justify-content:space-between;align-items:center;gap:12px;
+ padding:2px 0;width:100%;font:inherit;text-align:left;cursor:pointer;
+}
+.broadcast-destination-trigger strong{font-size:14px}
+.broadcast-destination-trigger .destination-name{min-width:0;flex:1;display:grid;gap:4px}
+.broadcast-destination-trigger small{font-size:11px;color:var(--sub);font-weight:600}
+.broadcast-destination-indicator{display:inline-flex;gap:7px;align-items:center;flex:none}
+.broadcast-destination-indicator .toggle{pointer-events:none}
+.broadcast-destination-body{display:grid;gap:10px;padding-top:12px;margin-top:10px;border-top:1px solid var(--line)}
+.broadcast-destination-body[hidden]{display:none!important}
+.broadcast-destination-body .input{width:100%;min-width:0}
+.broadcast-destination-body .helper{font-size:12px;margin:0}
+.broadcast-youtube-status{font-size:12px;color:var(--sub);font-weight:700;line-height:1.4;overflow-wrap:anywhere}
+.broadcast-youtube-status.connected{color:#269b6d}
+.broadcast-destination-body .solid-btn{width:100%;min-height:46px}
+.broadcast-advanced{border:1px solid var(--line);border-radius:16px;background:var(--surface);overflow:hidden;margin:14px 0}
+.broadcast-advanced>summary{padding:15px 16px;cursor:pointer;font-size:14px;font-weight:800;list-style:none;display:flex;align-items:center;justify-content:space-between}
+.broadcast-advanced>summary::-webkit-details-marker{display:none}
+.broadcast-advanced>summary::after{content:'⌄';font-size:20px;color:var(--sub);line-height:1}
+.broadcast-advanced[open]>summary::after{content:'⌃'}
+.broadcast-advanced-content{padding:0 14px 15px}
+.broadcast-advanced-content>.control-section{padding-inline:0}
+.broadcast-advanced-content .helper{line-height:1.45}
+.broadcast-quick-note{font-size:12px;color:var(--sub);padding:10px 2px;line-height:1.5}
+.broadcast-primary-heading{font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--sub);margin:12px 0}
+
+
+/* IMG BROADCAST GRAPHICS — independent premium visual family gallery */
+.broadcast-graphics-designer{gap:14px}
+.graphics-header h3{margin:0 0 5px;font:900 18px/1.12 system-ui,Arial,sans-serif;letter-spacing:-.035em}
+.graphics-header p{color:var(--sub);font-size:11px;line-height:1.45;margin:0}
+.graphics-library{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.graphics-pack{position:relative;display:flex;flex-direction:column;gap:9px;width:100%;min-width:0;
+ text-align:left;background:linear-gradient(145deg,#20312f,#12201f);border:1px solid #456259;border-radius:15px;
+ color:#eff9f4;padding:10px;min-height:110px;overflow:hidden;cursor:pointer;
+ box-shadow:inset 0 1px #ffffff21,0 4px 12px #0002;transition:transform .13s,border-color .14s}
+.graphics-pack:active{transform:scale(.975)}
+.graphics-pack.active{border-color:#7bf4b3;box-shadow:0 0 0 2px #44d795a1,inset 0 1px #ffffff50,0 9px 23px #0b6b4b55}
+.graphics-pack .graphics-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.graphics-pack .graphics-copy strong{font-size:12px;font-weight:900;letter-spacing:-.01em}
+.graphics-pack .graphics-copy small{font-size:9px;color:#bed4ca;font-weight:600;line-height:1.3}
+.graphics-art{--left:#1a577a;--right:#8e2336;--highlight:#f0e0a6;display:grid;position:relative;align-items:center;
+ grid-template-columns:18% 14% 1fr 14% 18%;width:100%;height:42px;border-radius:8px;
+ box-shadow:0 3px 8px #000c, inset 0 1px #fff6;isolation:isolate;
+ background:linear-gradient(105deg,var(--left),#14222a 44%,#111a22 58%,var(--right));border:1px solid #dbe3df8a;overflow:hidden}
+.graphics-art::before{content:"";position:absolute;inset:0;pointer-events:none;
+ background:linear-gradient(165deg,#ffffff66,transparent 34%,#03060788 87%);z-index:0}
+.graphics-art>*{z-index:1;min-width:0}
+.graphics-art .logo-unit{width:24px;height:24px;border-radius:50%;border:2px solid #e6f3e6;box-shadow:0 0 0 2px #0009,inset 0 0 0 3px #111c2a;background:radial-gradient(circle,#d6f0fe,#2283c1 62%,#092b54);justify-self:center}
+.graphics-art .team-one,.graphics-art .team-two{width:100%;height:19px;border-radius:3px;background:linear-gradient(#fff8,#ffffff08 40%,#0008),var(--left);border:1px solid #ffffff3d}
+.graphics-art .team-two{background:linear-gradient(#fff8,#ffffff08 40%,#0008),var(--right)}
+.graphics-art .score-one,.graphics-art .score-two{font:900 18px/1 system-ui;text-align:center;color:#fff;text-shadow:0 2px #000c}
+.graphics-art .time-unit{font:900 7px/1.35 system-ui;color:#f4e0b7;text-align:center;white-space:nowrap}
+.graphics-art .shine{position:absolute;inset:-30% auto -30% -15%;width:25%;transform:skew(-19deg);background:linear-gradient(90deg,transparent,#ffffff30,transparent);animation:graphics-sheen 5s ease-in-out infinite;pointer-events:none}
+@keyframes graphics-sheen{0%,65%,100%{left:-22%}88%{left:105%}}
+.graphics-art.style-courtside-a{grid-template-columns:10% 29% 12% 20% 12% 17%;background:linear-gradient(120deg,#0a2e49,#48717c,#d9d6d0,#441a2f)}
+.graphics-art.style-courtside-b{border-radius:45px;grid-template-columns:15% 15% 28% 15% 27%;background:linear-gradient(#ffffff35,#0008),linear-gradient(90deg,#dcac27,#050b12 42%,#01449a)}
+.graphics-art.style-courtside-b .time-unit{border-radius:50%;background:#16202c;box-shadow:0 0 0 3px #d1a757,inset 0 0 12px #000;padding:10px 0}
+.graphics-art.style-arena-glass{background:linear-gradient(135deg,#0c2d3f 0%,#234a6b 24%,#dce7ed 48%,#204365 51%,#531c3b 100%);border:2px solid #d5c5a0}
+.graphics-art.style-rivalry-plate{border-radius:3px;transform:skew(-5deg);background:linear-gradient(95deg,#911f3a,#1c1824 47%,#ecab1e 51%,#0f4d99)}
+.graphics-art.style-center-dial{grid-template-columns:16% 18% 32% 18% 16%;background:linear-gradient(90deg,#133c45,#19242b,#2a3035,#152637);border-radius:10px}
+.graphics-art.style-center-dial .time-unit{border:3px solid #cad4d9;border-radius:50%;padding:10px 0;background:radial-gradient(circle,#304757,#0c171e)}
+.graphics-art.style-broadcast-classic{background:linear-gradient(#f7f8f7 0 30%,#1b2834 32% 70%,#919aa0 73%);border-radius:2px}
+.graphics-art.style-crown-pill{border-radius:50px;border:3px solid #bdc6b8;background:linear-gradient(#ffffff4a,#000a),linear-gradient(90deg,#bf9f25,#080e15 45%,#18519b)}
+.graphics-art.style-split-box{height:42px;width:68%;margin:auto;border-radius:3px;grid-template-columns:26% 20% 15% 19% 20%;background:linear-gradient(#77384a 0 49%,#244d84 50%)}
+.graphics-art.style-match-cube{width:56%;margin:auto;grid-template-columns:20% 16% 28% 16% 20%;height:42px;border-radius:2px;background:linear-gradient(90deg,#e1e8ed,#102f38,#e4eaf0);border:2px solid #bdc9d0}
+.graphics-art.style-edge-box{width:70%;margin-left:auto;grid-template-columns:14% 25% 22% 25% 14%;height:38px;border-radius:7px;background:linear-gradient(110deg,#236a79,#10222a 45%,#a84728)}
+.graphics-art.style-legacy-tv{width:73%;margin:auto;border-radius:2px;height:43px;background:linear-gradient(#96223c 0 47%,#123c8f 53%)}
+.graphics-subhead{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px}
+.graphics-subhead strong{letter-spacing:.09em;font-size:10px}
+.graphics-subhead span{font-size:10px;color:var(--sub);text-align:right}
+.graphics-positions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.graphics-positions button{min-height:40px;border-radius:10px;border:1px solid var(--line);
+ background:var(--field);color:var(--ink);font-size:10px;font-weight:800;padding:5px}
+.graphics-positions button.active{border-color:var(--green);color:var(--green);box-shadow:inset 0 0 0 1px var(--green);background:var(--surface)}
+.graphics-geometry{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.graphics-switch-row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;font-weight:820}
+.graphics-switch-row input{width:22px;height:22px;accent-color:#39b886}
+@media (max-width:370px){.graphics-art{height:36px}.graphics-positions{grid-template-columns:repeat(2,1fr)}.graphics-geometry{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.graphics-art .shine{animation:none}}
+
+
+/* True on-air graphics previews drawn by Android's native renderer. */
+.graphics-pack .graphics-art{display:flex;align-items:center;justify-content:center;
+ background:radial-gradient(ellipse at center,#172028,#070d11 76%);
+ border:0;border-radius:8px;isolation:auto;overflow:hidden;min-height:60px;height:75px;
+ box-shadow:inset 0 1px #ffffff16,0 3px 11px #0008}
+.graphics-pack .graphics-art::before{display:none}
+.graphics-pack .graphics-art img{display:block;max-width:100%;height:100%;width:100%;
+ object-fit:contain;filter:drop-shadow(0 2px 3px #0008)}
+.graphics-pack .graphics-art small{font-size:10px;color:#9cb7ac;font-weight:700}
+.graphics-pack .graphics-art:not(.has-renderer-preview) .shine{display:none}
+.graphics-pack .graphics-art.style-split-box,
+.graphics-pack .graphics-art.style-match-cube,
+.graphics-pack .graphics-art.style-edge-box,
+.graphics-pack .graphics-art.style-legacy-tv{
+ width:100%;height:100px;margin:0;background:radial-gradient(ellipse at center,#172028,#070d11 76%);border:0;border-radius:8px}
+.graphics-pack:focus-visible{outline:2px solid #7bf4b3;outline-offset:2px}
+
+
+/* Native camera: display only the selected Android-rendered score graphic.
+   No legacy CSS scorebug, even before the camera is activated. */
+html.img-native-app .camera.broadcast-canvas-camera .broadcast-video-frame{
+ display:block!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .scorebug,
+html.img-native-app .camera.broadcast-canvas-camera .sponsor-scene,
+html.img-native-app .camera.broadcast-canvas-camera .video-timeout-ribbon,
+html.img-native-app .camera.broadcast-canvas-camera .onair-league{
+ display:none!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .camera-activate{
+ position:absolute;z-index:12!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .camera-chip{z-index:13!important}
+
+/* Compact, labeled position selectors; monochrome vector icons replace
+   ambiguous symbols. These rules affect controls, not on-air artwork. */
+.graphics-header h3,.graphics-subhead strong{display:flex;align-items:center;gap:7px}
+.graphics-positions{grid-template-columns:repeat(5,minmax(0,1fr))}
+.graphics-positions button{
+ display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+ min-width:0;min-height:55px;padding:6px 2px;font-size:10px;line-height:1.15
+}
+.graphics-positions button svg{flex:none}
+.graphics-pack .graphics-copy{
+ display:grid;grid-template-columns:minmax(0,1fr) auto;
+ align-items:center;column-gap:3px;row-gap:2px
+}
+.graphics-pack .graphics-copy strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.graphics-pack .graphics-copy svg{color:#76f0ac;grid-column:2;grid-row:1}
+.graphics-pack .graphics-copy small{grid-column:1/-1}
+@media(max-width:370px){
+ .graphics-positions{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+
+/* SIMPLIFIED IMG BROADCAST SETTINGS — one natural-ratio size control. */
+.broadcast-graphics-designer .scoreboard-adjust-grid{
+ display:grid;grid-template-columns:minmax(0,1fr);gap:11px
+}
+.broadcast-graphics-designer .scoreboard-adjust{
+ font-size:13px;gap:12px
+}
+.broadcast-graphics-designer .scoreboard-adjust input[type="range"]{
+ width:100%;min-height:42px;touch-action:pan-x;accent-color:#4fcb9d
+}
+/* Leave the top-right navigation button unobstructed. A pre-permission
+   camera action sits above the center of the preview, not on its edge. */
+html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .camera-activate{
+ position:absolute!important;top:44%!important;bottom:auto!important;
+ left:50%!important;right:auto!important;
+ transform:translate(-50%,-50%)!important;
+ max-width:90%!important;min-height:42px!important;
+ white-space:nowrap;justify-content:center;
+ padding:10px 15px!important;font-size:12px!important
+}
+
+/* Keep the REAL Broadcast Settings camera surface visible in portrait.
+   Some Android WebView layouts collapsed the aspect-ratio:auto height before
+   permission was granted, putting the form directly below the header. */
+@media (orientation:portrait) {
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap{
+  display:block!important;position:relative!important;flex:0 0 auto!important;
+  width:100%!important;height:auto!important;min-height:0!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.camera{
+  display:block!important;position:relative!important;flex:0 0 auto!important;
+  width:100%!important;height:min(52vw,245px)!important;min-height:174px!important;
+  max-height:245px!important;aspect-ratio:16/9!important;
+  overflow:hidden!important;background:#061a20!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.preview-label small{
+  display:none!important
+ }
+}
+
+/* While the name keyboard is open, preserve the earlier compact preview size. */
+@media (orientation:portrait){
+ html.img-native-app body.img-physical-portrait.img-keyboard-active
+ .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.camera{
+  height:96px!important;min-height:96px!important;max-height:96px!important
+ }
+}
+
+/* Keep the primary action within the Android viewport even when the entire
+   portrait setup editor is taller than its scrolling region. */
+@media (orientation:portrait){
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app) .fixed-cta{
+  position:fixed!important;z-index:60!important;
+  left:14px!important;right:14px!important;width:auto!important;
+  bottom:calc(12px + env(safe-area-inset-bottom,0px))!important;
+  margin:0!important;padding:12px 0 0!important;
+  background:linear-gradient(to bottom,transparent,var(--bg) 25%)!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page>.scroll-controls{
+  padding-bottom:125px!important
+ }
+}
+
+/* Portrait Broadcast Settings: keep camera stable and make the remaining form
+   a real scroll pane, with enough clearance above the anchored Start button. */
+@media (orientation:portrait){
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page){
+  display:flex!important;flex-direction:column!important;
+  height:100%!important;max-height:100%!important;min-height:0!important;
+  min-width:0!important;overflow:hidden!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap{
+  flex:0 0 auto!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.scroll-controls{
+  display:block!important;position:relative!important;
+  flex:1 1 auto!important;height:auto!important;max-height:none!important;
+  min-height:0!important;min-width:0!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch;
+  padding-bottom:144px!important
+ }
+}
+
+/* IMG four-step native-WebView broadcast setup. Portrait/landscape alike:
+   no camera is acquired, shown or started in this preparation flow. */
+.img-wizard-page{display:flex!important;flex-direction:column!important;flex:1;min-height:0;height:100%;width:100%;background:#10191f;color:#f3f8f6;overflow:hidden}
+.img-wizard-head{display:flex;align-items:center;gap:13px;padding:13px 17px 10px;flex:0 0 auto;min-height:55px;border-bottom:1px solid #273a37;font-size:12px;font-weight:800;letter-spacing:.07em}
+.img-wizard-head .img-wizard-back{height:36px;width:36px;flex:none;display:grid;place-items:center;background:#202f30;color:#f3f8f6;border:1px solid #36504b;border-radius:11px}
+.img-wizard-head .img-wizard-progress-caption{margin-left:auto;color:#a6bdb5;letter-spacing:0}
+.img-wizard-scroll{min-height:0;flex:1;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#36584b transparent;padding:20px 18px 24px}
+.img-wizard-topline{display:flex;justify-content:space-between;align-items:center;font-size:11px;letter-spacing:.07em;color:#94b5a8;font-weight:850;gap:8px}
+.img-wizard-topline strong{white-space:nowrap;color:#d8efe5}
+.img-wizard-track{display:flex;gap:6px;margin:13px 0 21px}
+.img-wizard-track>div{height:6px;border-radius:8px;background:#344543;flex:1}
+.img-wizard-track>div.complete{background:#22ce8e}
+.img-wizard-scroll>h1{font-size:clamp(24px,5.7vw,33px);font-weight:900;letter-spacing:-.035em;margin:0 0 6px;line-height:1.16;color:#fff}
+.img-wizard-intro{color:#a8bdb6;font-size:13px;line-height:1.55;margin:0 0 22px}
+.img-wizard-card{background:#1b292b;border:1px solid #334742;border-radius:17px;padding:16px;margin:0 0 15px;box-shadow:0 3px 14px rgba(0,0,0,.14)}
+.img-wizard-card-head{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+.img-wizard-card-head h2{margin:0;font-size:17px;line-height:1.3;font-weight:850;color:#f4faf6}
+.img-wizard-number{width:29px;height:29px;display:grid;place-items:center;border-radius:9px;color:#092a22;background:#2fe0b0;font-size:13px;font-weight:900;flex:none}
+.img-wizard-card .helper{color:#a8c0b6;font-size:12px;line-height:1.5;margin:8px 0 14px}
+.img-wizard-card .small-label{font-size:11px;color:#cadbd4;display:block;margin-bottom:7px}
+.img-wizard-card .input{max-width:100%;background:#112023;color:#f4faf6;border:1px solid #3c5550;border-radius:10px;min-height:43px;font-size:14px;padding:10px 12px}
+.img-wizard-card textarea.input{min-height:85px;resize:vertical}
+.img-wizard-card .form-group{display:block;margin:12px 0}
+.img-wizard-card .chips{display:flex;flex-wrap:wrap;gap:8px}
+.img-wizard-card .chip{background:#102124;color:#d6ece3;border:1px solid #405b53;border-radius:10px;min-height:38px;font-size:13px;padding:9px 12px}
+.img-wizard-card .chip.active{background:#114935;border-color:#2fe0b0;color:#7bfaca}
+.img-wizard-sports,.img-wizard-destinations{display:grid;gap:10px}
+.img-wizard-sport,.img-wizard-choice{color:#e9f6ef;background:#112123;border:1px solid #3c5550;border-radius:13px;padding:12px;min-height:65px;display:flex;align-items:center;gap:12px;width:100%;text-align:left}
+.img-wizard-sport.selected,.img-wizard-choice.selected{border-color:#2fe0b0;background:#153f31}
+.img-wizard-sport-icon{width:44px;height:44px;border-radius:12px;background:#21443b;color:#2fe0b0;display:grid;place-items:center}
+.img-wizard-sport strong,.img-wizard-sport small{display:block}
+.img-wizard-sport strong{font-size:15px}
+.img-wizard-sport small{color:#afc3ba;font-size:11px;margin-top:3px}
+.img-wizard-sport>svg:last-child,.img-wizard-choice>svg:last-child{margin-left:auto;color:#2fe0b0}
+.img-wizard-team{margin:13px 0}
+.img-wizard-team-row{display:flex;align-items:stretch;gap:9px}
+.img-wizard-team-row .grow{flex:1;min-width:0}
+.img-wizard-team-row .input{height:100%;width:100%;min-height:58px}
+.img-wizard-logo-upload{display:flex;gap:5px;align-items:center;justify-content:center;flex-direction:column;text-align:center;border:1px dashed #608b79;border-radius:10px;background:#182f29;padding:6px 8px;min-width:84px;max-width:95px;color:#75e5b0;font-size:10px;font-weight:700;cursor:pointer}
+.img-wizard-logo-upload img{width:36px;height:35px;object-fit:contain}
+.img-wizard-league-toggle{display:flex;align-items:center;justify-content:space-between;color:#f1f8f5;font-size:12px;margin:12px 0}
+.img-wizard-score-art{display:flex;align-items:center;justify-content:center;min-height:100px;padding:10px;border-radius:12px;background:#080f12;border:1px solid #293b38;overflow:hidden;color:#ddeee7;text-align:center}
+.img-wizard-score-art img{width:min(100%,430px);max-height:120px;object-fit:contain;display:block}
+.img-wizard-score-caption{display:flex;justify-content:space-between;gap:8px;color:#a9c9bb;font-size:11px;padding:8px 4px 13px;font-weight:650}
+.img-wizard-score-caption span{overflow:hidden;max-width:36%;text-overflow:ellipsis;white-space:nowrap}
+.img-wizard-card .scoreboard-designer{margin-top:12px}
+.img-wizard-card .graphics-library{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.img-wizard-card .graphics-pack{min-width:0}
+.img-wizard-card .graphics-art{overflow:hidden}
+.img-wizard-upload-clip,.img-wizard-disabled-upload{display:flex;gap:12px;align-items:center;padding:15px;border:1px dashed #528676;border-radius:12px;background:#122a25;color:#bfeada;font-size:12px;font-weight:700;cursor:pointer}
+.img-wizard-disabled-upload{opacity:.65;cursor:default;border-style:solid}
+.img-wizard-quality{display:grid;gap:15px}
+.img-wizard-output{background:#102321;color:#7ff9c1;padding:12px;border-radius:9px;text-align:center;font-size:17px;font-weight:850}
+.img-wizard-footer{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex:none;background:#10191f;border-top:1px solid #2b443d;padding:12px 17px calc(13px + env(safe-area-inset-bottom,0px));box-shadow:0 -12px 22px rgba(7,16,16,.18);min-height:69px}
+.img-wizard-footer button{min-height:44px;border-radius:12px;padding:10px 17px;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
+.img-wizard-footer .solid-btn{background:#2fe0b0!important;color:#092b20!important;flex:1;box-shadow:none}
+.img-wizard-footer .outline-btn{background:#253332;color:#dbede5;border:1px solid #526c61}
+.img-wizard-card .sponsor-list{display:grid;gap:8px}
+.img-wizard-card .sponsor-row{border-color:#385148}
+.img-wizard-card .dropdown-body{background:transparent;border:0;padding:0}
+.img-wizard-card .broadcast-destination,.img-wizard-card .facebook-destination{background:#102223;border-color:#37564c;border-radius:12px}
+@media(min-width:680px){.img-wizard-scroll{width:min(100%,660px);margin:0 auto;padding:26px 25px}.img-wizard-footer{padding-left:max(20px,calc((100% - 620px)/2));padding-right:max(20px,calc((100% - 620px)/2))}.img-wizard-card{padding:21px}.img-wizard-card .graphics-library{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Keep the wizard's next/start action inside the real Android viewport.
+   Older setup rules constrain all .studio-page descendants in portrait. */
+.app.headerless-setup-app .img-wizard-page .img-wizard-footer{
+ position:fixed!important;
+ left:50%!important;right:auto!important;bottom:0!important;top:auto!important;
+ transform:translateX(-50%);
+ width:min(100%,480px)!important;
+ z-index:90!important;
+ box-sizing:border-box!important;
+ display:flex!important;
+ visibility:visible!important;
+ margin:0!important;
+}
+.app.headerless-setup-app .img-wizard-page .img-wizard-scroll{
+ padding-bottom:115px!important;
+ overflow-y:auto!important;
+ min-height:0!important;
+}
+.app.headerless-setup-app .img-wizard-page .img-wizard-score-art canvas{
+ display:block;width:100%;height:auto;max-height:160px;object-fit:contain;
+}
+@media(min-width:570px) and (orientation:landscape){
+ .app.headerless-setup-app .img-wizard-page .img-wizard-footer{width:100%!important;max-width:none!important}
+}
+
+/* Silent sponsor clips use the video area, never the phone's microphone. */
+.sponsor-scene video{
+ position:relative;z-index:1;max-width:76%;width:auto;max-height:43%;
+ object-fit:contain;border-radius:11px;margin:7px 0 12px;
+}
+
+/* Native scoreboard artwork remains the sole preview source. Until the
+   per-team bitmap arrives, display its unmodified native gallery thumbnail. */
+.img-wizard-score-art{position:relative;min-height:102px}
+.img-wizard-score-art .img-wizard-score-fallback{position:relative;z-index:1;display:block;width:min(100%,430px);height:auto;max-height:140px;object-fit:contain}
+.img-wizard-score-art canvas[data-setup-scoreboard]{position:absolute;z-index:2;inset:0;width:100%;height:100%;object-fit:contain}
+.img-wizard-score-art.img-wizard-score-ready .img-wizard-score-fallback,
+.img-wizard-score-art.img-wizard-score-ready .img-wizard-score-loading{visibility:hidden}
+.img-wizard-card .img-wizard-score-loading{display:block;margin:auto}
+
+/* The wizard scrolls ONLY inside its content pane, never the phone window. */
+body.img-wizard-active{height:100dvh!important;overflow:hidden!important;overscroll-behavior:none}
+body.img-wizard-active .app.headerless-setup-app{height:100dvh!important;overflow:hidden!important}
+body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:contain;scroll-behavior:auto}
+
+/* Optional team reuse and lineup entry inside the existing Step 2 cards. */
+.img-wizard-team+.img-wizard-team{border-top:1px solid #334e47;padding-top:13px}
+.img-wizard-lineup{margin:13px 0 9px;border:1px solid #38544b;border-radius:11px;background:#102222;padding:11px}
+.img-wizard-lineup>summary{display:flex;align-items:center;gap:8px;color:#e6f9f0;font-size:12px;font-weight:750;cursor:pointer;list-style:none}
+.img-wizard-lineup>summary::-webkit-details-marker{display:none}
+.img-wizard-lineup>summary svg{color:#30dda7}
+.img-wizard-lineup[open]>summary{margin-bottom:10px}
+.img-wizard-lineup>.input{width:100%;min-height:88px;margin:0}
+.img-wizard-save-team{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border-radius:11px;border:1px solid #427d67;background:#143d31;color:#76eeb5;min-height:43px;font-size:12px;font-weight:780;padding:10px}
+.img-wizard-recent-teams{margin:13px 0 0}
+.img-wizard-recent-teams .chip{font-size:11px;min-height:33px;padding:8px 11px}
+
+
+/* IMG V2 Oct 23: understated controls, full landscape on-air frame. */
+.img-wizard-head .img-wizard-back{
+ background:transparent!important;border:0!important;border-radius:0!important;
+ box-shadow:none!important;width:42px;height:42px;color:#f3f8f6;
+}
+.img-wizard-topline,.img-wizard-intro{display:none!important}
+.img-wizard-track{margin:12px 0 17px}
+.img-wizard-page .img-wizard-score-art{
+ width:100%;max-width:100%;aspect-ratio:16/9;min-height:0!important;
+ padding:0!important;border:1px solid #2f4845;border-radius:12px;
+ background:#101820;position:relative;overflow:hidden;display:block;
+}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{
+ display:block!important;position:absolute!important;inset:0!important;
+ width:100%!important;height:100%!important;max-height:none!important;
+ object-fit:contain!important;background:transparent;
+}
+.img-wizard-page .img-wizard-sticky-preview{
+ flex:0 0 auto;min-height:0;background:#10191f;padding:8px 18px;
+ border-top:1px solid #2b443d;z-index:70;
+}
+.img-wizard-page .img-wizard-sticky-preview[hidden]{display:none!important}
+.img-wizard-page .img-wizard-sticky-preview .img-wizard-score-art{
+ width:min(100%,390px);margin:0 auto;
+}
+.img-wizard-platform{
+ border:1px solid #33534e;border-radius:12px;
+ background:#102224;overflow:hidden;margin:0 0 9px;
+}
+.img-wizard-platform-trigger{
+ display:flex;width:100%;min-height:58px;align-items:center;gap:12px;
+ border:0;background:transparent;color:#f0f9f5;padding:12px 14px;
+ text-align:left;font-size:15px;cursor:pointer;
+}
+.img-wizard-platform-trigger strong{font-size:15px;flex:1}
+.img-wizard-platform-logo{width:28px;height:28px;flex:none}
+.img-wizard-mini-switch{
+ height:21px;width:39px;position:relative;flex:none;background:#53625e;
+ border-radius:18px;transition:background .18s ease;
+}
+.img-wizard-mini-switch:after{
+ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
+ background:#fff;border-radius:50%;transition:transform .18s ease;
+}
+.img-wizard-mini-switch.active{background:#24ce98}
+.img-wizard-mini-switch.active:after{transform:translateX(18px)}
+.img-wizard-platform-body{padding:0 13px 13px}
+.img-wizard-platform-body[hidden]{display:none!important}
+.img-wizard-platform-body>.outline-btn,.img-wizard-platform-body>.solid-btn{
+ display:block;width:100%;min-height:43px;margin:0;
+}
+.img-wizard-platform-error{display:block;color:#fbbaaa;font-size:11px;margin:9px 0 0}
+.img-wizard-switch-row{display:flex;align-items:center;justify-content:space-between;
+ min-height:56px;gap:12px;font-size:14px;color:#eef9f3}
+.img-wizard-switch-row+.img-wizard-switch-row{border-top:1px solid #324b45}
+.img-wizard-footer>.solid-btn{width:100%}
+.img-wizard-card .helper{display:none}
+.img-wizard-scroll{padding-top:17px}
+
+/* Keep normal setup panels editorially quiet; runtime errors remain visible. */
+.img-wizard-page .img-wizard-sport small,
+.img-wizard-page .dropdown-body>.hint,
+.img-wizard-page .sponsor-list .hint{display:none!important}
+
+/* V2: enforce an actual bounded settings viewport. Some native WebView /
+   older .studio-page rules let the inner main grow to content height,
+   leaving scrollTop/maxScroll at zero and making sticky preview impossible. */
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page{
+ height:100dvh!important;max-height:100dvh!important;
+ min-height:0!important;display:flex!important;
+ flex-direction:column!important;overflow:hidden!important;
+}
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-scroll{
+ flex:1 1 0px!important;height:0!important;
+ min-height:0!important;max-height:none!important;
+ overflow-y:auto!important;overflow-x:hidden!important;
+ -webkit-overflow-scrolling:touch;
+}
+
+/* Approved IMG V2 mobile wizard corrections (same approved palette). */
+.img-wizard-page .img-wizard-sticky-preview{order:0;flex:none!important;border-top:0!important;border-bottom:1px solid #2b443d;padding:7px 18px 9px!important;background:#10191f;z-index:70}
+.img-wizard-page .img-wizard-sticky-preview .img-wizard-score-art{width:min(100%,330px)!important;margin:0 auto;aspect-ratio:16/9}
+.img-wizard-page .img-wizard-score-art .img-wizard-score-fallback{
+ position:absolute;z-index:1;bottom:5%;left:8%;width:84%;height:auto;
+ max-width:none;max-height:30%;object-fit:contain;pointer-events:none
+}
+.img-wizard-page .img-wizard-score-art.img-wizard-score-ready .img-wizard-score-fallback{visibility:hidden!important}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{z-index:2;background:transparent!important}
+.img-wizard-page .sponsor-number{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;min-width:13px!important;width:auto!important;height:auto!important;color:#9fbbb0}
+.img-wizard-page .img-wizard-quality{gap:10px!important}
+.img-wizard-page .img-wizard-quality .chip{min-height:32px!important;padding:6px 11px!important;font-size:12px!important;border-radius:9px!important}
+.img-wizard-page .img-wizard-quality-warning{margin:5px 0;color:#ffbf9e;font-size:12px}
+.img-wizard-page .img-wizard-offline-btn{min-height:44px;width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:9px 13px;border-radius:11px;border:1px solid #428571;background:#173f34;color:#abf9d9;font-weight:800;font-size:14px}
+.img-wizard-page .img-wizard-offline-btn svg:last-child{margin-left:auto}
+.img-create-sports{display:grid;gap:14px;margin:19px 0}
+.img-create-sports .img-wizard-sports{gap:11px}
+.img-create-sports .img-wizard-sport{color:#e9f6ef!important;background:#112123;border-radius:14px;min-height:78px}
+.img-create-sports .img-wizard-sport.selected{border-color:#2fe0b0;background:#153f31}
+.img-offline-ready-page .img-offline-ready-note{padding:14px 20px;color:#94b1a6;font-size:13px;text-align:center}
+.img-offline-ready-page .fixed-cta .solid-btn{width:100%;background:#2fe0b0;color:#092a20}
+
+.img-v2-stop-recording{position:fixed;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:99;border:1px solid #ea6b6b;border-radius:10px;background:#a72636;color:#fff;padding:9px 15px;font-size:12px;font-weight:850;box-shadow:0 4px 14px #0006}
+.img-v2-stop-recording:active{transform:scale(.98)}
+@media(orientation:landscape) and (max-height:450px){.img-v2-stop-recording{top:4px;right:7px;padding:7px 10px;font-size:10px}}
+
+/* Approved V2 final review: keep true 16:9 graphics free of black sidebars. */
+.img-wizard-page .img-wizard-score-art{background:transparent!important;isolation:isolate}
+.img-wizard-page .img-wizard-sticky-preview{background:#10191f}
+.img-wizard-page .img-wizard-score-origin{background:#1a2826!important}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{object-fit:contain;touch-action:pan-y}
+.img-wizard-audience{margin-top:15px;padding:12px;border:1px solid #35534c;border-radius:12px;display:grid;gap:10px;color:#e4f8ef}
+.img-wizard-audience legend{font-size:13px;font-weight:800;padding:0 6px}
+.img-wizard-audience label{display:flex;align-items:center;gap:9px;font-size:13px;min-height:28px}
+.img-wizard-audience input{accent-color:#2fe0b0;width:18px;height:18px}
+.img-my-streams{margin:22px 0}
+.img-my-streams-rail{display:flex;gap:12px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x mandatory;padding:2px 0 12px}
+.img-my-stream-card{flex:0 0 min(82vw,330px);text-align:left;scroll-snap-align:start;color:#e6f8ed;background:#1b2b26;border:1px solid #36594a;border-radius:18px;padding:17px;min-height:178px;display:flex;flex-direction:column;justify-content:space-between}
+.img-my-stream-teams{display:flex;gap:14px;align-items:center}
+.img-my-stream-logo{display:flex;align-items:center;justify-content:center;border-radius:14px;min-width:60px;min-height:60px;background:#234339;color:#3fe5b1}
+.img-my-stream-logo img{max-width:48px;max-height:48px;object-fit:contain}
+.img-my-stream-score{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:12px 6px;align-items:center;font-size:15px;font-weight:750}
+.img-my-stream-score span{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.img-my-stream-score strong{border-radius:9px;background:#263c34;text-align:center;padding:8px 0;font-size:18px}
+.img-my-stream-foot{border-top:1px dashed #4c685e;padding-top:12px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.img-my-stream-foot span{display:flex;align-items:center;gap:6px;color:#afc7bc}
+.img-my-stream-foot b{font-size:11px;color:#3de0aa}
