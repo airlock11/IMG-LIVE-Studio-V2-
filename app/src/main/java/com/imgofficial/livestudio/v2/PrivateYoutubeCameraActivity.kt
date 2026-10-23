@@ -33,6 +33,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var resumed=false
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
+ private var draftReady=true
+ private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
  private var previousGraphicBitmap:android.graphics.Bitmap?=null
  private var previousGraphicBounds=intArrayOf(-1,-1,-1,-1)
@@ -80,14 +82,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
-   if(broadcast?.prepareNextDraft(draftId)!=true){
-    status.text="This YouTube event has ended. Create a new broadcast from IMG setup."
+   draftReady=broadcast?.prepareNextDraft(draftId)==true
+   if(!draftReady){
+    autoLaunchAllowed=false
     refresh()
     return
    }
    val resolution=intent.getIntExtra("img_video_quality",720)
     val fps=intent.getIntExtra("img_video_fps",30)
-    broadcast?.configureVideoProfile(resolution,fps)
+    videoProfileReady=broadcast?.isActive()==true||broadcast?.configureVideoProfile(resolution,fps)==true
+    if(!videoProfileReady)autoLaunchAllowed=false
     broadcast?.configureLocalRecording(intent.getBooleanExtra("img_record_local",false))
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
@@ -795,6 +799,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val service=broadcast
    if(service?.isActive()==true){confirmStopUpload();return@greenButton}
    if(!checkPermissions())return@greenButton
+   if(!draftReady||!videoProfileReady){refresh();return@greenButton}
    if(service==null)status.text="Camera service is not ready."
    else if(!service.activateForeground())status.text="Android could not start the foreground service."
    else service.startPrivateUpload(draftId)
@@ -860,7 +865,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private fun maybeStartPrivateUpload(){
-  if(!autoLaunchAllowed||!checkPermissions())return
+  if(!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
   val service=broadcast?:return
   if(service.isActive()||service.isEnded()){autoLaunchAllowed=false;return}
   autoLaunchAllowed=false
@@ -895,14 +900,18 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(!::start.isInitialized)return
   val usable=service!=null&&checkPermissions()
   val liveNow=service?.isActive()==true
-  start.isEnabled=usable&&service?.isEnded()!=true
+  start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true
   val label=if(liveNow)"STOP STREAMING" else "GO LIVE"
   if(start.text.toString()!=label){
    start.text=label
    iconButton(start,if(liveNow)"stop" else "live",true)
   }
   if(service!=null) {
-   status.text=service.getStatus()+" • "+service.connectionSummary()
+   status.text=when{
+    !draftReady->"This YouTube event has ended. Create a new broadcast from IMG setup."
+    !videoProfileReady->"Selected video quality is unavailable. Return to setup and choose a supported profile."
+    else->service.getStatus()+" • "+service.connectionSummary()
+   }
    refreshScoreboard()
   }
  }
