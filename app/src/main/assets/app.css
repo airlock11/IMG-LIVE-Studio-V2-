@@ -2623,3 +2623,28 @@ body.img-wizard-active .img-wizard-page .img-wizard-score-sticky-unit.img-score-
 .img-offline-ready-page .img-offline-ready-note{
  padding:10px 4px;text-align:left;font-size:12px;color:#a0bfb0;
 }
+
+/* #10 phone fail: OFFLINE must expose the SAME interactive broadcast controls
+   before recording starts, without placing Start Recording inside video. */
+.img-offline-ready-page .img-offline-ready-controls{
+ flex:1 1 auto;
+ min-height:0;
+ overflow-y:auto;
+ overscroll-behavior:contain;
+ -webkit-overflow-scrolling:touch;
+ padding:12px 16px calc(104px + env(safe-area-inset-bottom,0px));
+}
+.img-offline-ready-page .img-offline-ready-game-controls{
+ margin-top:12px;
+ min-width:0;
+ width:100%;
+}
+.img-offline-ready-page .img-offline-ready-game-controls .control-section{
+ border-color:#29483d;
+}
+.img-offline-ready-page .img-offline-ready-game-controls button{
+ touch-action:manipulation;
+}
+.img-offline-ready-page .fixed-cta{
+ z-index:42;
+}
