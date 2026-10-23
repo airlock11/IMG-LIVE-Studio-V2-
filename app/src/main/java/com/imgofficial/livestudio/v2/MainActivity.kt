@@ -349,6 +349,7 @@ class MainActivity : Activity() {
            .putExtra("img_graphics_animated",game.optBoolean("animated",true))
            .putExtra("img_logo_home",game.optString("logoHome").take(35000))
            .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_images",game.optJSONArray("sponsorImages")?.toString()?.take(60000)?:"")
            .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
             (0 until minOf(12,items.length())).joinToString("\n"){index->
              items.optString(index).take(55)
