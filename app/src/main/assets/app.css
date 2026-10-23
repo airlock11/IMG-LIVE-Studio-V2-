@@ -2142,3 +2142,8 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
 .img-wizard-score-art.img-wizard-score-ready .img-wizard-score-fallback,
 .img-wizard-score-art.img-wizard-score-ready .img-wizard-score-loading{visibility:hidden}
 .img-wizard-card .img-wizard-score-loading{display:block;margin:auto}
+
+/* The wizard scrolls ONLY inside its content pane, never the phone window. */
+body.img-wizard-active{height:100dvh!important;overflow:hidden!important;overscroll-behavior:none}
+body.img-wizard-active .app.headerless-setup-app{height:100dvh!important;overflow:hidden!important}
+body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:contain;scroll-behavior:auto}
