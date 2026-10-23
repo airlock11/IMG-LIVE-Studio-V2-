@@ -35,8 +35,12 @@
    pending.delete(response.requestId);
    if(response.ok!==true){
     const code=String(response.error||"request failed");
-    const message=["oauth_not_enabled","service_not_configured","provider_not_configured"].includes(code)
-      ?"Facebook and YouTube login is not available yet. IMG is completing secure setup."
+    const message=code==="oauth_not_enabled"
+      ?"Secure YouTube testing has expired or is disabled on the server. Re-enable the authorized test window to connect."
+      :code==="provider_not_enabled"
+      ?"This platform is not enabled by the IMG account service yet."
+      :["service_not_configured","provider_not_configured"].includes(code)
+      ?"Secure account configuration is incomplete. Please check the IMG OAuth service."
       :"IMG login service: "+code;
     item.reject(Error(message));
     return;

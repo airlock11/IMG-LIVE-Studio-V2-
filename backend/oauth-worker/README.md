@@ -5,7 +5,7 @@
 
 **Access state:** Full production OAuth remains **disabled** (`OAUTH_ENABLED = "false"`). A separate `YOUTUBE_TEST_ENABLED` flag may temporarily enable **YouTube only** for Google Cloud's explicitly registered OAuth test users. The Cloudflare-only `YOUTUBE_TEST_EXPIRES_AT` timestamp closes this test window automatically. Facebook stays disabled. `wrangler.toml` defaults both flags to `false`, so normal source redeploys fail closed.
 
-**YouTube test configuration (October 22, 2026):** Cloudflare has a 24-hour testing window expiring on **October 23, 2026, 11:27 UTC** (7:27 PM Philippine time). The Google OAuth app is still in Testing with a registered test account. This enables a real-account **login test**, not public OAuth availability or live streaming. Don't extend it or turn on full OAuth without an additional security review.
+**YouTube test configuration (October 24, 2026):** After the previous test window expired, an authorized, narrow YouTube-only verification window was renewed in the Cloudflare runtime until **October 25, 2026, 06:15 UTC** (2:15 PM Philippine time). Full production OAuth stays disabled; Facebook is disabled; the Google OAuth app remains in Testing for registered test accounts. The runtime has the required D1 and encrypted secret bindings. This window permits account login and live-readiness testing subject to YouTube account eligibility; it does **not** establish that any live stream has successfully started. Wrangler source remains deliberately fail-closed for normal redeploys. Do not make production OAuth generally available without a separate security review.
 
 The existing IMG website and the original V1 app/Workers are not changed.
 
