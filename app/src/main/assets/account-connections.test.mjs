@@ -438,3 +438,55 @@ test('Edit Sponsor Name dialog only edits name; Step 3 retains separate image up
  assert.ok(studio.includes("data-upload='sponsor-"),'Sponsor images remain in separate Step 3 rows');
  assert.ok(css.includes('.img-sponsor-name-editor-actions'));
 });
+
+test('issue 8 My Streams: real saved clips, dates, logos, direct play and See all',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const home=app.slice(app.indexOf('function home(){'),app.indexOf('function ',app.indexOf('function home(){')+12));
+ assert.ok(home.includes('offlineClips.filter(c=>c.saved===true)'),'No unsaved offline clips');
+ assert.ok(home.includes('img-my-streams-rail'),'Keep approved horizontally scrolling My Streams');
+ assert.ok(home.includes("data-go=\"recordings\""),'See All opens library');
+ assert.ok(home.includes("open-native-recording-")&&home.includes("play-recording-"),'Each saved card opens real recording');
+ assert.ok(home.includes("c.createdAt")&&home.includes("homeLogo")&&home.includes("awayLogo"),'Real date and team badges');
+ assert.ok(home.includes("m.scores"),'Real scores');
+ assert.ok(!home.includes('<b>COMPLETED</b>'),'Do not substitute fake metadata');
+ assert.ok(native.includes('.put("homeLogo",savedHomeLogo)')&&native.includes('.put("awayLogo",savedAwayLogo)'));
+ assert.ok(native.includes('IS_PENDING,0'),'Only successfully exported clips should be indexed');
+});
+test('issue 10: offline recording opens broadcasting controls, does not record until tapped',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const block=app.slice(app.indexOf('function studio(){'),app.indexOf('function isTypingControl('));
+ assert.ok(block.includes("screen==='offline-ready'"));
+ assert.ok(block.includes('img-offline-ready-controls'),'Broadcast readiness controls are available');
+ assert.ok(block.includes('data-action="start-offline-recording"'));
+ assert.ok(block.includes("data-action=\"toggle-mic\""));
+ const action=app.slice(app.indexOf("if(name==='setup-record-offline')"),app.indexOf("if(name==='setup-destination-facebook')",app.indexOf("if(name==='setup-record-offline')")));
+ assert.ok(action.includes("screen='offline-ready'"));
+ assert.ok(!action.includes('startRecording('),'No automatic record on offline entry');
+ assert.ok(app.includes('if(name===\'start-offline-recording\')return startOfflineRecording()'));
+ assert.ok(app.includes('STOP RECORDING'));
+});
+test('issue 11: camera/mic teardown and repeated start/stop safety',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const media=await readFile(new URL('./media.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ assert.ok(app.includes('let offlineStartBusy=false,offlineStopBusy=false'));
+ assert.ok(app.includes('if(offlineStartBusy||offlineStopBusy||data.live.active'));
+ assert.ok(app.includes('offlineStopBusy=true'));
+ assert.ok(app.includes('offlineStopBusy=false'));
+ assert.ok(media.includes('let cameraEpoch=0'));
+ assert.ok(media.includes('if(attempt!==cameraEpoch)'), 'Canceled camera permission cannot attach a leaked track');
+ assert.ok(media.includes('opened.getTracks().forEach(track=>track.stop())'));
+ assert.ok(media.includes('cameraEpoch++; // Do not attach delayed camera permission results'));
+ assert.ok(media.includes('microphoneStream=null;drawCanvas=null;stateReader=null'));
+ assert.ok(native.includes('try{stream?.release()}'));
+});
+test('issue 12: professional vector sport, status, and recording controls',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const icons=app.slice(app.indexOf('const svgPaths='),app.indexOf('function ic('));
+ for(const name of ['basketball','pickleball','wifi','layout-broadcast','microphone','record','video','camera','clock'])
+  assert.ok(icons.includes(name+':')||icons.includes("'"+name+"':"),'Missing vector icon: '+name);
+ assert.ok(!app.includes("ic('emoji'"));
+ assert.ok(app.includes("ic('record',18)"));
+ assert.ok(app.includes("ic('microphone',17)"));
+});
