@@ -93,16 +93,15 @@
   // Use the exact Android on-air scoreboard bitmap, not a placeholder.
   syncNativeGraphic(state);
   for(const canvas of canvases){
-   if(canvas.width!==1200)canvas.width=1200;
-   if(canvas.height!==290)canvas.height=290;
+   if(canvas.width!==1280)canvas.width=1280;
+   if(canvas.height!==720)canvas.height=720;
    const ctx=canvas.getContext('2d');
    if(!ctx)continue;
    ctx.clearRect(0,0,canvas.width,canvas.height);
    if(!nativeScoreImage||!nativeScoreImage.naturalWidth)continue;
-   const w=nativeScoreImage.naturalWidth,h=nativeScoreImage.naturalHeight;
-   const scale=Math.min(canvas.width*.96/w,canvas.height*.82/h);
-   ctx.drawImage(nativeScoreImage,(canvas.width-w*scale)/2,
-    (canvas.height-h*scale)/2,w*scale,h*scale);
+   // Use exactly the same output-space placement and scale as the live
+   // compositor. Both the normal and the sticky 16:9 previews call this.
+   drawNativeGraphic(ctx,state,canvas.width,canvas.height);
    canvas.parentElement?.classList.add('img-wizard-score-ready');
   }
  }
