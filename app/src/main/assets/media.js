@@ -103,6 +103,7 @@
    const scale=Math.min(canvas.width*.96/w,canvas.height*.82/h);
    ctx.drawImage(nativeScoreImage,(canvas.width-w*scale)/2,
     (canvas.height-h*scale)/2,w*scale,h*scale);
+   canvas.parentElement?.classList.add('img-wizard-score-ready');
   }
  }
  function drawNativeGraphic(ctx,s,w,h){
