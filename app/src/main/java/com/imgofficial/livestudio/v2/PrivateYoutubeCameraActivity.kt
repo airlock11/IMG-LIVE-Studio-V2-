@@ -37,6 +37,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var timeoutActive=false
  private var timeoutSlideshowEnabled=false
  private var gameWasRunningBeforeTimeout=false
+ private var timeoutAuto=true
+ private var timeoutIntervalSeconds=5
+ private var timeoutTransitionMillis=500
+ private lateinit var timeoutButton:Button
  private var draftReady=true
  private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
@@ -101,9 +105,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      .map{it.trim()}.filter{it.isNotEmpty()}.take(12)
     val images=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
      catch(_:Exception){org.json.JSONArray()}
-    broadcast?.configureSponsorSlides(names,names.indices.map{i->
-     decodeSponsorImage(images.optString(i))
-    })
+     val token=intent.getStringExtra("img_sponsor_token").orEmpty()
+     broadcast?.configureSponsorSlides(names,names.indices.map{i->
+      decodeSponsorFile(token,i)?:decodeSponsorImage(images.optString(i))
+     })
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
     intent.getStringExtra("img_home")?:"HOME",
@@ -153,6 +158,21 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
    if(options.outWidth !in 1..128 || options.outHeight !in 1..128)return null
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
+ private fun decodeSponsorFile(token:String,index:Int):android.graphics.Bitmap?{
+  if(!token.matches(Regex("^[a-f0-9]{16}$"))||index !in 0..11)return null
+  val file=java.io.File(cacheDir,"imgsponsor_${token}_${index}.img")
+  if(!file.isFile||file.length() !in 1..2500000L)return null
+  return try{
+   val bounds=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeFile(file.absolutePath,bounds)
+   if(bounds.outWidth !in 1..4096||bounds.outHeight !in 1..4096)return null
+   val options=android.graphics.BitmapFactory.Options()
+   var downsample=1
+   while(maxOf(bounds.outWidth,bounds.outHeight)/downsample>1920)downsample*=2
+   options.inSampleSize=downsample
+   android.graphics.BitmapFactory.decodeFile(file.absolutePath,options)
   }catch(_:Exception){null}
  }
  private fun decodeSponsorImage(raw:String?):android.graphics.Bitmap?{
@@ -424,26 +444,26 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
    gameWasRunningBeforeTimeout=false
   }
-  updateGameClock()
- }
- private fun showTimeoutPreview(anchor:View){
+   if(::timeoutButton.isInitialized){
+    timeoutButton.text=if(timeoutActive)"RESUME" else "TIMEOUT"
+    iconButton(timeoutButton,if(timeoutActive)"play" else "clock")
+   }
+   updateGameClock()
+  }
+  private fun showTimeoutPreview(anchor:View){
   if(!timeoutActive)setTimeoutMode(true)
   timeoutPreview?.dismiss()
+  // Compact options above the bottom Timeout/Resume control, clear of camera.
   val content=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
-   background=rounded(Color.rgb(17,30,27),13)
-   setPadding(dp(12),dp(10),dp(12),dp(10))
+   background=rounded(Color.rgb(17,30,27),12)
+   setPadding(dp(9),dp(8),dp(9),dp(8))
   }
-  content.addView(smallLabel("TIMEOUT  •  CLOCKS PAUSED"),LinearLayout.LayoutParams(-1,dp(28)))
-  // Slideshow has no separate preview box: the native GL compositor
-  // displays sponsors directly over the camera in the actual on-air video.
-  val nextSponsor=iconButton(darkButton("NEXT SPONSOR"){
-   broadcast?.nextSponsorSlide()
-  },"play").apply{isEnabled=timeoutSlideshowEnabled}
+  content.addView(smallLabel("TIMEOUT · CLOCKS PAUSED"),LinearLayout.LayoutParams(-1,dp(24)))
   val showRow=LinearLayout(this).apply{
    orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
   }
-  showRow.addView(ink("Show Slideshow",14f),LinearLayout.LayoutParams(0,dp(45),1f))
+  showRow.addView(ink("Show Slideshow",12f),LinearLayout.LayoutParams(0,dp(32),1f))
   val toggle=android.widget.Switch(this).apply{
    isChecked=timeoutSlideshowEnabled
    isEnabled=broadcast?.hasSponsorSlides()==true
@@ -451,31 +471,53 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    trackTintList=android.content.res.ColorStateList(
     arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
     intArrayOf(Color.rgb(35,170,112),Color.rgb(74,91,80)))
-   setOnCheckedChangeListener{_,checked->
-    timeoutSlideshowEnabled=checked&&broadcast?.hasSponsorSlides()==true
-    broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)
-    nextSponsor.isEnabled=timeoutSlideshowEnabled
+  }
+  showRow.addView(toggle,LinearLayout.LayoutParams(dp(48),dp(32)))
+  content.addView(showRow)
+  val nextSponsor=darkButton("NEXT SPONSOR"){broadcast?.nextSponsorSlide()}.apply{
+   isEnabled=timeoutSlideshowEnabled;textSize=11f
+  }
+  fun timingRow(label:String,choices:List<Int>,selected:()->Int,
+   display:(Int)->String,changed:(Int)->Unit){
+   val line=LinearLayout(this).apply{
+    orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
    }
+   line.addView(ink(label,11f),LinearLayout.LayoutParams(0,dp(32),1f))
+   lateinit var choice:Button
+   choice=darkButton(display(selected())){
+    val i=choices.indexOf(selected()).coerceAtLeast(0)
+    val value=choices[(i+1)%choices.size]
+    changed(value);choice.text=display(value)
+    broadcast?.setSponsorTiming(timeoutAuto,timeoutIntervalSeconds,timeoutTransitionMillis)
+   }.apply{textSize=11f}
+   line.addView(choice,LinearLayout.LayoutParams(dp(74),dp(29)))
+   content.addView(line)
   }
-  showRow.addView(toggle,LinearLayout.LayoutParams(dp(56),dp(45)))
-  content.addView(showRow,LinearLayout.LayoutParams(-1,dp(48)))
-  if(broadcast?.hasSponsorSlides()==true){
-   content.addView(nextSponsor,LinearLayout.LayoutParams(-1,dp(40)))
-  }else{
-   content.addView(smallLabel("Add sponsors in Step 3 to enable the slideshow."),
-    LinearLayout.LayoutParams(-1,dp(34)))
+  timingRow("Mode",listOf(1,0),{if(timeoutAuto)1 else 0},
+   {if(it==1)"AUTO" else "MANUAL"},{timeoutAuto=it==1})
+  timingRow("Slide every",listOf(3,5,8,10,15),{timeoutIntervalSeconds},
+   {"${it}s"},{timeoutIntervalSeconds=it})
+  timingRow("Transition",listOf(0,250,500,1000,1500),{timeoutTransitionMillis},
+   {if(it==0)"NONE" else "${it/1000f}s"},{timeoutTransitionMillis=it})
+  content.addView(nextSponsor,LinearLayout.LayoutParams(-1,dp(35)).apply{
+   topMargin=dp(4)
+  })
+  if(broadcast?.hasSponsorSlides()!=true)content.addView(
+   smallLabel("Add sponsor images in Step 3."),
+   LinearLayout.LayoutParams(-1,dp(25)))
+  toggle.setOnCheckedChangeListener{_,checked->
+   timeoutSlideshowEnabled=checked&&broadcast?.hasSponsorSlides()==true
+   broadcast?.setSponsorTiming(timeoutAuto,timeoutIntervalSeconds,timeoutTransitionMillis)
+   broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)
+   nextSponsor.isEnabled=timeoutSlideshowEnabled
   }
-  content.addView(iconButton(greenButton("RESUME GAME"){
-   timeoutPreview?.dismiss();timeoutPreview=null
-   setTimeoutMode(false)
-  },"play"),LinearLayout.LayoutParams(-1,dp(40)).apply{topMargin=dp(6)})
-  val popup=android.widget.PopupWindow(content,dp(285),-2,true).apply{
-   setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
+  val popup=android.widget.PopupWindow(content,dp(230),-2,true).apply{
+   setBackgroundDrawable(rounded(Color.rgb(17,30,27),12))
    isOutsideTouchable=true
-   elevation=dp(12).toFloat()
+   elevation=dp(8).toFloat()
   }
   timeoutPreview=popup
-  popup.showAsDropDown(anchor,0,-anchor.height-dp(120),Gravity.CENTER_HORIZONTAL)
+  popup.showAsDropDown(anchor,0,-anchor.height-dp(207),Gravity.CENTER_HORIZONTAL)
  }
  private fun confirmStopOfflineRecording(){
   if(broadcast?.isOfflineRecording()!=true)return
@@ -601,9 +643,15 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    shotSeconds=savedInstanceState.getInt("v2_shot_seconds",24).coerceIn(0,99)
     configuredGameSeconds=savedInstanceState.getInt("v2_initial_clock_seconds",600).coerceIn(0,5999)
     shotClockVisible=savedInstanceState.getBoolean("v2_shot_visible",true)
-   gameRunning=false
-  }
-  if(savedInstanceState==null)shotClockVisible=intent.getBooleanExtra("img_shot_visible",true)
+    gameRunning=false
+    timeoutActive=savedInstanceState.getBoolean("v2_timeout_active",false)
+    gameWasRunningBeforeTimeout=savedInstanceState.getBoolean("v2_timeout_clock_before",false)
+    timeoutSlideshowEnabled=savedInstanceState.getBoolean("v2_timeout_sponsors",false)
+    timeoutAuto=savedInstanceState.getBoolean("v2_timeout_auto",true)
+    timeoutIntervalSeconds=savedInstanceState.getInt("v2_timeout_interval",5)
+    timeoutTransitionMillis=savedInstanceState.getInt("v2_timeout_transition",500)
+   }
+   if(savedInstanceState==null)shotClockVisible=intent.getBooleanExtra("img_shot_visible",true)
    autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
@@ -861,9 +909,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    refresh()
   }.apply{textSize=14f}
   if(!offlineMode)iconButton(start,"live",true)
-  val timeout=iconButton(darkButton("TIMEOUT"){},"clock")
-  timeout.setOnClickListener{showTimeoutPreview(timeout)}
-  val keys=listOf(start,timeout,
+   timeoutButton=iconButton(darkButton("TIMEOUT"){},"clock")
+   timeoutButton.setOnClickListener{
+    if(timeoutActive){
+     timeoutPreview?.dismiss();timeoutPreview=null
+     setTimeoutMode(false)
+    }else showTimeoutPreview(timeoutButton)
+   }
+   val keys=listOf(start,timeoutButton,
    iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
   val widths=listOf(1.9f,1.15f,1.15f)
   for((index,button) in keys.withIndex())
@@ -888,8 +941,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   setContentView(safeRoot)
   androidx.core.view.ViewCompat.requestApplyInsets(safeRoot)
   gameSeconds=savedInstanceState?.getInt("v2_clock_seconds",600)?:600
-  gameRunning=savedInstanceState?.getBoolean("v2_clock_running",false)?:false
-  lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+   gameRunning=if(timeoutActive)false else (savedInstanceState?.getBoolean("v2_clock_running",false)?:false)
+   if(::timeoutButton.isInitialized){
+    timeoutButton.text=if(timeoutActive)"RESUME" else "TIMEOUT"
+    iconButton(timeoutButton,if(timeoutActive)"play" else "clock")
+   }
+   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
   timer.post(tick)
 
   if(!offlineMode&&(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank())){
@@ -1020,8 +1077,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   outState.putInt("v2_shot_seconds",shotSeconds)
    outState.putInt("v2_initial_clock_seconds",configuredGameSeconds)
    outState.putBoolean("v2_shot_visible",shotClockVisible)
-  outState.putBoolean("v2_clock_running",gameRunning)
-  super.onSaveInstanceState(outState)
+   outState.putBoolean("v2_clock_running",gameRunning)
+   outState.putBoolean("v2_timeout_active",timeoutActive)
+   outState.putBoolean("v2_timeout_clock_before",gameWasRunningBeforeTimeout)
+   outState.putBoolean("v2_timeout_sponsors",timeoutSlideshowEnabled)
+   outState.putBoolean("v2_timeout_auto",timeoutAuto)
+   outState.putInt("v2_timeout_interval",timeoutIntervalSeconds)
+   outState.putInt("v2_timeout_transition",timeoutTransitionMillis)
+   super.onSaveInstanceState(outState)
  }
  override fun onDestroy(){
   timer.removeCallbacks(tick)
