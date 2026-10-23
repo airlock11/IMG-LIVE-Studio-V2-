@@ -96,15 +96,20 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('.img-wizard-page .graphics-library'))"))
    assertEquals("No separate X/Y sliders","false",js(activity,web,
     "Boolean(document.querySelector('[data-graphics-range^=\"overlayOffset\"]'))"))
-   js(activity,web,"document.querySelector('.img-wizard-score-art')?.scrollIntoView({block:'center'});true")
+   // Verify that the ACTUAL native bitmap was composited, not merely that
+   // a gallery of static thumbnails exists elsewhere on the screen.
+   waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art.img-wizard-score-ready'))")
+   js(activity,web,"(function(){const pane=document.querySelector('.img-wizard-scroll'),art=document.querySelector('.img-wizard-score-art');if(!pane||!art)return false;pane.scrollTop+=art.getBoundingClientRect().top-pane.getBoundingClientRect().top-130;return true})()")
    SystemClock.sleep(650)
    capture(activity,2,"scoreboard")
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
    SystemClock.sleep(650)
    capture(activity,3)
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-quality'))")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
    SystemClock.sleep(650)
    capture(activity,4)
    val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=setup-destination-youtube]'))")
