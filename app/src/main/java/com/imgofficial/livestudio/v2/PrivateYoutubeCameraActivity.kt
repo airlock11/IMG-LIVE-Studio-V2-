@@ -447,17 +447,36 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    }
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  heading("Size & position")
-  pair(tool("Smaller"){broadcast?.resizeGraphics(-5)},
-   tool("Larger"){broadcast?.resizeGraphics(5)})
-  pair(tool("Bottom"){broadcast?.placeGraphicsAt("bottom-center")},
-   tool("Lower right"){broadcast?.placeGraphicsAt("bottom-right")})
-  pair(tool("Lower left"){broadcast?.placeGraphicsAt("bottom-left")},
-   tool("Upper right"){broadcast?.placeGraphicsAt("top-right")})
-  pair(tool("Upper left"){broadcast?.placeGraphicsAt("top-left")},
-   tool("Reset"){broadcast?.placeGraphicsAt(
-    if(V2BroadcastGraphicsRenderer.compact(broadcast?.graphicsStyle()?:0))
-     "bottom-right" else "bottom-center")})
+  heading("Scoreboard size")
+  // A single continuous size slider: no technical X/Y, width, height,
+  // margin or fixed-position buttons. The original artwork stays intact.
+  val sizeReadout=ink("${broadcast?.graphicsSize()?:60}%",15f)
+  val sizeRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL
+   gravity=Gravity.CENTER_VERTICAL
+  }
+  val sizeSlider=android.widget.SeekBar(this).apply{
+   max=100
+   progress=(broadcast?.graphicsSize()?:60)-15
+   progressTintList=android.content.res.ColorStateList.valueOf(Color.rgb(46,214,146))
+   thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(67,233,166))
+   setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
+    override fun onProgressChanged(seekBar:android.widget.SeekBar?,value:Int,fromUser:Boolean){
+     if(fromUser){
+      val newSize=value+15
+      sizeReadout.text="${newSize}%"
+      broadcast?.setGraphicsSize(newSize)
+     }
+    }
+    override fun onStartTrackingTouch(seekBar:android.widget.SeekBar?){}
+    override fun onStopTrackingTouch(seekBar:android.widget.SeekBar?){}
+   })
+  }
+  sizeRow.addView(sizeSlider,LinearLayout.LayoutParams(0,dp(44),1f))
+  sizeRow.addView(sizeReadout,LinearLayout.LayoutParams(dp(58),dp(44)).apply{
+   leftMargin=dp(9)
+  })
+  tools.addView(sizeRow,LinearLayout.LayoutParams(-1,dp(48)))
   fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
    return android.widget.Switch(this).apply{
     text=name
