@@ -272,24 +272,28 @@ test('private draft cannot be created after signed-out session even with late re
  await accounts.signOut();
  await assert.rejects(accounts.createYoutubePrivateDraft({title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'b'.repeat(32)}),/Check YouTube Live readiness/);
 });
-test('collapsing YouTube settings does not unselect the active destination',async()=>{
+test('YouTube platform selection can switch off without logging out the account',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const start=studio.indexOf("if(name==='destination-yt')");
  const end=studio.indexOf("if(name==='youtube-connect')",start);
  assert.ok(start>0&&end>start,'Destination controller missing');
  const handler=studio.slice(start,end);
- assert.ok(handler.includes('if(!o.yt){o.yt=true;o.fb=false;o.tiktok=false;youtubeExpanded=true'));
- assert.ok(handler.includes('else youtubeExpanded=!youtubeExpanded'));
- assert.ok(!handler.includes('o.yt=youtubeExpanded'));
- assert.ok(handler.includes("if(name==='youtube-remove')"));
+ assert.ok(handler.includes('o.yt=!o.yt'));
+ assert.ok(handler.includes('else {youtubeExpanded=false'));
+ assert.ok(!handler.includes("accounts.disconnect("),'Turning off selection must not revoke OAuth');
+ assert.ok(studio.includes("if(name==='youtube-disconnect')"),'Explicit disconnect must remain available');
  assert.ok(studio.includes("window.IMGMedia?.stopCamera?.()"));
  assert.ok(studio.includes("native-private-video-start:"));
 });
 test('main private YouTube flow requires operator audience choice and stays private',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
- assert.ok(!studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){')).includes('data-youtube-audience'));
- assert.ok(studio.includes("dialog={type:'youtube-classification'}"));
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ assert.ok(wizard.includes('data-youtube-audience'),'Step 4 Stream Details should contain audience choices');
+ assert.ok(wizard.includes('Not made for kids'));
+ assert.ok(wizard.includes('Made for kids'));
+ assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Audience is required before YouTube draft creation');
+ assert.ok(!studio.includes("dialog={type:'youtube-classification'};render(true);return;"),'No GO LIVE classification pop-up');
  assert.ok(studio.includes('youtube-classification-yes'));
  assert.ok(studio.includes('youtube-classification-no'));
  assert.ok(studio.includes('Made for kids?'));
