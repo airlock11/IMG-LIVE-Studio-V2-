@@ -729,6 +729,7 @@
    .find(m=>MediaRecorder.isTypeSupported(m));
   if(!mime)throw new Error('Chrome WebM live encoding is unavailable on this device.');
   const portrait=orientation==='portrait',high=quality==='1080p';
+  const rate=Number(fps)===60?60:30;
   const canvas=document.createElement('canvas');
   canvas.width=portrait?(high?1080:720):(high?1920:1280);
   canvas.height=portrait?(high?1920:1280):(high?1080:720);
@@ -744,9 +745,10 @@
    if(microphone){
     mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
    }
-   stream=canvas.captureStream(clamp(fps,15,30));
+   stream=canvas.captureStream(rate);
    for(const track of mic?.getAudioTracks()||[])stream.addTrack(track);
-   mediaRecorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?4500000:2500000,
+   mediaRecorder=new MediaRecorder(stream,{mimeType:mime,
+    videoBitsPerSecond:high?(rate===60?12000000:8000000):(rate===60?6000000:4000000),
     audioBitsPerSecond:128000});
    mediaRecorder.addEventListener('dataavailable',e=>{if(active&&e.data?.size)onChunk(e.data)});
    mediaRecorder.addEventListener('error',e=>{if(active){const err=e?.error||new Error('Live video encoder failed.');if(typeof onError==='function')onError(err);else console.warn('Live capture failed',err?.name||'encoding error')}});
