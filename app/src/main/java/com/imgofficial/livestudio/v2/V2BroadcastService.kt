@@ -213,7 +213,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    return false
   }
  }
- private fun finishLocalRecording(engine:GenericStream?){
+ private fun finishLocalRecording(engine:GenericStream?,wasOffline:Boolean){
   val file=currentRecordFile?:return
   currentRecordFile=null
   try{engine?.stopRecord()}catch(_:Exception){}
@@ -280,7 +280,8 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("sport",finalScore.sport)
        .put("homeLogo",savedHomeLogo)
        .put("awayLogo",savedAwayLogo)
-       .put("platform","YouTube")
+       .put("platform",if(wasOffline)"Offline" else "YouTube")
+        .put("platforms",if(wasOffline)org.json.JSONArray() else org.json.JSONArray().put("YouTube"))
       previous.put(clip)
       prefs.edit().putString("clips",previous.toString()).apply()
      }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
@@ -1158,7 +1159,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreAwardEpoch++
   scoreAward=null
   qualityPolling=false
-  finishLocalRecording(stream)
+  finishLocalRecording(stream,wasOffline)
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
