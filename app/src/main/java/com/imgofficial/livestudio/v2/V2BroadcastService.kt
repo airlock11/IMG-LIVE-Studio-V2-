@@ -141,6 +141,23 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var wakeLock:PowerManager.WakeLock?=null
  private var generation=0
  private var attempted=false
+ private var activeDraftRequestId=""
+ /** Reusing the bound service after stopping must not sign out Google or
+  * restart an already-ended YouTube event. Only a NEW, server-validated
+  * request ID may reset this local encoder session. */
+ fun prepareNextDraft(draftId:String):Boolean{
+  if(!Regex("^[a-f0-9]{32}$").matches(draftId))return false
+  if(!ended)return true
+  if(running||connecting||draftId==activeDraftRequestId)return false
+  generation++
+  attempted=false
+  ended=false
+  ingestDestination=null
+  recoveryAttempts=0
+  connectedAtLeastOnce=false
+  notifyState("Ready for new private YouTube event · account retained.")
+  return true
+ }
  private var running=false
  private var connecting=false
  private var ended=false
@@ -424,6 +441,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   if(!networkReady){notifyState("No internet connection. Connect Wi-Fi or mobile data first.");return}
   attempted=true
+  activeDraftRequestId=draftId
   connecting=true
   recoveryAttempts=0
   connectedAtLeastOnce=false
