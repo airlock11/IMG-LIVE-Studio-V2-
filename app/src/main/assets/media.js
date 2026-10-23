@@ -112,15 +112,24 @@
   e?.name==='NotReadableError'?'The camera is currently in use by another app.':
   e?.name==='OverconstrainedError'?'This camera does not support the requested resolution.':
   e?.message||'Camera or recording could not start.';
- async function openCamera({quality='720p',facingMode='environment'}={}){
-  if(isCameraOn()){attach();return cameraStream;}
-  if(!canCamera())throw new Error('Camera is unavailable. Open IMG LIVE Studio in HTTPS Chrome and allow camera access.');
-  const high=quality==='1080p';
-  const requested={audio:false,video:{facingMode:{ideal:facingMode},width:{ideal:high?1920:1280},height:{ideal:high?1080:720}}};
-  try{cameraStream=await navigator.mediaDevices.getUserMedia(requested);}
-  catch(e){if(e.name!=='OverconstrainedError'&&e.name!=='NotFoundError')throw e;
-   cameraStream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});}
-  sourceVideo=document.createElement('video');sourceVideo.muted=true;sourceVideo.autoplay=true;
+ async function openCamera({quality='720p',fps=30,facingMode='environment'}={}){
+   if(isCameraOn()){attach();return cameraStream;}
+   if(!canCamera())throw new Error('Camera is unavailable. Open IMG LIVE Studio in HTTPS Chrome and allow camera access.');
+   const high=quality==='1080p',rate=Number(fps)===60?60:30;
+   const requested={audio:false,video:{facingMode:{ideal:facingMode},
+    width:{min:high?1920:1280,ideal:high?1920:1280},
+    height:{min:high?1080:720,ideal:high?1080:720},
+    frameRate:{min:rate===60?59:29,ideal:rate}}};
+   cameraStream=await navigator.mediaDevices.getUserMedia(requested);
+   const measured=cameraStream.getVideoTracks()[0]?.getSettings?.()||{};
+   const width=Math.max(Number(measured.width)||0,Number(measured.height)||0);
+   const height=Math.min(Number(measured.width)||0,Number(measured.height)||0);
+   if(width<(high?1920:1280)||height<(high?1080:720)||
+    (Number(measured.frameRate)>0&&Number(measured.frameRate)<(rate===60?58:28))){
+    cameraStream.getTracks().forEach(track=>track.stop());cameraStream=null;
+    throw new Error('This camera cannot capture '+quality+' at '+rate+' FPS. Select a supported profile.');
+   }
+   sourceVideo=document.createElement('video');sourceVideo.muted=true;sourceVideo.autoplay=true;
   sourceVideo.playsInline=true;sourceVideo.srcObject=cameraStream;
   try{sourceVideo.play().catch(()=>{});}catch(e){/* Playback can resume after a user interaction. */}
   cameraStream.getVideoTracks().forEach(t=>t.addEventListener('ended',()=>{if(!isRecording())stopCamera();}));
