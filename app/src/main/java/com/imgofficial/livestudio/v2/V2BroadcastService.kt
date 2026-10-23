@@ -307,10 +307,22 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    if(stream?.isOnPreview!=true)stream?.startPreview(surface)
    stream?.getGlInterface()?.setPreviewResolution(surface.width,surface.height)
-   // The GL renderer may start after filters were configured. Reapply its
-   // composed frame and geometry once the SurfaceView is actually attached.
+   // Preview attachment can recreate a GL surface/texture even when the
+   // scoreboard state is unchanged. Restore the last native renderer bitmap
+   // to the encoded compositor before restoring its placement.
+   val cached=latestGraphics
+   if(cached!=null && !cached.isRecycled){
+    try{scoreFilter?.setImage(cached)}
+    catch(_:Exception){
+     lastScorecardImageState=null
+     notifyState("GL graphic restoration failed; camera remains active.")
+    }
+   }else if(scoreFilter!=null){
+    // Make a fresh frame if the image cache was never filled.
+    lastScorecardImageState=null
+    updateScorecard()
+   }
    placeGraphics()
-   if(scoreFilter!=null && latestGraphics==null)updateScorecard()
    pushPreviewGraphics()
   }catch(_:Exception){ notifyState("Preview unavailable; camera upload may still work.") }
  }
@@ -421,7 +433,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    graphicsPosition=position;placeGraphics()
   }
  }
- private fun placeGraphics(){
+ private fun placeGraphics(notifyPreview:Boolean=true){
   val filter=scoreFilter
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
   // Maintain natural artwork aspect ratio under every resize setting.
@@ -445,7 +457,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    filter?.setScale(pw,ph)
    filter?.setPosition(finalX,finalY)
    lastGraphicsGeometry=floatArrayOf(finalX,finalY,pw,ph)
-   pushPreviewGraphics()
+   if(notifyPreview)pushPreviewGraphics()
   }catch(_:Exception){notifyState("Broadcast Graphics position could not be changed.")}
  }
  private fun startScoreAward(team:Int,points:Int,prior:Int){
@@ -564,16 +576,22 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Transparent frames are rendered for hide and fade transitions.
    val picture=V2BroadcastGraphicsRenderer.render(
     scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
-   // Upload first, then scale: image sprite dimensions can be reset on
-   // texture replacement in the GPU filter lifecycle.
-   // GL upload failure must never blank the operator's native preview.
-   try{filter?.setImage(picture)}catch(_:Exception){
-    notifyState("GL graphic upload unavailable; local preview remains visible.")
+   // Upload first, then scale: image sprite dimensions can reset on
+   // texture replacement in the GPU filter lifecycle. A local preview
+   // cannot be treated as proof that the encoded GL upload succeeded.
+   var uploaded=filter!=null
+   if(filter!=null){
+    try{filter.setImage(picture)}catch(_:Exception){
+     uploaded=false
+     notifyState("GL graphic upload failed; on-air overlay unverified.")
+    }
    }
-   placeGraphics()
+   // Clock ticks should update the native ImageView only once per frame.
+   placeGraphics(notifyPreview=false)
    latestGraphics=picture
    pushPreviewGraphics(picture)
-   lastScorecardImageState=scoreboard.copy()
+   // Retry a failed upload on a subsequent state update or surface attach.
+   lastScorecardImageState=if(uploaded)scoreboard.copy() else null
    lastRenderedAward=scoreAward
    lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
