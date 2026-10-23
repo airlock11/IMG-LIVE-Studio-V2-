@@ -275,11 +275,17 @@ async function startPrivateYouTubeFromStudio(){
   const logoHome=await compactBadge(data.options.broadcast.homeLogo);
   const logoAway=await compactBadge(data.options.broadcast.awayLogo);
   const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
+  const namedSponsors=data.sponsors.filter(x=>String(x.name||'').trim()).slice(0,12);
+  const sponsorImages=[];
+  for(const item of namedSponsors.slice(0,3)){
+   const image=await compactBadge(item.img||'');
+   sponsorImages.push(image.length<=18000?image:'');
+  }
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
   const game=encodeURIComponent(JSON.stringify({
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
-   sponsorNames:data.sponsors.map(x=>String(x.name||'').trim().slice(0,55)).filter(Boolean).slice(0,12),
+   sponsorNames:namedSponsors.map(x=>String(x.name).trim().slice(0,55)),sponsorImages,
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
    animated:data.options.overlayAnimated!==false,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
