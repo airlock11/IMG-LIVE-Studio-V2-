@@ -61,6 +61,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var sponsorSlides: List<Pair<String, android.graphics.Bitmap?>> = emptyList()
  private var sponsorFilter:ImageFilterRender?=null
  private var sponsorShowing=false
+ private var scoreVisibleBeforeSponsor:Boolean?=null
  private var sponsorSlideIndex=0
  private val sponsorAdvance=object:Runnable{
   override fun run(){
@@ -130,9 +131,22 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  fun setSponsorSlideshow(enabled:Boolean){
   ui.removeCallbacks(sponsorAdvance)
-  sponsorShowing=enabled&&sponsorSlides.isNotEmpty()&&!ended
-  if(sponsorShowing){sponsorSlideIndex=0;paintSponsorSlide();ui.postDelayed(sponsorAdvance,5000)}
-  else transparentSponsor()
+  val willShow=enabled&&sponsorSlides.isNotEmpty()&&!ended
+  if(willShow){
+   // Preserve visibility set by the operator before sponsor presentation.
+   if(!sponsorShowing)scoreVisibleBeforeSponsor=scoreVisible
+   sponsorShowing=true
+   setScorecardVisible(false)
+   sponsorSlideIndex=0
+   paintSponsorSlide()
+   ui.postDelayed(sponsorAdvance,5000)
+  }else{
+   sponsorShowing=false
+   transparentSponsor()
+   val previous=scoreVisibleBeforeSponsor
+   scoreVisibleBeforeSponsor=null
+   if(previous!=null)setScorecardVisible(previous)
+  }
  }
  fun nextSponsorSlide(){
   if(!sponsorShowing||sponsorSlides.isEmpty())return
@@ -1086,6 +1100,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   val wasOffline=offlineRecording
   ui.removeCallbacks(sponsorAdvance)
   sponsorShowing=false;transparentSponsor()
+  // Next recording or live stream must not inherit a hidden scoreboard.
+  scoreVisibleBeforeSponsor?.let{
+   scoreVisible=it;scoreAlpha=if(it)1f else 0f
+   scoreTransitionEpoch++
+  }
+  scoreVisibleBeforeSponsor=null
   offlineRecording=false;offlinePaused=false
   generation++
   connecting=false;running=false;ended=true
