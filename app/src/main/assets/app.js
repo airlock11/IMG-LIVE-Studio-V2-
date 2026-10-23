@@ -92,7 +92,7 @@ for(const [field,min,max,standard] of [['overlayOffsetX',-30,30,0],['overlayOffs
 o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
  const cannedNames=['COURTSIDE','NORTHSTAR','PEAK SPORT'];
  const onlyCannedSponsors=savedSponsors.length===3&&savedSponsors.every((item,i)=>item?.name===cannedNames[i]&&!item?.img);
- return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors,version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
+ return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors.map(item=>({...item,video:item.video?.startsWith('blob:')?'':item.video||''})),version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
 const data=load();
 function applyAppearance(){
  const theme=data.options.appearance==='dark'?'dark':'light';
@@ -1212,7 +1212,7 @@ if(name.startsWith('possession-')){l.possession=parseInt(name.slice(-1));persist
 if(name==='toggle-sponsors'){sponsorOpen=!sponsorOpen;return render(true)}
 if(name==='sponsor-add'){data.sponsors.push({name:'NEW SPONSOR',img:''});persist();sponsorOpen=true;return render(true)}
 if(name.startsWith('sponsor-up-')){const i=parseInt(name.slice(11));if(i>0)[data.sponsors[i-1],data.sponsors[i]]=[data.sponsors[i],data.sponsors[i-1]];persist();return render(true)}
-if(name.startsWith('sponsor-remove-')){if(data.sponsors.length>1)data.sponsors.splice(parseInt(name.slice(15)),1);l.slideIndex=0;persist();return render(true)}
+if(name.startsWith('sponsor-remove-')){if(data.sponsors.length>1){const removed=data.sponsors.splice(parseInt(name.slice(15)),1)[0];if(removed?.video?.startsWith('blob:'))URL.revokeObjectURL(removed.video);}l.slideIndex=0;persist();return render(true)}
 if(name.startsWith('sponsor-edit-')){dialog={type:'sponsor-edit',i:parseInt(name.slice(13))};return render(true)}
 if(name==='save-sponsor'){const n=$('#sponsor-title')?.value?.trim();if(n){data.sponsors[dialog.i].name=n;dialog=null;persist();render(true)}else toast('Sponsor name is required.');return}
 if(name==='team-add'){draft.teams.push({id:uid(),name:'',color:'#47816c',logo:''});return render(true)}
