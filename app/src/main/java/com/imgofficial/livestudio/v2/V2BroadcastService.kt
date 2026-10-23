@@ -422,7 +422,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
  }
  private fun placeGraphics(){
-  val filter=scoreFilter?:return
+  val filter=scoreFilter
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
   // Maintain natural artwork aspect ratio under every resize setting.
   val overall=(graphicsSize/60f)*minOf(graphicsWidth,graphicsHeight)/100f
@@ -442,8 +442,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    val finalX=(px+graphicsX).coerceIn(safe,100f-pw-safe)
    val finalY=(py+graphicsY).coerceIn(safe,100f-ph-safe)
-   filter.setScale(pw,ph)
-   filter.setPosition(finalX,finalY)
+   filter?.setScale(pw,ph)
+   filter?.setPosition(finalX,finalY)
    lastGraphicsGeometry=floatArrayOf(finalX,finalY,pw,ph)
    pushPreviewGraphics()
   }catch(_:Exception){notifyState("Broadcast Graphics position could not be changed.")}
@@ -540,10 +540,15 @@ class V2BroadcastService:Service(),ConnectChecker {
    lastRenderedAward=null
    lastGraphicsStyle=-1
    updateScorecard()
-  }catch(_:Exception){notifyState("Video scoreboard overlay unavailable on this phone.")}
+  }catch(_:Exception){
+   // GL may not support image filters on this device. Keep the operator
+   // preview alive and make the missing encoded overlay explicit.
+   notifyState("Broadcast Graphics unavailable in encoded video; camera remains ready.")
+   updateScorecard()
+  }
  }
  private fun updateScorecard(){
-  val filter=scoreFilter?:return
+  val filter=scoreFilter
   if(lastScoreAlpha==scoreAlpha && lastRenderedAward==scoreAward &&
       lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
   try{
@@ -554,7 +559,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can be reset on
    // texture replacement in the GPU filter lifecycle.
-   filter.setImage(picture)
+   filter?.setImage(picture)
    placeGraphics()
    latestGraphics=picture
    pushPreviewGraphics(picture)
