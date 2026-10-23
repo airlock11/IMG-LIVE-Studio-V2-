@@ -2015,3 +2015,27 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
   padding-bottom:125px!important
  }
 }
+
+/* Portrait Broadcast Settings: keep camera stable and make the remaining form
+   a real scroll pane, with enough clearance above the anchored Start button. */
+@media (orientation:portrait){
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page){
+  display:flex!important;flex-direction:column!important;
+  height:100%!important;max-height:100%!important;min-height:0!important;
+  min-width:0!important;overflow:hidden!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap{
+  flex:0 0 auto!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.scroll-controls{
+  display:block!important;position:relative!important;
+  flex:1 1 auto!important;height:auto!important;max-height:none!important;
+  min-height:0!important;min-width:0!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  overscroll-behavior-y:contain; -webkit-overflow-scrolling:touch;
+  padding-bottom:144px!important
+ }
+}
