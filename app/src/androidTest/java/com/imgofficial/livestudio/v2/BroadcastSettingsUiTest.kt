@@ -136,6 +136,8 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('.img-wizard-output'))"))
    assertEquals("Go Live must not advertise PRIVATE in button label","false",js(activity,web,
     "(document.querySelector('[data-action=start-broadcast]')?.textContent||'').includes('PRIVATE')"))
+   assertEquals("Offline recording must use its own entry, not main GO LIVE CTA","true",js(activity,web,
+    "(document.querySelector('[data-action=start-broadcast]')?.textContent||'').includes('GO LIVE NOW')"))
    val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=destination-yt]'))")
    assertEquals("YouTube destination missing","true",localToggle)
    click(activity,web,"destination-yt")
