@@ -314,7 +314,41 @@ class MainActivity : Activity() {
          }
          if(requestedOrientation!=requested)requestedOrientation=requested
         }
-       } else if (action.startsWith("native-private-video-start:")) {
+       } else if (action.startsWith("native-offline-controls:")) {
+        // An explicitly tapped offline recording never requests OAuth, a
+        // YouTube draft, a relay, or an RTMPS endpoint.
+        val payload=action.removePrefix("native-offline-controls:")
+        if(payload.length<=100000){
+         val game=try{JSONObject(Uri.decode(payload))}catch(_:Exception){JSONObject()}
+         fun team(key:String)=game.optString(key).trim().take(18).ifEmpty{
+          if(key=="home")"HOME" else "AWAY"
+         }
+         val sport=if(game.optString("sport")=="pickleball")"pickleball" else "basketball"
+         runOnUiThread{
+          startActivityForResult(Intent(this@MainActivity,PrivateYoutubeCameraActivity::class.java)
+           .putExtra("img_offline_recording",true)
+           .putExtra("img_autostart",false)
+           .putExtra("img_sport",sport)
+           .putExtra("img_video_quality",if(game.optString("quality")=="1080p")1080 else 720)
+           .putExtra("img_video_fps",if(game.optInt("fps")==60)60 else 30)
+           .putExtra("img_shot_visible",game.optBoolean("shotVisible",true))
+           .putExtra("img_record_local",true)
+           .putExtra("img_home",team("home"))
+           .putExtra("img_away",team("away"))
+           .putExtra("img_graphics",game.optString("graphics").take(30))
+           .putExtra("img_graphics_size",game.optInt("size",60))
+           .putExtra("img_graphics_opacity",game.optInt("opacity",100))
+           .putExtra("img_logo_home",game.optString("logoHome").take(35000))
+           .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_images",game.optJSONArray("sponsorImages")?.toString()?.take(60000)?:"")
+           .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
+            (0 until minOf(12,items.length())).joinToString("\n"){i->
+             items.optString(i).take(55)
+            }
+           }?:""),7206)
+         }
+        }
+ (action.startsWith("native-private-video-start:")) {
         val payload=action.removePrefix("native-private-video-start:")
         val draftId=payload.substringBefore(':')
         val encodedGame=payload.substringAfter(':',"")
