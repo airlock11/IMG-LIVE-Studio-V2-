@@ -165,6 +165,38 @@ class BroadcastSettingsUiTest {
    assertEquals(2,details.optInt("fpsButtons"))
    assertTrue("Start button is off screen: "+metric,details.optBoolean("startVisible"))
    assertTrue("Invalid icon template text: "+metric,details.optBoolean("noRawIconText"))
+   // The operator must deliberately press Connect before any progress text
+   // appears. Expanding the YouTube row alone never starts Google OAuth.
+   assertEquals("No premature Connecting below Connect","false",js(activity,web,
+    "Boolean(document.querySelector('#youtube-destination .img-wizard-platform-error'))"))
+   assertEquals("Clicking Offline Recording opens Broadcasting ready state","true",js(activity,web,
+    "Boolean(document.querySelector('[data-action=setup-record-offline]'))"))
+   click(activity,web,"setup-record-offline")
+   waitFor(activity,web,"Boolean(document.querySelector('[data-action=start-offline-recording]'))")
+   assertEquals("Offline entry must NOT start recording","false",js(activity,web,
+    "Boolean(window.IMGMedia?.isRecording?.())"))
+
+  }finally{
+   activity.runOnUiThread{activity.finish()}
+  }
+ }
+ @Test fun createLeagueBeginsWithChooseSports(){
+  val instrument=InstrumentationRegistry.getInstrumentation()
+  val activity=instrument.startActivitySync(Intent(instrument.targetContext,MainActivity::class.java).apply {
+   addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+  })
+  try{
+   val web=seek(activity.window.decorView)!!
+   waitFor(activity,web,"Boolean(document.querySelector('[data-go=create]'))")
+   js(activity,web,"document.querySelector('[data-go=create]')?.click();true")
+   waitFor(activity,web,"Boolean(document.querySelector('[data-action=create-sport-basketball]'))")
+   assertEquals("Create League starts with Choose Sports","true",js(activity,web,
+    "(document.querySelector('.create-wizard-page')?.innerText||'').includes('Choose Sports')"))
+   js(activity,web,"document.querySelector('[data-action=create-sport-pickleball]')?.click();true")
+   assertEquals("Pickleball can be selected","true",js(activity,web,
+    "document.querySelector('[data-action=create-sport-pickleball]')?.getAttribute('aria-pressed')==='true'"))
+   click(activity,web,"create-next")
+   waitFor(activity,web,"Boolean(document.querySelector('#league-name'))")
   }finally{
    activity.runOnUiThread{activity.finish()}
   }
