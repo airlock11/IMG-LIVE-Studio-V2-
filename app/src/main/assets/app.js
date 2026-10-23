@@ -581,10 +581,11 @@ function setupWizard(){
  const selected=normalizeGraphic(o.overlay);
  const realArt=realGraphicsThumbnails[selected]||'';
  const fallbackArtwork=realArt?`<img class="img-wizard-score-fallback" src="${realArt}" alt="Selected original native scoreboard graphic">`:'';
- const graphicsPreview=`<div class="img-wizard-score-art img-wizard-score-origin" aria-label="Landscape 16:9 broadcast scoreboard preview">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div>`;
+ const previewSliderValue=Math.min(streetballActive()?115:95,Math.max(15,Number(streetballActive()?o.streetOverlaySize:o.overlaySize)||60));
+ const graphicsPreview=`<div class="img-wizard-score-sticky-unit" aria-label="Scoreboard preview and size control"><div class="img-wizard-score-art img-wizard-score-origin" aria-label="Landscape 16:9 broadcast scoreboard preview">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div><label class="img-wizard-score-size-control"><span>Size</span><input type="range" min="15" max="${streetballActive()?115:95}" step="1" value="${previewSliderValue}" data-score-range="size" aria-label="Scoreboard size"></label></div>`;
  const teamContent=card('1','Team names & logos',team('home','First team')+team('away','Second team'))+
  card('2','Tournament or league',`<label class="form-group"><span class="small-label">Tournament / League name (optional)</span><input class="input" maxlength="55" data-quick="leagueName" value="${esc(b.leagueName||'')}" placeholder="Enter tournament or league name"></label><label class="img-wizard-league-toggle"><span>Show league name on video</span><button class="toggle ${b.showLeagueName?'active':''}" data-action="toggle-league-name" role="switch" aria-checked="${b.showLeagueName}" aria-label="Show league name"></button></label>`)+
- card('3','Scoreboard',`${graphicsPreview}${scoreSettings()}`)+
+ card('3','Scoreboard',`${graphicsPreview}${scoreSettings(false,true)}`)+
  (activeSport()==='pickleball'?card('4','Pickleball match format',`<label class="form-group"><span class="small-label">Scoring</span><select class="input" data-input="pickleballScoring"><option value="sideout" ${o.pickleballScoring==='sideout'?'selected':''}>Standard · side-out</option><option value="rally" ${o.pickleballScoring==='rally'?'selected':''}>Rally</option></select></label><label class="form-group"><span class="small-label">Points per game</span><select class="input" data-input="pickleballTarget">${[11,15,21].map(n=>`<option value="${n}" ${o.pickleballTarget===n?'selected':''}>${n} points</option>`).join('')}</select></label>`):'');
  const sponsorContent=card('1','Sponsor logos and images',`${sponsorSettings()}`)+
  card('2','Sponsor video clips',`<label class="img-wizard-upload-clip">${ic('video',22)}<span>Choose a short MP4 video</span><input type="file" data-upload="sponsor-clip" accept="video/mp4" hidden></label>${data.sponsors.filter(item=>item.video).map(x=>`<p class="helper">${ic('check-circle',16)} ${esc(x.name)} · silent video</p>`).join('')}`)+
@@ -615,7 +616,7 @@ function updateWizardStickyScoreboard(){
  // The original preview stays inside its ORIGINAL Step 2 Scoreboard card.
  // No dock, portal, copy, clone, floating second card or replacement canvas.
  const card=pane?.querySelector('[data-img-scoreboard-settings]');
- const preview=root?.querySelector('.img-wizard-score-origin');
+ const preview=root?.querySelector('.img-wizard-score-sticky-unit');
  if(!pane||!card||!preview)return;
  let marker=card.querySelector('.img-wizard-score-anchor');
  if(!marker){
@@ -724,7 +725,7 @@ const graphicIsCompact=id=>SCOREBOARD_STYLES.some(x=>x[0]===id&&x[2]==="compact"
 const normalizeGraphic=id=>SCOREBOARD_IDS.includes(id)?id:"prime-tv";
 const SCOREBOARD_PALETTE=["#E66D48","#C33F4B","#225AA9","#21846D","#B88637","#6E5CAC"];
 function scoreStyleName(value){const found=SCOREBOARD_STYLES.find(x=>x[0]===value);return found?found[1]:'Prime TV'}
-function scoreSettings(compact=false){
+function scoreSettings(compact=false,sliderUnderPreview=false){
  if(!realGraphicsRequested){
   realGraphicsRequested=true;
   setTimeout(()=>window.IMGNativeChannel?.postMessage?.('native-graphics-gallery'),0);
@@ -749,8 +750,7 @@ function scoreSettings(compact=false){
  '<div class="graphics-header"><h3>'+ic('layout-broadcast',19)+' Graphics</h3><p>Choose a style and adjust its size.</p></div>'+
  '<div class="graphics-library" role="group" aria-label="Broadcast Graphics style library">'+SCOREBOARD_STYLES.map(styleCard).join('')+'</div>'+
  '')+
- '<div class="scoreboard-adjust-grid">'+
- '<label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>'+
+ (sliderUnderPreview?'':'<div class="scoreboard-adjust-grid"><label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>')+
  (isolated||activeSport()==='pickleball'?'<div class="score-color-row"><span class="small-label">Accent</span><div class="score-color-palette>'+
  SCOREBOARD_PALETTE.map(hex=>'<button class="score-color-swatch '+(color.toLowerCase()===hex.toLowerCase()?'selected':'')+'" style="--swatch:'+hex+'" data-set="overlayColor:'+hex+'" aria-pressed="'+(color.toLowerCase()===hex.toLowerCase())+'" aria-label="Accent '+hex+'"></button>').join('')+
  '<label class="score-color-custom"><input type="color" data-score-color="1" value="'+color+'" aria-label="Custom accent color"><span>Custom</span></label></div></div>':'')+
