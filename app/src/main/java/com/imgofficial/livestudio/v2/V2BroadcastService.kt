@@ -151,8 +151,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   * request ID may reset this local encoder session. */
  fun prepareNextDraft(draftId:String):Boolean{
   if(!Regex("^[a-f0-9]{32}$").matches(draftId))return false
+  // Rotation may reconnect the SAME on-air event, but never allow an
+  // unrelated draft to take over a running stream in the shared service.
+  if(running||connecting)return draftId==activeDraftRequestId
   if(!ended)return true
-  if(running||connecting||draftId==activeDraftRequestId)return false
+  if(draftId==activeDraftRequestId)return false
   generation++
   attempted=false
   ended=false
