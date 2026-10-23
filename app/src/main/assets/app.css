@@ -1968,3 +1968,25 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
  white-space:nowrap;justify-content:center;
  padding:10px 15px!important;font-size:12px!important
 }
+
+/* Keep the REAL Broadcast Settings camera surface visible in portrait.
+   Some Android WebView layouts collapsed the aspect-ratio:auto height before
+   permission was granted, putting the form directly below the header. */
+@media (orientation:portrait) {
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap{
+  display:block!important;position:relative!important;flex:0 0 auto!important;
+  width:100%!important;height:auto!important;min-height:0!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.camera{
+  display:block!important;position:relative!important;flex:0 0 auto!important;
+  width:100%!important;height:min(52vw,245px)!important;min-height:174px!important;
+  max-height:245px!important;aspect-ratio:16/9!important;
+  overflow:hidden!important;background:#061a20!important
+ }
+ html.img-native-app .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.preview-label small{
+  display:none!important
+ }
+}
