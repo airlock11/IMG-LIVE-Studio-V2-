@@ -423,9 +423,8 @@ async function startOfflineRecording(){
   const opts={quality:o.quality,orientation:o.orientation,fps:o.fps,microphone:o.micInputs?.some(x=>x.type==='device'&&x.enabled)};
   const result=await media.startRecording(recordingState,opts);
   l.active=true;l.recordOnly=true;l.remoteLiveId=uid();l.remoteEndedAt=0;l.lockedOrientation=o.orientation;l.clockRunning=false;l.timeout=false;
-  l.slides=false;l.scores=[0,0];l.fouls=[0,0];l.seconds=o.quarterMins*60;l.shot=24;l.quarter=1;l.slideIndex=0;l.undo=[];
-  Object.assign(l,window.IMGPickleballRules?.initial(o,0,1,[0,0])||{
-   pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'Game ready'});
+  // Retain scoreboard/clock adjustments made in the visible pre-recording
+  // broadcasting controls. Capture must not reset the prepared game.
   persist();screen='live';history.pushState({screen},'','#/live');render(false);
   requestOrientation(o.orientation,true);
   if(opts.microphone&&!result.audio)toast('Recording started without mic audio. Check microphone permission.');
@@ -992,7 +991,7 @@ function streetballGlassScreen(){
  return '<div class="street-glass-screen">'+
  '<div class="street-camera-stage">'+camera(true)+'</div>'+
  '<div class="street-glass-header"><div class="street-glass-status"><span class="street-status-dot"></span><span>'+state+'</span><span class="street-format-label">'+o.streetFormat.toUpperCase()+'</span></div>'+
- '<div class="street-header-actions"><button data-action="remote-open-manager" aria-label="Remote scorer connection">'+ic('wifi',15)+'</button><button data-action="edit-scoreboard" aria-label="Change Streetball scoreboard size opacity or color">'+ic('sliders',18)+'</button><button class="street-finish-btn" data-action="exit-live" title="Stop and save recording" aria-label="Stop and save recording">'+ic('square',15)+'</button></div></div>'+
+ '<div class="street-header-actions"><button data-action="remote-open-manager" aria-label="Remote scorer connection">'+ic('wifi',15)+'</button><button data-action="edit-scoreboard" aria-label="Change Streetball scoreboard size opacity or color">'+ic('sliders',18)+'</button><button class="street-finish-btn" data-action="'+(l.recordOnly?'finish-broadcast':'exit-live')+'" title="'+(l.recordOnly?'Stop Recording':'End broadcast')+'" aria-label="'+(l.recordOnly?'Stop Recording':'End broadcast')+'">'+ic('square',15)+'</button></div></div>'+
  '<div class="street-glass-dock" aria-label="One-page Streetball game controls">'+
  '<div class="street-dock-title"><span>'+ic('trophy',14)+(winner>=0?' WINNER':' FIRST TO '+target)+'</span><span>'+(winner>=0?esc(count?(o.streetPlayers[winner]?.[0]?.name||'Player'):(streetTeamName(winner)||(winner?'RIGHT':'LEFT'))):o.streetFormat.toUpperCase()+' · '+(l.recordOnly?'OFFLINE REC':'GAME'))+'</span></div>'+
  '<div class="street-glass-score-row">'+[0,1].map(i=>{
@@ -1021,7 +1020,8 @@ function studio(){
     <div class="img-offline-ready-teams"><span>${esc(b.homeName||'Home')}</span><strong>${ic('video',15)} OFFLINE</strong><span>${esc(b.awayName||'Away')}</span></div>
     <div class="img-offline-ready-setting"><span>${ic('video',17)} ${esc(o.quality)} · ${Number(o.fps)===60?60:30} FPS</span><span>Device recording</span></div>
     <div class="img-offline-ready-setting"><span>${ic('microphone',17)} Microphone</span><button class="toggle ${mic?'active':''}" data-action="toggle-mic" role="switch" aria-checked="${mic}" aria-label="Record microphone audio"></button></div>
-    <p class="img-offline-ready-note">Use Start Recording to enter game and broadcast controls. No online platform is required.</p>
+    <div class="img-offline-ready-game-controls" aria-label="Broadcasting game and sponsor controls">${liveControls()}</div>
+    <p class="img-offline-ready-note">Game controls are ready. Start Recording begins saving your camera and scoreboard locally; no streaming platform is required.</p>
    </div>
    <div class="fixed-cta"><button class="solid-btn green" data-action="start-offline-recording">${ic('record',18)} START RECORDING</button></div></div>`;
  }
@@ -1250,6 +1250,13 @@ if(name==='offline-ready-back'){window.IMGMedia?.stopCamera?.();screen='setup';s
 if(name==='setup-record-offline'){
  if(l.active)return;
  o.yt=false;o.fb=false;o.tiktok=false;youtubeExpanded=false;fbExpanded=false;
+ // Prepare a fresh OFFLINE game before showing interactive controls.
+ // The existing streaming stop/reset workflow is left unchanged.
+ l.clockRunning=false;l.timeout=false;l.slides=false;l.scores=[0,0];l.fouls=[0,0];
+ l.seconds=o.quarterMins*60;l.shot=24;l.quarter=1;l.slideIndex=0;l.undo=[];
+ Object.assign(l,window.IMGPickleballRules?.initial(o,0,1,[0,0])||{
+  pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,
+  pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'Game ready'});
  persist();screen='offline-ready';history.pushState({screen},'','#/offline-ready');
  render(false);
  // Open camera for framing only. Recording must NOT begin until Start Recording.
