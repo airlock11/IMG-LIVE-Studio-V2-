@@ -453,7 +453,13 @@ internal object V2BroadcastGraphicsRenderer {
      val scoreX=if(i==0)335f else 578f
      shape(c,p,scoreX,37f,102f,68f,
       if(i==0)0xFF214A70.toInt() else 0xFF795029.toInt())
-     scoreText(c,p,points[i],scoreX+51f,93f,68f,WHITE,scoreX,37f,102f,68f)
+     // Arena Glass' raised center clock occupies x=409..551. Keep the
+     // left number entirely left of the clock without moving the reference
+     // plate, rim or central time dial. Three digits remain fitted.
+     val readableW=if(i==0)70f else 102f
+     val readableCenter=if(i==0)scoreX+35f else scoreX+51f
+     scoreText(c,p,points[i],readableCenter,93f,
+      if(i==0)54f else 68f,WHITE,scoreX,37f,readableW,68f)
      pointsFlash(c,p,a,i,scoreX,38f,102f,67f,accent,id)
      if(a?.team==i){
       val wipeX=if(i==0)110f else 690f
