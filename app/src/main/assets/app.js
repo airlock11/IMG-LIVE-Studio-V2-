@@ -202,32 +202,23 @@ function facebookFields(){
  'rel="noopener noreferrer">Get Stream Key from Facebook Live Producer ↗</a></div>';
 }
 function youtubeDestination(){
- const state=window.IMGAccounts?.getStatus?.().youtube||"disconnected";
- const connected=state==="connected";
- const label=state==="connected"?"Connected":state==="verifying"?"Checking account…":
-  state==="authorization-pending"?"Finish Google sign-in":
-  state==="connecting"?"Connecting…":
-  state==="verification-unavailable"?"Verification temporarily unavailable":"Not connected";
+ const state=window.IMGAccounts?.getStatus?.().youtube||'disconnected';
+ const connected=state==='connected';
+ const selected=Boolean(data.options.yt);
+ const label=connected?'Connected':state==='authorization-pending'?'Sign in pending':
+   state==='verifying'?'Checking…':state==='verification-unavailable'?'Check unavailable':'Not connected';
+ const control=connected
+  ?'<button class="outline-btn" type="button" data-action="youtube-disconnect">Disconnect</button>'
+  :state==='authorization-pending'||state==='verification-unavailable'
+   ?'<button class="outline-btn" type="button" data-action="youtube-verify">Connect</button>'
+   :'<button class="solid-btn" type="button" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect</button>';
  return '<div class="broadcast-destination" id="youtube-destination">'+
   '<button type="button" class="broadcast-destination-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'" aria-controls="youtube-destination-body">'+
-  '<span class="destination-name"><strong><span class="img-platform-logo img-youtube-logo" aria-hidden="true">▶</span> YouTube</strong><small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+(data.options.yt?' · Selected':'')+'</small></span>'+
-  '<span class="broadcast-destination-indicator"><span class="toggle '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span>'+''+'</span></button>'+
-  '<div class="broadcast-destination-body" id="youtube-destination-body" '+(youtubeExpanded?'':'hidden')+'>'+
-  (connected?''+
-   '<label class="form-group"><span class="small-label">Livestream title</span><input class="input" data-quick="liveTitle" maxlength="100" autocomplete="off" placeholder="Enter livestream title" value="'+esc(data.options.broadcast.liveTitle||'')+'"></label>'+
-   '<div class="img-required-audience" aria-label="Required YouTube content classification"><label class="small-label">YouTube content classification</label><select data-youtube-audience="1" aria-label="YouTube content classification">'+
-   '<option value="" '+(!youtubeAudience?'selected':'')+'>Select audience</option>'+
-   '<option value="no" '+(youtubeAudience==='no'?'selected':'')+'>Not made for kids</option>'+
-   '<option value="yes" '+(youtubeAudience==='yes'?'selected':'')+'>Made for kids</option></select></div>'+
-   ''+
-   '<button class="text-link" type="button" data-action="youtube-disconnect">Disconnect Google account</button>':
-   state==="authorization-pending"?
-    '<button class="outline-btn" data-action="youtube-verify">Verify connection</button>':
-   state==="verification-unavailable"?
-    '<button class="solid-btn" data-action="youtube-verify">Retry account check</button>':
-    '<button class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect YouTube</button>')+
+  '<span class="destination-name"><strong><span class="img-platform-logo img-youtube-logo" aria-hidden="true">▶</span> YouTube</strong>'+
+  '<small class="broadcast-youtube-status '+(connected?'connected':'')+'">'+esc(label)+'</small></span>'+
+  '<span class="broadcast-destination-indicator"><span class="toggle '+(connected&&selected?'active':'')+'" aria-hidden="true"></span></span></button>'+
+  '<div class="broadcast-destination-body" id="youtube-destination-body" '+(youtubeExpanded?'':'hidden')+'>'+control+
   (youtubeFeedback?'<p class="helper" role="status">'+esc(youtubeFeedback)+'</p>':'')+
-  ''+
   '</div></div>';
 }
 function youtubeTitle(){
@@ -1252,7 +1243,7 @@ if(name==='destination-yt'){
  else youtubeExpanded=!youtubeExpanded;
  persist();render(true);
  const accounts=window.IMGAccounts,kind=accounts?.getStatus?.().youtube;
- if(youtubeExpanded&&kind==='disconnected'){
+ if(false&&youtubeExpanded&&kind==='disconnected'){
   youtubeFeedback='Opening secure Google sign-in…';
   accounts.connect('youtube').then(()=>render(true)).catch(error=>{
    youtubeFeedback=String(error?.message||'Google sign-in unavailable.').slice(0,180);
