@@ -45,7 +45,7 @@ class BroadcastSettingsUiTest {
   assertEquals("Expected setup state not reached","true",js(activity,web,test))
  }
  private fun click(activity:android.app.Activity,web:WebView,action:String){
-  val selector="[data-action=\\\""+action+"\\\"]"
+  val selector="[data-action="+action+"]"
   assertEquals("Missing or unclickable: "+action,"true",
    js(activity,web,"Boolean(document.querySelector('"+selector+"'))"))
   // Do not require an evaluateJavascript result from a click that synchronously
