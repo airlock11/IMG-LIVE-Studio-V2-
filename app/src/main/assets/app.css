@@ -2353,7 +2353,7 @@ body.img-wizard-active input[type="range"][data-score-range="size"]{
 
 /* Phone-confirmed Step 2 behavior: there is exactly ONE preview node.
    Only the ORIGINAL scoreboard frame takes the fixed position when scrolled. */
-body.img-wizard-active .img-wizard-page .img-wizard-score-origin.img-score-pinned{
+body.img-wizard-active .img-wizard-page .img-wizard-score-unit.img-score-pinned{
  position:fixed!important;
  inset:auto!important;
  top:var(--img-score-top)!important;
@@ -2395,4 +2395,35 @@ body.img-wizard-active .img-wizard-page .img-wizard-score-origin::before{
  padding-top:56.25%;
  height:0;
  pointer-events:none;
+}
+
+/* Only requested Step 2 change: the ONE original preview and its slider are
+   the same scroll/sticky unit; no duplicate preview or numeric percentage. */
+body.img-wizard-active .img-wizard-page .img-wizard-score-unit{
+ display:flex;flex-direction:column;gap:8px;
+ width:100%;max-width:100%;min-width:0;
+ margin:0 0 10px;position:relative;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-unit .img-wizard-score-origin{
+ display:block;position:relative;width:100%!important;max-width:none!important;
+ flex:0 0 auto;min-height:0;box-sizing:border-box;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-unit .img-wizard-size-control{
+ display:flex;align-items:center;gap:12px;
+ flex:0 0 44px;min-height:44px;box-sizing:border-box;
+ width:100%;padding:5px 13px;
+ background:#162923;border:1px solid #2f4845;border-radius:12px;
+ color:#dcece5;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-size-control span{
+ font-size:13px;font-weight:650;white-space:nowrap;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-size-control input[type="range"]{
+ flex:1;min-width:0;max-width:100%;height:30px;touch-action:pan-x;
+ accent-color:#2fe0b0;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-unit.img-score-pinned{
+ display:flex!important;flex-direction:column!important;
+ gap:8px!important;overflow:visible!important;
+ background:transparent!important;box-shadow:none!important;
 }
