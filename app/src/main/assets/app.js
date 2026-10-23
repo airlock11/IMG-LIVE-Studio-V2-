@@ -54,9 +54,9 @@ const svgPaths={
  mobile:'<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
  landscape:'<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M11 14h2"/>',
  sports:'<circle cx="6.8" cy="6.8" r="3.3"/><path d="M4.5 4.5c1.6 1.2 2.9 2.6 4.6 4.6M4.6 9l4.3-4.3M14 10l7-7M13 11l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l2.5-2.5a4.5 4.5 0 0 0-6.3-6.5Z"/>',
- basketball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.65 5.65c2.9 2.7 5.1 6.5 5.6 12.5M18.35 5.65c-2.9 2.7-5.1 6.5-5.6 12.5"/>',
+ basketball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7C9.7 9.8 9.7 14.2 5.7 18.3M18.3 5.7c-4 4.1-4 8.5 0 12.6"/>',
  user:'<circle cx="12" cy="8" r="4"/><path d="M4.5 21v-2.5c0-3.7 3.2-6 7.5-6s7.5 2.3 7.5 6V21"/>',
- pickleball:'<ellipse cx="8.8" cy="8.8" rx="5.9" ry="6.8" transform="rotate(-30 8.8 8.8)"/><path d="m12.8 13.8 6.4 7.1a1.3 1.3 0 0 0 1.8-1.8l-6.4-6.4"/><circle cx="7" cy="6.3" r=".8" fill="currentColor" stroke="none"/><circle cx="10.7" cy="7.1" r=".8" fill="currentColor" stroke="none"/><circle cx="7.5" cy="10.6" r=".8" fill="currentColor" stroke="none"/><circle cx="11.7" cy="11.3" r=".8" fill="currentColor" stroke="none"/><circle cx="19" cy="4.6" r="2.25"/>'};
+ pickleball:'<ellipse cx="8" cy="8" rx="5.5" ry="6.7" transform="rotate(-35 8 8)"/><path d="m12 12 7.6 7.5a1.4 1.4 0 0 0 2-2L14 10"/><circle cx="5.7" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="9.8" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="7.3" cy="10" r=".65" fill="currentColor" stroke="none"/><circle cx="11.2" cy="9.8" r=".65" fill="currentColor" stroke="none"/><circle cx="19" cy="4.5" r="3"/><circle cx="18" cy="3.5" r=".45" fill="currentColor" stroke="none"/><circle cx="20" cy="5.2" r=".45" fill="currentColor" stroke="none"/>'};
 function ic(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${svgPaths[name]||svgPaths.more}</svg>`}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>String(Date.now())+Math.random().toString(36).slice(2,6);
