@@ -19,6 +19,11 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.view.SurfaceView
+import android.os.Environment
+import android.content.ContentValues
+import android.provider.MediaStore
+import java.io.File
+import java.io.FileInputStream
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.library.generic.GenericStream
@@ -45,6 +50,59 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val ui=Handler(Looper.getMainLooper())
  private var listeners=mutableSetOf<Listener>()
  private var stream:GenericStream?=null
+ private var saveLocalCopy=false
+ private var currentRecordFile:File?=null
+ fun configureLocalRecording(enabled:Boolean){
+  if(running||connecting)return
+  saveLocalCopy=enabled
+ }
+ private fun beginLocalRecording(engine:GenericStream){
+  if(!saveLocalCopy)return
+  try{
+   val folder=getExternalFilesDir(Environment.DIRECTORY_MOVIES)?:filesDir
+   if(!folder.exists()&&!folder.mkdirs())throw IllegalStateException("Recording folder unavailable")
+   val name="IMG-LIVE-"+java.text.SimpleDateFormat("yyyyMMdd-HHmmss",
+    java.util.Locale.US).format(java.util.Date())+".mp4"
+   val file=File(folder,name)
+   engine.startRecord(file.absolutePath){ _ -> }
+   currentRecordFile=file
+   notifyState("Local MP4 recording started")
+  }catch(_:Exception){
+   currentRecordFile=null
+   notifyState("Local recording could not start. YouTube upload continues.")
+  }
+ }
+ private fun finishLocalRecording(engine:GenericStream?){
+  val file=currentRecordFile?:return
+  currentRecordFile=null
+  try{engine?.stopRecord()}catch(_:Exception){}
+  if(!file.exists()||file.length()<=0)return
+  if(Build.VERSION.SDK_INT>=29){
+   Thread {
+    try{
+     val values=ContentValues().apply{
+      put(MediaStore.Video.Media.DISPLAY_NAME,file.name)
+      put(MediaStore.Video.Media.MIME_TYPE,"video/mp4")
+      put(MediaStore.Video.Media.RELATIVE_PATH,Environment.DIRECTORY_MOVIES+"/IMG LIVE Studio")
+      put(MediaStore.Video.Media.IS_PENDING,1)
+     }
+     val uri=contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,values)
+      ?:throw IllegalStateException("Storage destination unavailable")
+     try{
+      contentResolver.openOutputStream(uri)?.use{output->
+       FileInputStream(file).use{input->input.copyTo(output)}
+      }?:throw IllegalStateException("Storage output unavailable")
+      contentResolver.update(uri,ContentValues().apply{
+       put(MediaStore.Video.Media.IS_PENDING,0)
+      },null,null)
+      file.delete()
+     }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
+    }catch(_:Exception){
+     // Preserve recording in app-owned Movies directory on storage export failure.
+    }
+   }.start()
+  }
+ }
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
  private var latestGraphics:android.graphics.Bitmap?=null
@@ -395,6 +453,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     }
     ingestDestination=url
     stream?.startStream(url)
+    stream?.let{beginLocalRecording(it)}
     notifyState("Connecting private RTMPS; waiting for server…")
    }catch(_:Exception){
     notifyState("Camera/RTMPS start failed.")
@@ -733,6 +792,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreAwardEpoch++
   scoreAward=null
   qualityPolling=false
+  finishLocalRecording(stream)
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
