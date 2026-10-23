@@ -2224,3 +2224,18 @@ body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:c
 .img-wizard-page .img-wizard-sport small,
 .img-wizard-page .dropdown-body>.hint,
 .img-wizard-page .sponsor-list .hint{display:none!important}
+
+/* V2: enforce an actual bounded settings viewport. Some native WebView /
+   older .studio-page rules let the inner main grow to content height,
+   leaving scrollTop/maxScroll at zero and making sticky preview impossible. */
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page{
+ height:100dvh!important;max-height:100dvh!important;
+ min-height:0!important;display:flex!important;
+ flex-direction:column!important;overflow:hidden!important;
+}
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-scroll{
+ flex:1 1 0px!important;height:0!important;
+ min-height:0!important;max-height:none!important;
+ overflow-y:auto!important;overflow-x:hidden!important;
+ -webkit-overflow-scrolling:touch;
+}
