@@ -131,6 +131,10 @@ internal object V2BroadcastGraphicsRenderer {
   val rect=RectF(x-r,y-r,x+r,y+r)
   c.drawBitmap(logo,null,rect,p)
  }
+ private fun periodTag(n:Int):String=when(n){
+  1->"1ST";2->"2ND";3->"3RD";4->"4TH"
+  else->"OT${(n-4).coerceAtLeast(1)}"
+ }
  private fun hardware(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,color:Int){
   val save=c.save();c.clipRect(x,y,x+w,y+h)
   p.color=Color.argb(34,240,248,245);p.strokeWidth=1.6f;p.style=Paint.Style.STROKE
@@ -352,7 +356,7 @@ internal object V2BroadcastGraphicsRenderer {
     // Broadcast clock housing with the reference's white inset clock
     // and contrasting amber shot-clock cell.
     bevel(c,p,664f,15f,284f,87f,0xFF454549.toInt(),0xFF17191B.toInt(),2f,0xFF7B7D80.toInt())
-    label(c,p,if(s.period in 1..4)"${s.period}RD" else "OT${s.period-4}",
+    label(c,p,periodTag(s.period),
      719f,72f,32f,0xFFC7C9C9.toInt())
     bevel(c,p,769f,25f,91f,66f,0xFFF7F9F6.toInt(),0xFFCDD4D6.toInt(),8f,0xFFCFD4D6.toInt())
     label(c,p,s.clock.ifBlank{"10:00"},814f,72f,41f,0xFF101318.toInt())
@@ -458,7 +462,7 @@ internal object V2BroadcastGraphicsRenderer {
     c.drawCircle(480f,73f,61f,p);p.shader=null
     shape(c,p,428f,62f,104f,3f,0x55FFFFFF)
     label(c,p,s.clock.ifBlank{"10:00"},480f,80f,44f,WHITE)
-    label(c,p,if(s.period<=4)"${s.period}RD" else "OT${s.period-4}",
+    label(c,p,periodTag(s.period),
      462f,117f,28f,WHITE)
     shape(c,p,496f,93f,38f,29f,0xFF853A44.toInt(),2f)
     label(c,p,s.shotClock.toString(),515f,116f,24f,WHITE)
