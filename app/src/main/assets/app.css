@@ -1910,3 +1910,40 @@ html.img-native-app .fab{box-shadow:0 5px 16px rgba(0,0,0,.16)}
 .graphics-pack .graphics-art.style-legacy-tv{
  width:100%;height:100px;margin:0;background:radial-gradient(ellipse at center,#172028,#070d11 76%);border:0;border-radius:8px}
 .graphics-pack:focus-visible{outline:2px solid #7bf4b3;outline-offset:2px}
+
+
+/* Native camera: display only the selected Android-rendered score graphic.
+   No legacy CSS scorebug, even before the camera is activated. */
+html.img-native-app .camera.broadcast-canvas-camera .broadcast-video-frame{
+ display:block!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .scorebug,
+html.img-native-app .camera.broadcast-canvas-camera .sponsor-scene,
+html.img-native-app .camera.broadcast-canvas-camera .video-timeout-ribbon,
+html.img-native-app .camera.broadcast-canvas-camera .onair-league{
+ display:none!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .camera-activate{
+ position:absolute;z-index:12!important;
+}
+html.img-native-app .camera.broadcast-canvas-camera .camera-chip{z-index:13!important}
+
+/* Compact, labeled position selectors; monochrome vector icons replace
+   ambiguous symbols. These rules affect controls, not on-air artwork. */
+.graphics-header h3,.graphics-subhead strong{display:flex;align-items:center;gap:7px}
+.graphics-positions{grid-template-columns:repeat(5,minmax(0,1fr))}
+.graphics-positions button{
+ display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+ min-width:0;min-height:55px;padding:6px 2px;font-size:10px;line-height:1.15
+}
+.graphics-positions button svg{flex:none}
+.graphics-pack .graphics-copy{
+ display:grid;grid-template-columns:minmax(0,1fr) auto;
+ align-items:center;column-gap:3px;row-gap:2px
+}
+.graphics-pack .graphics-copy strong{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.graphics-pack .graphics-copy svg{color:#76f0ac;grid-column:2;grid-row:1}
+.graphics-pack .graphics-copy small{grid-column:1/-1}
+@media(max-width:370px){
+ .graphics-positions{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
