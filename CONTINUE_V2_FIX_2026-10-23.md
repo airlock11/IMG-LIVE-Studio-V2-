@@ -36,3 +36,7 @@
 - Work branch: https://github.com/airlock11/IMG-LIVE-Studio-V2-/tree/fix/v2-fourstep-clean-streaming-20261023
 - GitHub Actions: https://github.com/airlock11/IMG-LIVE-Studio-V2-/actions
 - Continue fixing THIS repository only. Preserve all native scorebug references. Ship a V2 APK from this branch only.
+
+## Live Cloudflare findings, October 23
+Live Worker `img-live-studio-oauth` has `OAUTH_ENABLED=false`, `YOUTUBE_TEST_ENABLED=true`, `YOUTUBE_DRAFT_ENABLED=true`, and `YOUTUBE_INGEST_TEST_ENABLED=true`, but the test expiry `YOUTUBE_TEST_EXPIRES_AT` was `2026-10-23T11:27:17.678Z`; when checked after 12:50Z, it had expired.
+Code gate `youtubeTestActive()` denies YouTube auth and draft creation after expiry even if other flags say true. **The Cloudflare settings were READ-ONLY inspected; no production flags or secret bindings were changed.** Production `OAUTH_ENABLED` intentionally remains false until hardening. The next safe controlled-test step is to extend a short explicit, time-bounded test window without globally enabling production authentication, then validate channel eligibility and upload with a permitted test account. Do not enable general production OAuth or public/unlisted publishing merely to bypass this safety gate.
