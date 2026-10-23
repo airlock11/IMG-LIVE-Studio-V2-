@@ -289,6 +289,7 @@ class MainActivity : Activity() {
            .putExtra("img_sport",sport)
             .putExtra("img_video_quality",if(game.optString("quality")=="1080p")1080 else 720)
             .putExtra("img_video_fps",if(game.optInt("fps")==60)60 else 30)
+            .putExtra("img_record_local",game.optBoolean("recordLocal",false))
            .putExtra("img_home",team("home"))
            .putExtra("img_away",team("away"))
            .putExtra("img_graphics",game.optString("graphics").take(30))
