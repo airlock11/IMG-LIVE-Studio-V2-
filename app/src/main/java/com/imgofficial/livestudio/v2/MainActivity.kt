@@ -29,6 +29,56 @@ import androidx.webkit.WebViewAssetLoader
 
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
+ // Receive origin-verified original sponsor images in bounded chunks and
+ // store them locally, without thumbnail degradation or Intent-size failures.
+ private val incomingSponsorParts=mutableMapOf<String,MutableList<StringBuilder>>()
+ private fun receiveSponsorTransfer(command:String){
+  val pieces=command.split(':',limit=4)
+  if(pieces.size<3)return
+  val token=pieces[1]
+  if(!token.matches(Regex("^[a-f0-9]{16}$")))return
+  when(pieces[0]){
+   "native-sponsor-begin"->{
+    val count=pieces[2].toIntOrNull()?:return
+    if(count !in 1..12)return
+    incomingSponsorParts.clear()
+    incomingSponsorParts[token]=MutableList(count){StringBuilder()}
+   }
+   "native-sponsor-chunk"->{
+    if(pieces.size!=4)return
+    val index=pieces[2].toIntOrNull()?:return
+    val arr=incomingSponsorParts[token]?:return
+    if(index !in arr.indices)return
+    val chunk=pieces[3]
+    if(chunk.length>48000||chunk.any{
+      it !in 'A'..'Z'&&it !in 'a'..'z'&&it !in '0'..'9'&&it!='+'&&it!='/'&&it!='='
+     })return
+    if(arr[index].length+chunk.length>3500000)return
+    arr[index].append(chunk)
+   }
+   "native-sponsor-end"->{
+    val arr=incomingSponsorParts.remove(token)?:return
+    var ok=true
+    arr.forEachIndexed{index,source->
+     if(source.isEmpty())return@forEachIndexed
+     try{
+      val bytes=android.util.Base64.decode(source.toString(),android.util.Base64.DEFAULT)
+      if(bytes.size !in 1..2500000)throw IllegalArgumentException("Image size")
+      val bounds=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+      android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+      if(bounds.outWidth !in 1..4096||bounds.outHeight !in 1..4096)
+       throw IllegalArgumentException("Image dimensions")
+      java.io.File(cacheDir,"imgsponsor_${token}_${index}.img").writeBytes(bytes)
+     }catch(_:Exception){ok=false}
+    }
+    val response=JSONObject().put("token",token).put("ok",ok).toString()
+    runOnUiThread{
+     if(::browser.isInitialized)
+      browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-sponsors-ready',{detail:"+response+"}));",null)
+    }
+   }
+  }
+ }
  private var graphicsGalleryPayload:String?=null
  @Volatile private var graphicsGalleryBusy=false
  // The picker shows snapshots produced by THE ACTUAL native H.264 overlay
@@ -291,6 +341,8 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action.startsWith("native-sponsor-")){
+        receiveSponsorTransfer(action)
        } else if(action=="img-saved-recordings"){
         runOnUiThread{publishNativeRecordings()}
        } else if(action.startsWith("native-open-recording:")){
@@ -340,6 +392,7 @@ class MainActivity : Activity() {
            .putExtra("img_graphics_opacity",game.optInt("opacity",100))
            .putExtra("img_logo_home",game.optString("logoHome").take(35000))
            .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_token",game.optString("sponsorToken").take(16))
            .putExtra("img_sponsor_images",game.optJSONArray("sponsorImages")?.toString()?.take(60000)?:"")
            .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
             (0 until minOf(12,items.length())).joinToString("\n"){i->
@@ -384,6 +437,7 @@ class MainActivity : Activity() {
            .putExtra("img_graphics_animated",game.optBoolean("animated",true))
            .putExtra("img_logo_home",game.optString("logoHome").take(35000))
            .putExtra("img_logo_away",game.optString("logoAway").take(35000))
+           .putExtra("img_sponsor_token",game.optString("sponsorToken").take(16))
            .putExtra("img_sponsor_images",game.optJSONArray("sponsorImages")?.toString()?.take(60000)?:"")
            .putExtra("img_sponsor_names",game.optJSONArray("sponsorNames")?.let{items->
             (0 until minOf(12,items.length())).joinToString("\n"){index->
