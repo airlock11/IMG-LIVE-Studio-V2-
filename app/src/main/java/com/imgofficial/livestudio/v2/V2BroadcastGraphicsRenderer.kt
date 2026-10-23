@@ -354,10 +354,10 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,32f,15f,240f,83f,c1,mix(c1,INK,.8f),43f,SILVER)
     bevel(c,p,686f,15f,240f,83f,c2,mix(c2,INK,.8f),43f,SILVER)
     badge(0,81f,54f,36f);badge(1,878f,54f,36f)
-    label(c,p,names[0],187f,83f,32f)
-    label(c,p,names[1],773f,83f,32f)
+    label(c,p,names[0],187f,83f,36f)
+    label(c,p,names[1],773f,83f,36f)
     lights(0,288f,20f,true);lights(1,669f,20f,true)
-    num(0,315f,14f,120f,84f);num(1,527f,14f,120f,84f)
+    num(0,323f,16f,108f,80f);num(1,529f,16f,108f,80f)
     awardName(0,117f,14f,168f,84f)
     awardName(1,673f,14f,168f,84f)
     mark(c,p,481f,55f,61f,accent,"IMG",null)
@@ -365,9 +365,9 @@ internal object V2BroadcastGraphicsRenderer {
     // Earlier x=324 gave the 489px rail an 88px rightward bias, squeezing the
     // clock/ticker visually against Away. Keep all original materials unchanged.
     bevel(c,p,219f,102f,522f,40f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
-    label(c,p,periodTag(s.period),303f,132f,27f,INK)
-    label(c,p,s.clock.ifEmpty{"10:00"},480f,132f,31f,INK)
-    label(c,p,s.shotClock.toString(),657f,132f,28f,INK)
+    label(c,p,periodTag(s.period),303f,132f,27f,WHITE)
+    label(c,p,s.clock.ifEmpty{"10:00"},480f,132f,31f,WHITE)
+    label(c,p,s.shotClock.toString(),657f,132f,28f,WHITE)
    }
    2->{ // Asymmetric beveled floating team nameplates + slim bottom ticker.
     p.setShadowLayer(14f,0f,8f,0xA0000000.toInt())
