@@ -99,7 +99,7 @@ class BroadcastSettingsUiTest {
    assertEquals("Landscape preview uses 16:9 broadcast coordinates","true",js(activity,web,
     "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
-    "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;updateWizardStickyScoreboard();return true})()"))
+    "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
    SystemClock.sleep(700)
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
    assertEquals("Sticky preview must preserve native 16:9 space","true",js(activity,web,
