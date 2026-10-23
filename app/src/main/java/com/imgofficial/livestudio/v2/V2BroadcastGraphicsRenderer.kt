@@ -118,28 +118,18 @@ internal object V2BroadcastGraphicsRenderer {
   c.drawText(value,x,y,p)
   p.textScaleX=normalScale
  }
+ /**
+  * Draw ONLY a real operator-supplied team logo. The reference's badge area
+  * stays the original panel material when there is no logo. No fake emblem,
+  * generated initials, fabricated circle, or fallback frame.
+  */
  private fun mark(c:Canvas,p:Paint,x:Float,y:Float,r:Float,color:Int,
   name:String,logo:Bitmap?=null){
-  // Embossed circular team medallion. Real user team PNG when supplied.
-  shape(c,p,x-r-3,y-r-3,2*r+6,2*r+6,0xFF0D141B.toInt(),r+3)
-  p.shader=LinearGradient(x-r,y-r,x+r,y+r,WHITE,0xFF586771.toInt(),Shader.TileMode.CLAMP)
-  p.style=Paint.Style.FILL
-  c.drawCircle(x,y,r+1f,p);p.shader=null
-  p.color=mix(color,INK,.42f);c.drawCircle(x,y,r-2f,p)
-  if(logo!=null&&!logo.isRecycled){
-   val save=c.save()
-   val clip=Path().apply{addCircle(x,y,r-4f,Path.Direction.CW)}
-   c.clipPath(clip)
-   c.drawBitmap(logo,null,RectF(x-r+4,y-r+4,x+r-4,y+r-4),p)
-   c.restoreToCount(save)
-  }else{
-   val initials=name.trim().split(' ').filter{it.isNotEmpty()}.take(2)
-    .joinToString(""){it.take(1).uppercase()}.ifEmpty{"IMG"}
-   label(c,p,initials,x,y+r*.29f,r*.9f,WHITE)
-  }
-  p.color=Color.argb(90,255,255,255);p.style=Paint.Style.STROKE;p.strokeWidth=1.5f
-  c.drawArc(RectF(x-r+3,y-r+3,x+r-3,y+r-3),205f,135f,false,p)
-  p.style=Paint.Style.FILL
+  if(logo==null || logo.isRecycled)return
+  p.shader=null;p.style=Paint.Style.FILL;p.color=WHITE
+  p.isFilterBitmap=true
+  val rect=RectF(x-r,y-r,x+r,y+r)
+  c.drawBitmap(logo,null,rect,p)
  }
  private fun hardware(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,color:Int){
   val save=c.save();c.clipRect(x,y,x+w,y+h)
