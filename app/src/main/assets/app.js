@@ -103,7 +103,7 @@ function applyAppearance(){
  if(meta)meta.setAttribute('content',theme==='dark'?'#10191f':'#f8f6f2');
 }
 applyAppearance();
-let offlineClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
+let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
 let youtubeExpanded=false,youtubeBusy=false,youtubeConnectBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
 let fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''},fbConnecting=false,fbExpanded=false,fbMessage='',fbGeneration=0,fbAttemptTimer=null,fbFeedbackState='idle';
@@ -371,6 +371,7 @@ async function refreshOfflineClips(){
 function recordings(){
  return '<main class="page recordings-page" data-scroll="main"><button class="recordings-back" data-go="home">← Home</button><div class="row between"><div><div class="eyebrow">LOCAL DEVICE STORAGE</div><h1>Recordings</h1><p class="lead">Saved on this device, in this browser. Download videos to keep them in your phone files.</p></div><button class="icon-btn" data-action="refresh-recordings" aria-label="Refresh recordings">'+ic('repeat',18)+'</button></div>'+
  '<div class="recordings-guide">Offline MP4 recordings include your real camera and the video scoreboard. They are not uploaded to IMG. Clearing browser data can erase copies stored in this page.</div>'+
+ (nativeClips.length?nativeClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.home||'Home')+' vs '+esc(c.away||'Away')+'</strong><small>YouTube · Saved to phone · '+new Date(c.createdAt).toLocaleString()+'</small></div><div class="offline-clip-actions"><button data-action="open-native-recording-'+c.id+'">Play</button></div></div>').join(''):'')+
  (offlineClips.length?offlineClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.name)+'</strong><small>'+new Date(c.createdAt).toLocaleString()+' · '+Math.max(1,Math.round(c.size/1048576*10)/10)+' MB · '+(c.duration||0)+'s</small></div><div class="offline-clip-actions"><button data-action="download-recording-'+c.id+'">Download</button><button data-action="delete-recording-'+c.id+'" aria-label="Delete recording">Delete</button></div></div>').join(''):
  '<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>')+'</main>';
 }
@@ -393,13 +394,13 @@ async function startOfflineRecording(){
  }catch(e){toast(media.readableError(e));}
 }
 
-function home(){const upcomingEvents=upcoming(),leagues=sportLeagues();return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
-${offlineClips.length?
+function home(){const upcomingEvents=upcoming(),leagues=sportLeagues();const savedStreams=[...offlineClips,...nativeClips.map(c=>({...c,native:true,metadata:{home:c.home,away:c.away,scores:c.scores,platform:c.platform,sport:c.sport}}))].sort((a,b)=>b.createdAt-a.createdAt);return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
+${savedStreams.length?
 '<section class="img-my-streams"><div class="section-heading"><h2>My Streams</h2><button class="text-link" data-go="recordings">See all</button></div><div class="img-my-streams-rail" aria-label="Saved completed recordings">'+
-offlineClips.slice(0,12).map(c=>'<button class="img-my-stream-card" data-go="recordings" aria-label="Open recording '+esc(c.name)+'">'+
+savedStreams.slice(0,12).map(c=>'<button class="img-my-stream-card" data-go="recordings" aria-label="Open recording '+esc(c.name)+'">'+
 '<div class="img-my-stream-teams"><div class="img-my-stream-logo">'+(c.metadata?.homeLogo?'<img alt="" src="'+esc(c.metadata.homeLogo)+'">':ic(c.metadata?.sport==='pickleball'?'pickleball':'basketball',24))+'</div>'+
 '<div class="img-my-stream-score"><span>'+esc(c.metadata?.home||'Home')+'</span><strong>'+Number(c.metadata?.scores?.[0]||0)+'</strong><span>'+esc(c.metadata?.away||'Away')+'</span><strong>'+Number(c.metadata?.scores?.[1]||0)+'</strong></div></div>'+
-'<div class="img-my-stream-foot"><span>'+ic('video',16)+' Saved to phone</span><b>COMPLETED</b></div></button>').join('')+'</div></section>':''}
+'<div class="img-my-stream-foot"><span>'+ic(c.native?'radio':'video',16)+' '+esc(c.native?'YouTube · Saved to phone':'Saved to phone')+'</span><b>COMPLETED</b></div></button>').join('')+'</div></section>':''}
 <button class="action-line recordings-home-link" data-go="recordings">${ic('video',19)}<span>Offline Recordings</span>${ic('arrow',19)}</button><p class="offline-indicator">Choose a connected destination in Broadcast Settings to start a stream.</p></main>`}
 function eventRow(e){const l=data.leagues.find(x=>x.id===e.leagueId);const h=l?.teams?.find(t=>t.id===e.home),a=l?.teams?.find(t=>t.id===e.away);const dt=new Date(e.date+'T12:00:00');return `<button class="event-row" data-event="${e.id}"><div class="date-block"><span>${Number.isNaN(dt.valueOf())?'GAME':dt.toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</span>${Number.isNaN(dt.valueOf())?'–':dt.getDate()}</div><div class="grow"><div class="names">${esc(h?.name||'Home')} vs ${esc(a?.name||'Away')}</div><div class="detail">${esc(e.time||'TBD')} · ${esc(e.venue||'Venue TBD')}</div></div><span class="arrow">${ic('arrow',17)}</span></button>`}
 function leagues(){const list=sportLeagues();return `<main class="page" data-scroll="main"><div class="row between" style="padding:3px 0 20px"><div><div class="eyebrow">MANAGEMENT</div><h1 style="margin:5px 0 0">My Leagues</h1></div><button class="icon-btn dark" data-go="create" aria-label="Create league">${ic('plus',20)}</button></div>${!list.length?`<div style="padding:50px 6px;text-align:center">${ic('trophy',40)}<h2 style="margin:20px 0 8px">Start your first ${sportName()} league</h2><p class="lead">Add teams, choose a format, and manage your game schedule.</p><button class="solid-btn" data-go="create" style="margin-top:24px">${ic('plus',18)} Create League</button></div>`:list.map(l=>`<button class="list-link" data-league="${l.id}"><div class="logo-circle" style="width:57px;height:57px">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name[0])}</span>`}</div><span class="main">${esc(l.name)}<span class="sub">${esc(l.season||'Season')} · ${l.teams.length} teams</span></span>${ic('arrow',19)}</button>`).join('')}</main>`}
@@ -1195,6 +1196,7 @@ if(name==='download-last-recording'){try{window.IMGMedia?.downloadClip(window.IM
 if(name.startsWith('download-recording-')){const id=name.slice('download-recording-'.length);return window.IMGMedia?.getClip(id).then(c=>{if(c)window.IMGMedia.downloadClip(c);else toast('Recording not found on this device.')}).catch(e=>toast(e.message))}
 if(name.startsWith('delete-recording-')){dialog={type:'delete-recording',id:name.slice('delete-recording-'.length)};return render(true)}
 if(name==='confirm-delete-recording'){const id=dialog?.id;dialog=null;return window.IMGMedia?.deleteClip(id).then(()=>refreshOfflineClips()).catch(e=>toast(e.message))}
+if(name.startsWith('open-native-recording-')){const id=name.slice('open-native-recording-'.length);if(nativeClips.some(c=>String(c.id)===id))window.IMGNativeChannel?.postMessage?.('native-open-recording:'+id);return}
 if(name==='open-recordings'){dialog=null;return navigate('recordings')}
 if(name==='exit-live'){dialog={type:'exit-live'};return render(true)}
 if(name==='close-modal'){dialog=null;return render(true)}
@@ -1577,6 +1579,23 @@ if(remoteHash){
   remoteApi()?.join(code).then(()=>render(true)).catch(e=>toast(e.message));
 }
 remoteApi()?.configure({applyAction:applyRemoteScoreCommand,snapshot:remoteGameSnapshot,update:remoteUpdated});
+window.addEventListener('img-native-recordings',event=>{
+ const clips=event?.detail?.clips;
+ if(!Array.isArray(clips))return;
+ nativeClips=clips.filter(c=>/^\d{10,18}$/.test(String(c.id||''))&&c.uri?.startsWith('content://media/'))
+  .sort((a,b)=>b.createdAt-a.createdAt);
+ if(screen==='home'||screen==='recordings')render(true);
+});
+window.addEventListener('img-native-stream-ended',()=>{
+ resetForNewBroadcast();
+ screen='home';
+ history.replaceState({screen},'','#/home');
+ render(false);
+ window.IMGNativeChannel?.postMessage?.('img-saved-recordings');
+ for(const ms of [1800,4300,8000])setTimeout(
+  ()=>window.IMGNativeChannel?.postMessage?.('img-saved-recordings'),ms);
+});
 render(false);
 refreshOfflineClips();
+window.IMGNativeChannel?.postMessage?.('img-saved-recordings');
 })();
