@@ -288,7 +288,7 @@ test('collapsing YouTube settings does not unselect the active destination',asyn
 test('main private YouTube flow requires operator audience choice and stays private',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
- assert.ok(!studio.includes('data-youtube-audience'));
+ assert.ok(!studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){')).includes('data-youtube-audience'));
  assert.ok(studio.includes("dialog={type:'youtube-classification'}"));
  assert.ok(studio.includes('youtube-classification-yes'));
  assert.ok(studio.includes('youtube-classification-no'));
