@@ -424,8 +424,8 @@ internal object V2BroadcastGraphicsRenderer {
      val xLogo=if(i==0)63f else 901f
      if(logo!=null&&!logo.isRecycled)badge(i,xLogo,74f,39f)
      val code=names[i].split(' ').lastOrNull().orEmpty().uppercase().take(7)
-     val nx=if(i==0)(if(logo==null)159f else 205f)
-       else (if(logo==null)794f else 757f)
+     val nx=if(i==0){if(logo==null)159f else 205f}
+      else {if(logo==null)794f else 757f}
      label(c,p,code,nx,91f,50f,WHITE,Paint.Align.CENTER,159f)
      val scoreX=if(i==0)335f else 578f
      shape(c,p,scoreX,37f,102f,68f,
