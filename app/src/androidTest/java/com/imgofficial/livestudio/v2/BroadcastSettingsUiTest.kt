@@ -45,13 +45,15 @@ class BroadcastSettingsUiTest {
  }
  private fun click(activity:android.app.Activity,web:WebView,action:String){
   val selector="[data-action="+action+"]"
-  assertEquals("Missing or unclickable: "+action,"true",
-   js(activity,web,"Boolean(document.querySelector('"+selector+"'))"))
-  // Do not require an evaluateJavascript result from a click that synchronously
-  // replaces the DOM: Android WebView may discard that callback on navigation.
+  // Only wait until the tap is queued on Android's UI thread. A WebView
+  // response callback can be lost during DOM replacement or emulator startup.
+  // Each caller verifies the resulting screen or control after this action.
+  val queued=CountDownLatch(1)
   activity.runOnUiThread {
    web.evaluateJavascript("document.querySelector('"+selector+"')?.click()",null)
+   queued.countDown()
   }
+  assertTrue("Could not dispatch "+action,queued.await(8,TimeUnit.SECONDS))
  }
  private fun capture(activity:android.app.Activity,step:Int,part:String=""){
   val target=File(activity.filesDir,"img-v2-wizard-step"+step+(if(part.isBlank())"" else "-"+part)+".png")
