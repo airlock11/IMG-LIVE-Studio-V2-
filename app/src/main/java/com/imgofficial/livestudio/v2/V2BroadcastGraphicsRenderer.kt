@@ -361,10 +361,13 @@ internal object V2BroadcastGraphicsRenderer {
     awardName(0,117f,14f,168f,84f)
     awardName(1,673f,14f,168f,84f)
     mark(c,p,481f,55f,61f,accent,"IMG",null)
-    bevel(c,p,324f,105f,489f,35f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
-    label(c,p,periodTag(s.period),380f,131f,29f,INK)
-    label(c,p,s.clock.ifEmpty{"10:00"},554f,130f,32f,INK)
-    label(c,p,s.shotClock.toString(),737f,130f,31f,INK)
+    // Courtside A: center the hanging information rail beneath the score cells.
+    // Earlier x=324 gave the 489px rail an 88px rightward bias, squeezing the
+    // clock/ticker visually against Away. Keep all original materials unchanged.
+    bevel(c,p,219f,102f,522f,40f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
+    label(c,p,periodTag(s.period),303f,132f,27f,INK)
+    label(c,p,s.clock.ifEmpty{"10:00"},480f,132f,31f,INK)
+    label(c,p,s.shotClock.toString(),657f,132f,28f,INK)
    }
    2->{ // Asymmetric beveled floating team nameplates + slim bottom ticker.
     p.setShadowLayer(14f,0f,8f,0xA0000000.toInt())
