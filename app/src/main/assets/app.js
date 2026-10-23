@@ -629,13 +629,16 @@ function updateWizardStickyScoreboard(){
   const box=preview.getBoundingClientRect();
   if(box.top>=boundary.top+3)return;
   // Reserve the original slot invisibly; never draw another scoreboard.
-  marker.style.height=Math.ceil(box.height)+'px';
+  // Size the frame in physical CSS pixels; some Android WebViews collapse
+  // aspect-ratio to the two border pixels when the canvas is absolute.
+  const originalHeight=Math.max(Math.ceil(box.height),Math.round(box.width*9/16)+2);
+  marker.style.height=originalHeight+'px';
   marker.hidden=false;
   marker.style.display='block';
   preview.style.setProperty('--img-score-top',Math.round(boundary.top)+'px');
   preview.style.setProperty('--img-score-left',Math.round(box.left)+'px');
   preview.style.setProperty('--img-score-width',Math.round(box.width)+'px');
-  preview.style.setProperty('--img-score-height',Math.round(box.height)+'px');
+  preview.style.setProperty('--img-score-height',originalHeight+'px');
   // Lift the SAME element above the scroll container's clipping boundary.
   // No second preview, image, canvas or extra visual frame is created.
   root.appendChild(preview);
