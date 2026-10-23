@@ -119,6 +119,25 @@ internal object V2BroadcastGraphicsRenderer {
   p.textScaleX=normalScale
  }
  /**
+  * Three-digit scores are fitted INSIDE the existing score window without
+  * changing the reference geometry, borders or animation. Cropping the
+  * canvas to that window prevents a 999 from covering neighboring labels.
+  */
+ private fun scoreText(c:Canvas,p:Paint,number:Int,x:Float,baseline:Float,
+  fontSize:Float,color:Int,left:Float,top:Float,w:Float,h:Float){
+  val score=number.coerceIn(0,999).toString()
+  p.shader=null;p.style=Paint.Style.FILL;p.color=color
+  p.typeface=Typeface.create("sans-serif-condensed",Typeface.BOLD)
+  p.textScaleX=1f;p.textAlign=Paint.Align.CENTER;p.textSize=fontSize
+  val available=w*.88f
+  val measured=p.measureText(score).coerceAtLeast(1f)
+  p.textSize=fontSize*minOf(1f,available/measured)
+  val saved=c.save()
+  c.clipRect(left,top,left+w,top+h)
+  c.drawText(score,x,baseline,p)
+  c.restoreToCount(saved)
+ }
+ /**
   * Draw ONLY a real operator-supplied team logo. The reference's badge area
   * stays the original panel material when there is no logo. No fake emblem,
   * generated initials, fabricated circle, or fallback frame.
@@ -275,8 +294,8 @@ internal object V2BroadcastGraphicsRenderer {
    if(style in listOf(1,6,9))0xFFE4E9E6.toInt() else 0xFF1B242E.toInt(),
    if(style in listOf(1,6,9))0xFF819399.toInt() else 0xFF0A1018.toInt(),4f,rim)
   val dark=style in listOf(1,6,9)
-  label(c,p,points.toString(),scoreX,y+h*.67f,min(h*.66f,w*.24f),
-   if(dark)INK else WHITE)
+  scoreText(c,p,points,scoreX,y+h*.67f,min(h*.66f,w*.24f),
+   if(dark)INK else WHITE,x+w*.71f,y+5f,w*.25f,h-10f)
   if(score.sport=="basketball"){
    val bonus=if(fouls>=5)" BONUS" else ""
    label(c,p,"FOULS ${fouls}${bonus}",x+w*.34f,y+h*.89f,min(19f,h*.15f),SILVER)
@@ -299,8 +318,8 @@ internal object V2BroadcastGraphicsRenderer {
    bevel(c,p,x,y,w,h,
     if(light)0xFFF5F7F4.toInt() else 0xFF21232B.toInt(),
     if(light)0xFFABBAC2.toInt() else 0xFF07090D.toInt(),3f,SILVER)
-   label(c,p,points[i].toString(),x+w*.5f,y+h*.80f,min(h*.83f,w*.8f),
-    if(light)INK else WHITE)
+   scoreText(c,p,points[i],x+w*.5f,y+h*.80f,min(h*.83f,w*.8f),
+    if(light)INK else WHITE,x,y,w,h)
    pointsFlash(c,p,a,i,x,y,w,h,accent,id)
   }
   fun badge(i:Int,x:Float,y:Float,r:Float){
@@ -349,7 +368,7 @@ internal object V2BroadcastGraphicsRenderer {
      shape(c,p,left+241f,17f,81f,81f,
       if(i==0)0xFF102238.toInt() else 0xFF581524.toInt())
      shape(c,p,left+242f,18f,79f,3f,0x27FFFFFF)
-     label(c,p,points[i].toString(),left+282f,80f,64f)
+     scoreText(c,p,points[i],left+282f,80f,64f,WHITE,left+241f,17f,81f,81f)
      pointsFlash(c,p,a,i,left+242f,17f,80f,81f,accent,id)
      awardName(i,left+6f,19f,230f,78f)
     }
@@ -384,9 +403,9 @@ internal object V2BroadcastGraphicsRenderer {
     awardName(1,673f,14f,168f,84f)
     mark(c,p,481f,55f,61f,accent,"IMG",null)
     bevel(c,p,324f,105f,489f,35f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
-    label(c,p,if(s.period<=4)"${s.period}TH" else "OT",380f,131f,33f,INK)
-    label(c,p,s.clock.ifEmpty{"10:00"},554f,130f,38f,WHITE)
-    label(c,p,s.shotClock.toString(),737f,130f,33f,0xFFFFCA53.toInt())
+    label(c,p,periodTag(s.period),380f,131f,29f,INK)
+    label(c,p,s.clock.ifEmpty{"10:00"},554f,130f,32f,INK)
+    label(c,p,s.shotClock.toString(),737f,130f,31f,INK)
    }
    2->{ // Asymmetric beveled floating team nameplates + slim bottom ticker.
     p.setShadowLayer(14f,0f,8f,0xA0000000.toInt())
@@ -434,7 +453,7 @@ internal object V2BroadcastGraphicsRenderer {
      val scoreX=if(i==0)335f else 578f
      shape(c,p,scoreX,37f,102f,68f,
       if(i==0)0xFF214A70.toInt() else 0xFF795029.toInt())
-     label(c,p,points[i].toString(),scoreX+51f,93f,68f,WHITE)
+     scoreText(c,p,points[i],scoreX+51f,93f,68f,WHITE,scoreX,37f,102f,68f)
      pointsFlash(c,p,a,i,scoreX,38f,102f,67f,accent,id)
      if(a?.team==i){
       val wipeX=if(i==0)110f else 690f
@@ -523,7 +542,7 @@ internal object V2BroadcastGraphicsRenderer {
     mark(c,p,480f,71f,61f,accent,"IMG",null)
     shape(c,p,424f,53f,112f,62f,0xDB131A22.toInt(),15f)
     label(c,p,s.clock.ifEmpty{"10:00"},480f,81f,32f)
-    label(c,p,"Q${s.period}  ${s.shotClock}",480f,105f,22f,accent)
+    label(c,p,"Q${s.period}  ${s.shotClock}",480f,105f,22f,WHITE)
    }
   }
  }
@@ -557,7 +576,7 @@ internal object V2BroadcastGraphicsRenderer {
      mark(c,p,x+89f,93f,43f,color,teamName,logos[i])
      label(c,p,teamName.take(10).uppercase(),x+89f,162f,27f)
      bevel(c,p,x+20f,181f,138f,93f,0xFFE3E9EA.toInt(),0xFF81939C.toInt(),3f,SILVER)
-     label(c,p,pts.toString(),x+89f,251f,69f,INK)
+     scoreText(c,p,pts,x+89f,251f,69f,INK,x+20f,181f,138f,93f)
      label(c,p,"FOULS: ${foul}",x+89f,306f,22f)
      identityTransition(c,p,a,i,x,38f,178f,134f,style,accent,color,teamName,logos[i])
      pointsFlash(c,p,a,i,x+20f,181f,138f,93f,accent,style)
