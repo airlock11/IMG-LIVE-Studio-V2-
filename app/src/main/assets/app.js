@@ -92,7 +92,7 @@ o.overlayPosition=graphicIsCompact(o.overlay)?'bottom-right':'bottom-center';
 for(const [field,min,max,standard] of [['overlayOffsetX',-30,30,0],['overlayOffsetY',-30,30,0],['overlayWidth',65,150,100],['overlayHeight',65,150,100],['overlaySafe',1,10,3]]){
  o[field]=Math.max(min,Math.min(max,Number.isFinite(Number(o[field]))?Number(o[field]):standard));
 }
-o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
+o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=true;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
  const cannedNames=['COURTSIDE','NORTHSTAR','PEAK SPORT'];
  const onlyCannedSponsors=savedSponsors.length===3&&savedSponsors.every((item,i)=>item?.name===cannedNames[i]&&!item?.img);
  return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors.map(item=>({...item,video:item.video?.startsWith('blob:')?'':item.video||''})),version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
@@ -288,7 +288,7 @@ async function startPrivateYouTubeFromStudio(){
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
    sponsorNames:namedSponsors.map(x=>String(x.name).trim().slice(0,55)),sponsorImages,
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
-   animated:data.options.overlayAnimated!==false,logoHome,logoAway,
+   animated:true,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
     recordLocal:Boolean(data.options.recordLocal)
   }));
@@ -575,7 +575,7 @@ function setupWizard(){
  const card=(n,title,content)=>`<section class="img-wizard-card" ${step===1&&n==='3'?'data-img-scoreboard-settings="true"':''}><div class="img-wizard-card-head"><span class="img-wizard-number">${n}</span><h2>${title}</h2></div>${content}</section>`;
  const upload=(key,title)=>`<label class="img-wizard-logo-upload">${b[key+'Logo']?`<img src="${esc(b[key+'Logo'])}" alt="${title} logo">`:ic('upload',21)}<span>${b[key+'Logo']?'Change logo':'Add logo'}</span><input type="file" accept="image/*" data-upload="quick-${key}-logo" hidden></label>`;
  const saved=Array.isArray(data.savedTeams)?data.savedTeams.filter(t=>t.sport===activeSport()).slice(0,8):[];
- const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div><details class="img-wizard-lineup"><summary>${ic('users',15)} Lineup setup (optional)</summary><p class="helper">Enter player names, one per line. The lineup is saved with this team.</p><textarea class="input" rows="3" maxlength="900" data-quick="${key}Lineup" placeholder="Player names (one per line)">${esc(b[key+'Lineup']||'')}</textarea></details><button type="button" class="img-wizard-save-team" data-action="save-team-${key}">${ic('check-circle',16)} Save or update team for next matches</button>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
+ const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div><button type="button" class="img-wizard-save-team" data-action="save-team-${key}">${ic('check-circle',16)} Save or update team for next matches</button>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
  const sportContent=card('1','Choose your sport',`<div class="img-wizard-sports">${SPORTS.map(s=>`<button class="img-wizard-sport ${activeSport()===s.id?'selected':''}" data-action="setup-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="img-wizard-sport-icon">${ic(s.icon,30)}</span><span><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?ic('check-circle',20):ic('chevron',18)}</button>`).join('')}</div>`) +
  (activeSport()==='basketball'?card('2','Game format',`<div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div>`):'');
  const selected=normalizeGraphic(o.overlay);
@@ -607,22 +607,44 @@ function setupWizard(){
   card('4','Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
   <div class="img-wizard-switch-row"><button type="button" class="img-wizard-offline-btn" data-action="setup-record-offline">${ic('video',18)} Offline Recording ${ic('arrow',17)}</button></div>`);
  const content=step===0?sportContent:step===1?teamContent:step===2?sponsorContent:destinationContent;
- return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div>${step===1?`<aside class="img-wizard-sticky-preview" hidden aria-label="Landscape scoreboard preview"><div class="img-wizard-score-art">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div></aside>`:''}<main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
+ return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div>${step===1?`<aside class="img-wizard-sticky-preview" hidden aria-label="Docked original scoreboard preview"></aside>`:''}<main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
 }
 function updateWizardStickyScoreboard(){
  const root=document.querySelector('.img-wizard-page');
  const pane=root?.querySelector('.img-wizard-scroll');
- const holder=root?.querySelector('.img-wizard-sticky-preview');
- const source=root?.querySelector('.img-wizard-score-origin');
- const section=root?.querySelector('[data-img-scoreboard-settings]');
- if(!pane||!holder||!source||!section)return;
- const frame=pane.getBoundingClientRect(),origin=source.getBoundingClientRect();
- // Once the original preview scrolls above the Step 2 viewport, keep the
- // exact live-preview canvas docked at TOP until scrolling back reveals it.
- // Do not unpin merely because the remaining scoreboard card scrolls away.
- const pin=origin.bottom<=frame.top+8;
- holder.hidden=!pin;
- if(pin)window.IMGMedia?.paintSetupScoreboard?.();
+ const dock=root?.querySelector('.img-wizard-sticky-preview');
+ const card=root?.querySelector('[data-img-scoreboard-settings]');
+ if(!pane||!dock||!card)return;
+ // One physical preview and one real native canvas. Dock THAT element,
+ // not a second preview. A fixed-size placeholder reserves its old position.
+ let preview=root.querySelector('.img-wizard-score-origin');
+ let spacer=card.querySelector('.img-wizard-score-placeholder');
+ if(!preview)return;
+ if(!spacer){
+  spacer=document.createElement('div');
+  spacer.className='img-wizard-score-placeholder';
+  preview.before(spacer);
+ }
+ const pinned=preview.parentElement===dock;
+ if(!pinned){
+  const bounds=preview.getBoundingClientRect();
+  spacer.style.height=Math.round(bounds.height)+'px';
+  spacer.style.width='100%';
+ }
+ const anchor=spacer.getBoundingClientRect();
+ const frame=pane.getBoundingClientRect();
+ const shouldPin=pinned?anchor.bottom<=frame.top+18:anchor.bottom<=frame.top+8;
+ if(shouldPin&&!pinned){
+  dock.hidden=false;
+  dock.appendChild(preview);
+  root.classList.add('img-score-docked');
+  window.IMGMedia?.paintSetupScoreboard?.();
+ }else if(!shouldPin&&pinned){
+  spacer.after(preview);
+  dock.hidden=true;
+  root.classList.remove('img-score-docked');
+  window.IMGMedia?.paintSetupScoreboard?.();
+ }
 }
 document.addEventListener('scroll',event=>{
  if(event.target?.classList?.contains('img-wizard-scroll'))updateWizardStickyScoreboard();
@@ -707,7 +729,7 @@ function scoreSettings(compact=false){
  (activeSport()==='pickleball'||isolated?'<p class="helper">Independent '+(isolated?'Streetball':'Pickleball')+' graphics controls</p>':
  '<div class="graphics-header"><h3>'+ic('layout-broadcast',19)+' Graphics</h3><p>Choose a style and adjust its size.</p></div>'+
  '<div class="graphics-library" role="group" aria-label="Broadcast Graphics style library">'+SCOREBOARD_STYLES.map(styleCard).join('')+'</div>'+
- '<label class="graphics-switch-row"><span>Score animation</span><input type="checkbox" data-graphics-check="overlayAnimated" '+(o.overlayAnimated?'checked':'')+'></label>')+
+ '')+
  '<div class="scoreboard-adjust-grid">'+
  '<label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>'+
  (isolated||activeSport()==='pickleball'?'<div class="score-color-row"><span class="small-label">Accent</span><div class="score-color-palette>'+
@@ -1461,9 +1483,6 @@ document.addEventListener('change',async e=>{const t=e.target;
   data.options.streetWinTarget=points;persist();return render(true);
  }
  if(t.dataset.streetVertical||t.dataset.streetHorizontal){persist();return}
-if(t.dataset.graphicsCheck){
- if(t.dataset.graphicsCheck==='overlayAnimated'){data.options.overlayAnimated=!!t.checked;persist();return render(true)}return;
-}
 if(t.dataset.graphicsRange){persist();return}
 if(t.dataset.scoreRange||t.dataset.scoreColor){persist();window.IMGMedia?.paintSetupScoreboard?.();return}if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}if(!t.dataset.upload||!t.files?.[0])return;const file=t.files[0];
 if(t.dataset.upload.startsWith('street-')){
@@ -1486,7 +1505,7 @@ if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(
 function keepKeyboardFieldVisible(){
  const el=document.activeElement;
  if(!isTypingControl(el))return;
- const pane=el.closest?.('.setup-quick-teams, .setup-landscape-settings, .scroll-controls, .content, .page');
+ const pane=el.closest?.('.img-wizard-scroll, .setup-quick-teams, .setup-landscape-settings, .scroll-controls, .content, .page');
  if(!pane)return;
  // Never scroll the left container: its top child is the live camera.
  const left=el.closest?.('.setup-landscape-left');
