@@ -820,7 +820,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    refresh()
   }.apply{textSize=14f}
   iconButton(start,"live",true)
-  val timeout=iconButton(darkButton("TIMEOUT"){showTimeoutPreview(it)},"clock")
+  val timeout=iconButton(darkButton("TIMEOUT"){},"clock")
+  timeout.setOnClickListener{showTimeoutPreview(timeout)}
   val keys=listOf(start,timeout,
    iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
   val widths=listOf(1.9f,1.15f,1.15f)
