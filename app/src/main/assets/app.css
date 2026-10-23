@@ -2350,3 +2350,38 @@ body.img-wizard-active .img-wizard-sticky-preview .img-wizard-score-origin{
 body.img-wizard-active input[type="range"][data-score-range="size"]{
  touch-action:pan-x;accent-color:#2fe0b0;will-change:auto;
 }
+
+/* Phone-confirmed Step 2 behavior: there is exactly ONE preview node.
+   Only the ORIGINAL scoreboard frame takes the fixed position when scrolled. */
+body.img-wizard-active .img-wizard-page .img-wizard-score-origin.img-score-pinned{
+ position:fixed!important;
+ inset:auto!important;
+ top:var(--img-score-top)!important;
+ left:var(--img-score-left)!important;
+ width:var(--img-score-width)!important;
+ height:var(--img-score-height)!important;
+ max-width:var(--img-score-width)!important;
+ min-height:0!important;
+ margin:0!important;
+ transform:none!important;
+ z-index:73!important;
+ box-shadow:0 7px 16px rgba(0,0,0,.24);
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-anchor{
+ background:transparent!important;
+ padding:0!important;
+ border:0!important;
+ margin:0!important;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-anchor[hidden]{
+ display:none!important;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-head{
+ position:relative;
+ z-index:76!important;
+}
+body.img-wizard-active .img-wizard-page input[type="range"][data-score-range="size"]{
+ touch-action:pan-x!important;
+ -webkit-user-select:none;
+ user-select:none;
+}
