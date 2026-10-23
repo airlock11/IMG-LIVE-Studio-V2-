@@ -1560,6 +1560,45 @@ if(remoteHash){
  if(code&&remoteApi()?.status().role==='none')
   remoteApi()?.join(code).then(()=>render(true)).catch(e=>toast(e.message));
 }
+// Sticky preview only after the Step 2 landscape scoreboard has scrolled out of view.
+// Draw from the SAME native-rendered setup scoreboard canvas; never rebuild an alternate graphic.
+let floatingScore=null;
+function updateFloatingScore(){
+ if(screen!=='setup'||setupStep!==1){
+  floatingScore?.classList.remove('visible');return;
+ }
+ const source=document.querySelector('.img-wizard-landscape-frame');
+ const scroll=document.querySelector('.img-wizard-scroll');
+ if(!source||!scroll){floatingScore?.classList.remove('visible');return;}
+ if(!floatingScore){
+  floatingScore=document.createElement('div');
+  floatingScore.className='img-wizard-floating-score';
+  floatingScore.setAttribute('aria-label','Landscape scoreboard preview');
+  floatingScore.innerHTML='<canvas width="1200" height="675"></canvas>';
+  document.body.appendChild(floatingScore);
+ }
+ const top=scroll.getBoundingClientRect().top;
+ const isPast=source.getBoundingClientRect().bottom<top+4;
+ floatingScore.classList.toggle('visible',isPast);
+ if(isPast){
+  const from=source.querySelector('canvas[data-setup-scoreboard]');
+  const fallback=source.querySelector('img');
+  const dest=floatingScore.querySelector('canvas');
+  const dc=dest.getContext('2d');
+  if(!dc)return;
+  dc.clearRect(0,0,dest.width,dest.height);
+  try {
+   if(from&&from.width&&from.height)dc.drawImage(from,0,0,from.width,from.height,0,0,dest.width,dest.height);
+   else if(fallback&&fallback.complete&&fallback.naturalWidth)dc.drawImage(fallback,0,0,dest.width,dest.height);
+  }catch(_){}
+ }
+}
+document.addEventListener('scroll',event=>{
+ if(event.target?.matches?.('.img-wizard-scroll'))requestAnimationFrame(updateFloatingScore);
+},true);
+window.addEventListener('resize',()=>requestAnimationFrame(updateFloatingScore));
+new MutationObserver(()=>requestAnimationFrame(updateFloatingScore))
+ .observe(document.querySelector('#app'),{childList:true,subtree:false});
 remoteApi()?.configure({applyAction:applyRemoteScoreCommand,snapshot:remoteGameSnapshot,update:remoteUpdated});
 render(false);
 })();
