@@ -28,13 +28,19 @@ class BroadcastSettingsUiTest {
   return null
  }
  private fun js(activity:android.app.Activity,web:WebView,code:String):String {
-  val result=AtomicReference("")
-  val latch=CountDownLatch(1)
-  activity.runOnUiThread{
-   web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+  // Android WebView can discard the callback for a frame that navigates while
+  // evaluateJavascript is in flight. Retry the same read-only query after the
+  // next frame; a continuously unresponsive WebView still fails the test.
+  for(attempt in 1..3){
+   val result=AtomicReference("")
+   val latch=CountDownLatch(1)
+   activity.runOnUiThread{
+    web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+   }
+   if(latch.await(5,TimeUnit.SECONDS))return result.get()
+   SystemClock.sleep(350)
   }
-  assertTrue("WebView JavaScript did not respond",latch.await(8,TimeUnit.SECONDS))
-  return result.get()
+  throw AssertionError("WebView JavaScript did not respond after 3 attempts")
  }
  private fun waitFor(activity:android.app.Activity,web:WebView,test:String){
   repeat(25){
@@ -82,6 +88,20 @@ class BroadcastSettingsUiTest {
    assertEquals("Step 1 has no camera preview","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-page .preview-wrap,.img-wizard-page video[data-img-camera]'))"))
    capture(activity,1)
+   val viewport=js(activity,web,"""(function(){
+    const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect(),c=getComputedStyle(el);return {top:r.top,bottom:r.bottom,height:r.height,scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,overflow:c.overflow,display:c.display,position:c.position,background:c.backgroundColor}};
+    return JSON.stringify({height:window.innerHeight,width:window.innerWidth,
+      app:rect(document.querySelector('.app')),
+      content:rect(document.querySelector('.app>.content')),
+      wizard:rect(document.querySelector('.img-wizard-page')),
+      scroll:rect(document.querySelector('.img-wizard-scroll')),
+      card:rect(document.querySelector('.img-wizard-card')),
+      sport:rect(document.querySelector('.img-wizard-sport')),
+      body:rect(document.body)});
+   })()""")
+   File(context.filesDir,"img-v2-wizard-viewport.txt").writeText(viewport)
+   assertEquals("Wizard must fill the real Android WebView viewport","true",js(activity,web,
+    "(function(){const a=document.querySelector('.app'),w=document.querySelector('.img-wizard-page');return !!a&&!!w&&a.getBoundingClientRect().height>=window.innerHeight*0.85&&w.getBoundingClientRect().height>=window.innerHeight*0.85})()"))
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art'))")
    SystemClock.sleep(600)
