@@ -412,13 +412,17 @@ internal object V2BroadcastGraphicsRenderer {
      val nx=if(i==0){if(logo==null)159f else 205f}
       else {if(logo==null)794f else 757f}
      label(c,p,code,nx,91f,50f,WHITE,Paint.Align.CENTER,159f)
-     // Symmetrical score windows clear the existing raised center dial
-     // (x=404..556) by 6 px on either side. Keep its exact style and layers.
-     val scoreX=if(i==0)296f else 562f
+     // Keep both of the EXACT original score windows (reference mapping).
+     // The center clock obscures part of the left cell, so the left text is
+     // fitted inside its readable slice. Identical font sizing on BOTH sides
+     // corrects disproportionate scores without moving any original plates.
+     val scoreX=if(i==0)335f else 578f
      shape(c,p,scoreX,37f,102f,68f,
       if(i==0)0xFF214A70.toInt() else 0xFF795029.toInt())
-     scoreText(c,p,points[i],scoreX+51f,93f,68f,
-      WHITE,scoreX,37f,102f,68f)
+     val readableW=if(i==0)70f else 102f
+     val readableCenter=if(i==0)scoreX+35f else scoreX+51f
+     scoreText(c,p,points[i],readableCenter,93f,
+      54f,WHITE,scoreX,37f,readableW,68f)
      pointsFlash(c,p,a,i,scoreX,38f,102f,67f,accent,id)
      if(a?.team==i){
       val wipeX=if(i==0)110f else 690f
