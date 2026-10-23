@@ -177,7 +177,7 @@ internal object V2BroadcastGraphicsRenderer {
   if(progress>=1f)return
   val eased=progress*progress*(3f-2f*progress)
   val glintX=x+w*(-.08f+1.16f*eased)
-  val strength=kotlin.math.sin(progress*Math.PI).toFloat().coerceIn(0f,1f)
+  val strength=kotlin.math.sin(progress.toDouble()*Math.PI).toFloat().coerceIn(0f,1f)
   val save=c.save()
   c.clipRect(x,y,x+w,y+h)
   p.shader=null
@@ -204,7 +204,7 @@ internal object V2BroadcastGraphicsRenderer {
   val progress=(a.progress/.78f).coerceIn(0f,1f)
   if(progress>=1f)return
   val eased=progress*progress*(3f-2f*progress)
-  val intensity=kotlin.math.sin(progress*Math.PI).toFloat().coerceIn(0f,1f)
+  val intensity=kotlin.math.sin(progress.toDouble()*Math.PI).toFloat().coerceIn(0f,1f)
   val save=c.save()
   c.clipRect(x,y,x+w,y+h)
   p.shader=null
