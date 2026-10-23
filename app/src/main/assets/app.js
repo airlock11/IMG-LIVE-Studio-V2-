@@ -596,16 +596,20 @@ function setupWizard(){
  const quality=String(o.quality)==='1080p'?'1080p':'720p',fps=Number(o.fps)===60?60:30;
  const destinationContent=
   card('1','Streaming Platform',`${youtubeDestination()}${facebookDestination()}`)+
-  ((ytSelected&&ytConnected)||(fbSelected&&fbConnected)?
-   card('2','Stream Details',`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
+  (ytConnected?
+   card('2',`<span class='img-wizard-provider-title'><svg class='img-wizard-platform-logo' viewBox='0 0 24 24' aria-hidden='true'><rect x='1' y='5' width='22' height='14' rx='5' fill='#FF0033'/><path d='M10 8.6L16 12l-6 3.4Z' fill='#fff'/></svg> YouTube</span>`,`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
     <label class="form-group"><span class="small-label">Description</span><textarea class="input" rows="3" data-quick="liveDescription" placeholder="Description">${esc(b.liveDescription||'')}</textarea></label>
-    ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
+    ${ytConnected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
       <fieldset class="img-wizard-audience"><legend>Audience · Is this video made for kids?</legend><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="no" ${youtubeAudience==='no'?'checked':''}> Not made for kids</label><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="yes" ${youtubeAudience==='yes'?'checked':''}> Made for kids</label></fieldset>
       <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
-  card('3','Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
+  (fbConnected?card(ytConnected?'3':'2',`<span class='img-wizard-provider-title'><svg class='img-wizard-platform-logo' viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='12' r='11' fill='#1877F2'/><path d='M13.6 22.9v-9.3h3.1l.5-3.6h-3.6V7.7c0-1 .3-1.7 1.8-1.7h1.9V2.8a24 24 0 0 0-2.8-.2c-2.8 0-4.7 1.7-4.7 4.8V10H6.7v3.6h3.1v9.1Z' fill='#fff'/></svg> Facebook</span>`,
+`<label class='form-group'><span class='small-label'>Stream title</span><input class='input' data-quick='facebookLiveTitle' maxlength='100' value='${esc(b.facebookLiveTitle||'')}' placeholder='Facebook stream title'></label>
+<label class='form-group'><span class='small-label'>Description</span><textarea class='input' rows='3' data-quick='facebookLiveDescription' placeholder='Facebook description'>${esc(b.facebookLiveDescription||'')}</textarea></label>
+<p class='helper'>Facebook publishing details are managed in Facebook Live Producer. These values are saved separately from YouTube.</p>`):'')+
+  card(String(2+Number(ytConnected)+Number(fbConnected)),'Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
    <div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${fps===v?'active':''}" data-set="fps:${v}" ${ytSelected&&!profileSupported('720p',v)&&!profileSupported('1080p',v)?'disabled':''}>${v} FPS</button>`).join('')}</div></div>
    ${ytSelected&&!profileSupported(quality,fps)?'<p class="img-wizard-quality-warning">Selected quality is unsupported by this phone.</p>':''}</div>`)+
-  card('4','Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
+  card(String(3+Number(ytConnected)+Number(fbConnected)),'Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
   <div class="img-wizard-switch-row"><button type="button" class="img-wizard-offline-btn" data-action="setup-record-offline">${ic('video',18)} Offline Recording ${ic('arrow',17)}</button></div>`);
  const content=step===0?sportContent:step===1?teamContent:step===2?sponsorContent:destinationContent;
  return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div><main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
@@ -1193,9 +1197,10 @@ if(name==='setup-record-offline'){
  return;
 }
 if(name==='setup-destination-facebook'){
- o.fb=!o.fb;
- if(o.fb){o.yt=false;o.tiktok=false;fbExpanded=true;youtubeExpanded=false}
- else fbExpanded=false;
+ fbExpanded=!fbExpanded;
+ if(fbExpanded&&window.IMGFacebookLive?.status?.().phase==='sending'){
+  o.fb=true;o.yt=false;o.tiktok=false;
+ }
  persist();return render(true);
 }
 if(name==='setup-facebook-connect'){if(window.IMGFacebookLive?.status?.().phase==='sending'){window.IMGFacebookLive?.stop?.();fbFeedbackState='idle';fbMessage='';return render(true)}if(!fbFields.streamKey||fbFields.streamKey.length<10)return toast('Enter your Facebook stream key');return startFacebookBroadcast()}
@@ -1326,9 +1331,10 @@ if(name==='toggle-facebook-panel'){
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
 if(name==='destination-yt'){
- o.yt=!o.yt;
- if(o.yt){o.fb=false;o.tiktok=false;youtubeExpanded=true;fbExpanded=false}
- else {youtubeExpanded=false;youtubeFeedback=''}
+ youtubeExpanded=!youtubeExpanded;
+ if(youtubeExpanded&&window.IMGAccounts?.getStatus?.().youtube==='connected'){
+  o.yt=true;o.fb=false;o.tiktok=false;
+ }
  persist();return render(true);
 }
 
