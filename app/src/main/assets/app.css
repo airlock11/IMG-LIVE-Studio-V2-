@@ -2287,3 +2287,19 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
 .img-my-stream-foot{border-top:1px dashed #4c685e;padding-top:12px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
 .img-my-stream-foot span{display:flex;align-items:center;gap:6px;color:#afc7bc}
 .img-my-stream-foot b{font-size:11px;color:#3de0aa}
+
+/* V2 Android compatibility: System WebView versions before dynamic viewport
+   unit support ignore 100dvh. Use vh FIRST, then dvh for modern keyboards.
+   Without the fallback the four-step editor collapsed to about 198px. */
+html.img-native-app .app,
+body.img-wizard-active .app.headerless-setup-app,
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page{
+ height:100vh!important;
+ height:100dvh!important;
+ max-height:100vh!important;
+ max-height:100dvh!important;
+}
+body.img-wizard-active{
+ height:100vh!important;
+ height:100dvh!important;
+}
