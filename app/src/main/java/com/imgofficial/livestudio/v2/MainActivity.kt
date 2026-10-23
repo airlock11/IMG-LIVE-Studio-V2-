@@ -34,12 +34,12 @@ class MainActivity : Activity() {
  private val incomingSponsorParts=mutableMapOf<String,MutableList<StringBuilder>>()
  private fun receiveSponsorTransfer(command:String){
   val pieces=command.split(':',limit=4)
-  if(pieces.size<3)return
+  if(pieces.size<2)return
   val token=pieces[1]
   if(!token.matches(Regex("^[a-f0-9]{16}$")))return
   when(pieces[0]){
    "native-sponsor-begin"->{
-    val count=pieces[2].toIntOrNull()?:return
+    val count=pieces.getOrNull(2)?.toIntOrNull()?:return
     if(count !in 1..12)return
     incomingSponsorParts.clear()
     incomingSponsorParts[token]=MutableList(count){StringBuilder()}
