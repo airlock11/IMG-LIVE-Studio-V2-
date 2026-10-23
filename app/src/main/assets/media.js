@@ -5,6 +5,76 @@
  'use strict';
  let cameraStream=null, microphoneStream=null, sourceVideo=null, recorder=null, recorderStream=null;
  let drawCanvas=null, chunks=[], startedAt=0, latestClip=null, stateReader=null, overlayReader=null, previewRaf=0, lastPreviewFrame=0, liveCapture=null, broadcastPreviewRaf=0, lastBroadcastPreviewFrame=0;
+ // The WebView monitor asks Android for the REAL bitmap that RootEncoder uses.
+ // Only request a new bitmap when game data or artwork changes (no 60fps
+ // PNG encoding). Preview and browser recording share the same bitmap.
+ let nativeScoreImage=null, nativeScoreKey='', nativeScorePending='';
+ const nativeGraphicsEnabled=()=>typeof window.IMGNativeChannel?.postMessage==='function';
+ window.addEventListener('img-native-graphics-frame',event=>{
+  const detail=event?.detail;
+  if(!detail||detail.key!==nativeScorePending||typeof detail.src!=='string'||
+     !detail.src.startsWith('data:image/png;base64,'))return;
+  const picture=new Image();
+  picture.onload=()=>{
+   if(nativeScorePending!==detail.key)return;
+   nativeScoreImage=picture;nativeScoreKey=detail.key;
+   paintBroadcastPreview();
+  };
+  picture.src=detail.src;
+ });
+ function syncNativeGraphic(s){
+  if(!nativeGraphicsEnabled())return false;
+  const o=s.options||{},l=s.live||{},t=s.teams||[];
+  const home=t[0]||{},away=t[1]||{};
+  const styleIds=['prime-tv','courtside-a','courtside-b','arena-glass',
+   'rivalry-plate','center-dial','broadcast-classic','crown-pill',
+   'split-box','match-cube','edge-box','legacy-tv'];
+  const style=Math.max(0,styleIds.indexOf(o.overlay));
+  const logoId=v=>String(v||'').length+':'+String(v||'').slice(-24);
+  const key=[style,home.name,away.name,l.scores?.[0],l.scores?.[1],
+   l.fouls?.[0],l.fouls?.[1],l.quarter,Math.floor(l.seconds??600),
+   l.shot,o.overlayOpacity,logoId(home.logo),logoId(away.logo)].join('|').slice(0,350);
+  if(nativeScoreKey===key||nativeScorePending===key)return true;
+  nativeScorePending=key;
+  nativeScoreImage=null;
+  const game={
+   key,style,home:home.name||'HOME',away:away.name||'AWAY',
+   homeScore:Math.max(0,Math.min(999,Math.round(Number(l.scores?.[0])||0))),
+   awayScore:Math.max(0,Math.min(999,Math.round(Number(l.scores?.[1])||0))),
+   homeFouls:Math.max(0,Math.min(99,Math.round(Number(l.fouls?.[0])||0))),
+   awayFouls:Math.max(0,Math.min(99,Math.round(Number(l.fouls?.[1])||0))),
+   period:Math.max(1,Math.min(9,Math.round(Number(l.quarter)||1))),
+   clock:formatClock(l.seconds??600),shot:Math.max(0,Math.min(99,Math.ceil(Number(l.shot??24)))),
+   opacity:clamp(o.overlayOpacity??100,30,100)/100,
+   homeLogo:String(home.logo||'').slice(0,65000),
+   awayLogo:String(away.logo||'').slice(0,65000)
+  };
+  try{window.IMGNativeChannel.postMessage('native-graphics-frame:'+encodeURIComponent(JSON.stringify(game)));}
+  catch(_){nativeScorePending='';}
+  return true;
+ }
+ function drawNativeGraphic(ctx,s,w,h){
+  if(!syncNativeGraphic(s))return false;
+  // When a bitmap is loading, never show an unrelated legacy scoreboard.
+  if(!nativeScoreImage||nativeScoreKey!==nativeScorePending)return true;
+  const o=s.options||{},id=['prime-tv','courtside-a','courtside-b','arena-glass',
+   'rivalry-plate','center-dial','broadcast-classic','crown-pill',
+   'split-box','match-cube','edge-box','legacy-tv'].indexOf(o.overlay);
+  const compact=id>=8;
+  const size=clamp(o.overlaySize??60,15,115)/60;
+  const geometry=clamp(Math.min(Number(o.overlayWidth)||100,Number(o.overlayHeight)||100),65,150)/100;
+  let pw=(compact?31:84)*size*geometry;
+  let ph=pw*(960/540)*(compact?1:(144/960));
+  const factor=Math.min(1,85/ph,95/pw);pw*=factor;ph*=factor;
+  const safe=clamp(o.overlaySafe??3,1,10);
+  const pos=o.overlayPosition|| (compact?'bottom-right':'bottom-center');
+  let px=pos.endsWith('left')?safe:pos.endsWith('right')?100-pw-safe:(100-pw)/2;
+  let py=pos.startsWith('top')?safe:100-ph-safe;
+  px=clamp(px+(Number(o.overlayOffsetX)||0),safe,100-pw-safe);
+  py=clamp(py+(Number(o.overlayOffsetY)||0),safe,100-ph-safe);
+  ctx.drawImage(nativeScoreImage,w*px/100,h*py/100,w*pw/100,h*ph/100);
+  return true;
+ }
  const DB='img-live-offline-clips', STORE='clips';
  const canCamera=()=>Boolean(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
  const isCameraOn=()=>Boolean(cameraStream&&cameraStream.getVideoTracks().some(t=>t.readyState==='live'));
@@ -194,6 +264,7 @@
   if(!canvases.length)return;
   let state;try{state=overlayReader()}catch(_){return}
   if(state?.sport!=='basketball'||state.options?.basketballMode==='streetball')return;
+  syncNativeGraphic(state);
   const high=state.options?.quality==='1080p';
   const portrait=state.options?.orientation==='portrait';
   const w=portrait?(high?1080:720):(high?1920:1280);
@@ -428,7 +499,7 @@
    drawVideo(ctx,sourceVideo,w,h);
    if(s.sport==='pickleball')drawPickleballBar(ctx,s,w,h);
    else if(s.sport==='basketball'&&s.options?.basketballMode==='streetball')drawStreetball(ctx,s,w,h);
-   else drawGameBar(ctx,s,w,h);
+   else if(!drawNativeGraphic(ctx,s,w,h))drawGameBar(ctx,s,w,h);
    if(!(s.sport==='basketball'&&s.options?.basketballMode==='streetball')){
     if(s.live?.timeout){block(ctx,w*.42,h*.04,w*.16,h*.053,'rgba(191,74,57,.88)',10);text(ctx,'TIMEOUT',w*.5,h*.067,Math.max(16,w*.014),'900','center');}
     if(s.options?.broadcast?.showLeagueName&&s.options.broadcast.leagueName)text(ctx,s.options.broadcast.leagueName,w/2,h*.08,Math.max(15,w*.015),'900','center','#fff',w*.7);
