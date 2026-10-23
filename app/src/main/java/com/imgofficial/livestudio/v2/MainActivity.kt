@@ -68,6 +68,68 @@ class MainActivity : Activity() {
    }catch(_:Exception){}finally{graphicsGalleryBusy=false}
   }.start()
  }
+ // Camera previews in Broadcast Settings use the actual same native graphic
+ // renderer as the H.264 GL filter, rather than WebView's legacy scorebar.
+ @Volatile private var frameRequestEpoch=0
+ private fun decodeGraphicLogo(data:String?):android.graphics.Bitmap?{
+  if(data.isNullOrBlank()||data.length>65000||
+   !(data.startsWith("data:image/png;base64,")||
+     data.startsWith("data:image/jpeg;base64,")))return null
+  return try{
+   val bytes=android.util.Base64.decode(data.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..48000)return null
+   val opts=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,opts)
+   if(opts.outWidth !in 1..256||opts.outHeight !in 1..256)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
+ private fun nativeGraphicFrame(encoded:String){
+  if(encoded.length !in 3..140000)return
+  val epoch=++frameRequestEpoch
+  Thread {
+   var homeLogo:android.graphics.Bitmap?=null
+   var awayLogo:android.graphics.Bitmap?=null
+   try{
+    val json=JSONObject(Uri.decode(encoded))
+    val id=json.optInt("style",0).coerceIn(0,11)
+    val key=json.optString("key").take(360)
+    if(key.isBlank())return@Thread
+    homeLogo=decodeGraphicLogo(json.optString("homeLogo"))
+    awayLogo=decodeGraphicLogo(json.optString("awayLogo"))
+    val state=V2Scorecard.State(
+     sport="basketball",
+     home=json.optString("home","HOME").trim().take(18).ifEmpty{"HOME"},
+     away=json.optString("away","AWAY").trim().take(18).ifEmpty{"AWAY"},
+     homeScore=json.optInt("homeScore",0).coerceIn(0,999),
+     awayScore=json.optInt("awayScore",0).coerceIn(0,999),
+     homeFouls=json.optInt("homeFouls",0).coerceIn(0,99),
+     awayFouls=json.optInt("awayFouls",0).coerceIn(0,99),
+     period=json.optInt("period",1).coerceIn(1,9),
+     clock=json.optString("clock","10:00").take(7),
+     shotClock=json.optInt("shot",24).coerceIn(0,99)
+    )
+    val bmp=V2BroadcastGraphicsRenderer.render(state,
+     json.optDouble("opacity",1.0).toFloat().coerceIn(0f,1f),
+     null,id,homeLogo,awayLogo)
+    val bytes=java.io.ByteArrayOutputStream()
+    bmp.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+    bmp.recycle()
+    if(epoch!=frameRequestEpoch||bytes.size()>145000)return@Thread
+    val src="data:image/png;base64,"+
+     android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP)
+    val detail=JSONObject().put("key",key).put("src",src).toString()
+    runOnUiThread{
+     if(epoch==frameRequestEpoch && !isFinishing && ::browser.isInitialized)
+      browser.evaluateJavascript(
+       "window.dispatchEvent(new CustomEvent('img-native-graphics-frame',{detail:"+detail+"}));",null)
+    }
+   }catch(_:Exception){}finally{
+    homeLogo?.recycle();awayLogo?.recycle()
+   }
+  }.start()
+ }
+
  private lateinit var browser: WebView
  private var oauthClient: NativeOAuthClient? = null
  private lateinit var root: FrameLayout
@@ -194,6 +256,8 @@ class MainActivity : Activity() {
        } else if(action=="native-graphics-gallery"){
         // Preview generation is on demand only, not during app launch or stream.
         runOnUiThread { generateGraphicsGallery() }
+       } else if(action.startsWith("native-graphics-frame:")){
+        nativeGraphicFrame(action.removePrefix("native-graphics-frame:"))
        } else if(action in setOf("img-orientation:landscape","img-orientation:portrait","img-orientation:auto")) {
         // Only fixed, origin-checked orientation values are accepted. Avoid
         // WebView fullscreen tricks: native system bars remain real/visible.
