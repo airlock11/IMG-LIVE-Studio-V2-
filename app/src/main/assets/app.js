@@ -89,7 +89,7 @@ o.overlayPosition=graphicIsCompact(o.overlay)?'bottom-right':'bottom-center';
 for(const [field,min,max,standard] of [['overlayOffsetX',-30,30,0],['overlayOffsetY',-30,30,0],['overlayWidth',65,150,100],['overlayHeight',65,150,100],['overlaySafe',1,10,3]]){
  o[field]=Math.max(min,Math.min(max,Number.isFinite(Number(o[field]))?Number(o[field]):standard));
 }
-o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(115,Number(o.overlaySize)||45));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
+o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
  const cannedNames=['COURTSIDE','NORTHSTAR','PEAK SPORT'];
  const onlyCannedSponsors=savedSponsors.length===3&&savedSponsors.every((item,i)=>item?.name===cannedNames[i]&&!item?.img);
  return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors,version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
@@ -612,7 +612,7 @@ function scoreSettings(compact=false){
   setTimeout(()=>window.IMGNativeChannel?.postMessage?.('native-graphics-gallery'),0);
  }
  const o=data.options,isolated=streetballActive(),
- size=Math.min(115,Math.max(15,Number(isolated?o.streetOverlaySize:o.overlaySize)||60)),
+ size=Math.min(isolated?115:95,Math.max(15,Number(isolated?o.streetOverlaySize:o.overlaySize)||60)),
  alpha=Math.min(100,Math.max(30,isolated?o.streetOverlayOpacity:o.overlayOpacity)),
  choice=isolated?o.streetOverlayColor:o.overlayColor,
  color=/^#[0-9a-fA-F]{6}$/.test(choice||'')?choice:'#2FE0B0';
@@ -632,7 +632,7 @@ function scoreSettings(compact=false){
  '<div class="graphics-library" role="group" aria-label="Broadcast Graphics style library">'+SCOREBOARD_STYLES.map(styleCard).join('')+'</div>'+
  '<label class="graphics-switch-row"><span>Score animation</span><input type="checkbox" data-graphics-check="overlayAnimated" '+(o.overlayAnimated?'checked':'')+'></label>')+
  '<div class="scoreboard-adjust-grid">'+
- '<label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="115" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>'+
+ '<label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>'+
  (isolated||activeSport()==='pickleball'?'<div class="score-color-row"><span class="small-label">Accent</span><div class="score-color-palette>'+
  SCOREBOARD_PALETTE.map(hex=>'<button class="score-color-swatch '+(color.toLowerCase()===hex.toLowerCase()?'selected':'')+'" style="--swatch:'+hex+'" data-set="overlayColor:'+hex+'" aria-pressed="'+(color.toLowerCase()===hex.toLowerCase())+'" aria-label="Accent '+hex+'"></button>').join('')+
  '<label class="score-color-custom"><input type="color" data-score-color="1" value="'+color+'" aria-label="Custom accent color"><span>Custom</span></label></div></div>':'')+
@@ -728,7 +728,7 @@ function streetballLiveControls(){
 
 function pickleballScorebug(){
  const l=data.live,o=data.options,t=gameTeams();
- const scale=Math.max(15,Math.min(115,Number(o.overlaySize)||45))/100;
+ const scale=Math.max(15,Math.min(95,Number(o.overlaySize)||45))/100;
  const opacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)))/100;
  const accent=/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||'')?o.overlayColor:'#E66D48';
  return '<div class="pickle-scorebug" style="--overlay-size:'+scale+';--overlay-opacity:'+opacity+';--overlay-accent:'+accent+'">'+
