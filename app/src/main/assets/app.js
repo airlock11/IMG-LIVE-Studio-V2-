@@ -575,7 +575,7 @@ function setupWizard(){
  const selected=normalizeGraphic(o.overlay);
  const realArt=realGraphicsThumbnails[selected]||'';
  const graphicsPreview=activeSport()==='basketball'&&!streetballActive()
-  ?`<div class="img-wizard-score-art">${realArt?`<img src="${realArt}" draggable="false" alt="Actual selected native ${esc(scoreStyleName(selected))} scoreboard artwork">`:`<p class="helper">Loading the actual Android scoreboard artwork…</p>`}</div><div class="img-wizard-score-caption"><span>${esc(b.homeName||'Home')}</span><span>0 — 0</span><span>${esc(b.awayName||'Away')}</span></div>`
+  ?`<div class="img-wizard-score-art"><canvas data-setup-scoreboard aria-label="Selected live scoreboard artwork with actual team names" width="1200" height="290"></canvas></div><div class="img-wizard-score-caption"><span>${esc(b.homeName||'Home')}</span><span>${esc(scoreStyleName(selected))}</span><span>${esc(b.awayName||'Away')}</span></div>`
   :`<div class="img-wizard-score-art"><span>${esc(b.homeName||'HOME')} · 0 : 0 · ${esc(b.awayName||'AWAY')}</span></div>`;
  const teamContent=card('1','Team names & logos',team('home','First team')+team('away','Second team'))+
  card('2','Tournament or league',`<label class="form-group"><span class="small-label">Tournament / League name (optional)</span><input class="input" maxlength="55" data-quick="leagueName" value="${esc(b.leagueName||'')}" placeholder="Enter tournament or league name"></label><label class="img-wizard-league-toggle"><span>Show league name on video</span><button class="toggle ${b.showLeagueName?'active':''}" data-action="toggle-league-name" role="switch" aria-checked="${b.showLeagueName}" aria-label="Show league name"></button></label>`)+
@@ -875,6 +875,7 @@ function updateQuickPreview(key,value,source){
   document.querySelectorAll(pickle).forEach(el=>{el.textContent=String(value).trim()});
  }
  if(key==='leagueName')document.querySelectorAll('.onair-league span').forEach(el=>{el.textContent=value});
+ if(['homeName','awayName','leagueName'].includes(key))window.IMGMedia?.paintSetupScoreboard?.();
 }
 
 function currentEditor(){
