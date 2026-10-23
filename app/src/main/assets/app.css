@@ -2550,3 +2550,16 @@ body.img-wizard-active .img-wizard-page .img-wizard-score-sticky-unit.img-score-
  height:30px;
  flex:none;
 }
+
+/* Sponsor name editor: compact, focused dialog; image upload stays in Step 3. */
+.img-sponsor-name-editor-actions{
+ display:flex;
+ align-items:center;
+ gap:10px;
+ margin-top:19px;
+}
+.img-sponsor-name-editor-actions button{
+ flex:1 1 0;
+ min-width:0;
+ min-height:43px;
+}
