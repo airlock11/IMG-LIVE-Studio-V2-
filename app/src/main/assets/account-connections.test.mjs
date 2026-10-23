@@ -349,8 +349,8 @@ test('phone issues: one scoreboard canvas, no lineup, no animation switch, compa
  assert.ok(!wizard.includes('Score animation'));
  assert.ok(!wizard.includes('img-wizard-sticky-preview'),'No duplicate sticky preview container');
  assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
- assert.ok(studio.includes("preview.classList.add('img-score-pinned')"));
- assert.ok(studio.includes("preview.classList.remove('img-score-pinned')"));
+ assert.ok(studio.includes("unit.classList.add('img-score-pinned')"));
+ assert.ok(studio.includes("unit.classList.remove('img-score-pinned')"));
  assert.ok(!studio.includes("dock.appendChild(preview)"));
  assert.ok(!studio.includes("Save or update team for next matches"));
  assert.ok(studio.includes("if(!scoreboardSizeFrame)scoreboardSizeFrame=requestAnimationFrame"));
@@ -369,4 +369,21 @@ test('phone recheck: expired OAuth is never presented as both platforms permanen
  const accounts=await readFile(new URL('./account-connections.js',import.meta.url),'utf8');
  assert.ok(!accounts.includes('Facebook and YouTube login is not available yet.'));
  assert.ok(accounts.includes('Secure YouTube testing has expired or is disabled'));
+});
+
+test('Only requested Size slider change: directly under original preview, no percentage, sticky together',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ const dock=studio.slice(studio.indexOf('function updateWizardStickyScoreboard(){'),studio.indexOf('let scoreboardStickyTick=false;'));
+ assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
+ assert.equal((wizard.match(/data-score-range="size"/g)||[]).length,1);
+ assert.match(wizard, /class="img-wizard-score-unit"/);
+ assert.ok(wizard.includes('img-wizard-size-control')&&wizard.indexOf('img-wizard-score-origin')<wizard.indexOf('img-wizard-size-control'));
+ assert.ok(wizard.includes('scoreSettings(false,false)'));
+ assert.ok(!wizard.includes('data-score-range-output="size"'));
+ assert.ok(!wizard.includes('Size <output'));
+ assert.ok(dock.includes("root.appendChild(unit)")&&dock.includes("marker.after(unit)"));
+ assert.ok(css.includes('.img-wizard-score-unit.img-score-pinned'));
+ assert.ok(css.includes('.img-wizard-size-control input[type="range"]'));
 });

@@ -119,14 +119,14 @@ class BroadcastSettingsUiTest {
    assertEquals("Landscape preview uses 16:9 broadcast coordinates","true",js(activity,web,
     "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
-    "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
+    "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-unit');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
    SystemClock.sleep(700)
    // The FIRST native canvas itself must remain one DOM element and pin in place.
    try {
-    waitFor(activity,web,"(function(){const a=document.querySelector('.img-wizard-score-origin');return !!a&&a.classList.contains('img-score-pinned')})()")
+    waitFor(activity,web,"(function(){const a=document.querySelector('.img-wizard-score-unit');return !!a&&a.classList.contains('img-score-pinned')})()")
    }catch(ex:AssertionError){
     val debug=js(activity,web,"""(function(){
-      const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');
+      const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-unit');
       return JSON.stringify({scroll:p?.scrollTop,max:p?(p.scrollHeight-p.clientHeight):0,
        artTop:a?.getBoundingClientRect().top,paneTop:p?.getBoundingClientRect().top,
        pinned:a?.classList.contains('img-score-pinned'),canvases:document.querySelectorAll('canvas[data-setup-scoreboard]').length});
@@ -141,7 +141,7 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('.img-wizard-sticky-preview'))"))
    val visiblePinned=js(activity,web,
     """(function(){
-      const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll');
+      const a=document.querySelector('.img-wizard-score-unit'),p=document.querySelector('.img-wizard-scroll');
       if(!a||!p)return false;
       const r=a.getBoundingClientRect(),b=p.getBoundingClientRect();
       const node=document.elementFromPoint(r.left+r.width/2,r.top+Math.min(25,r.height/2));
@@ -151,7 +151,7 @@ class BroadcastSettingsUiTest {
      })()""")
    if(visiblePinned!="true"){
     val debug=js(activity,web,"""(function(){
-     const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll'),r=a?.getBoundingClientRect(),b=p?.getBoundingClientRect(),pt=r?{x:r.left+r.width/2,y:r.top+Math.min(25,r.height/2)}:null,n=pt?document.elementFromPoint(pt.x,pt.y):null;
+     const a=document.querySelector('.img-wizard-score-unit'),p=document.querySelector('.img-wizard-scroll'),r=a?.getBoundingClientRect(),b=p?.getBoundingClientRect(),pt=r?{x:r.left+r.width/2,y:r.top+Math.min(25,r.height/2)}:null,n=pt?document.elementFromPoint(pt.x,pt.y):null;
      return JSON.stringify({pinned:a?.classList.contains('img-score-pinned'),parent:a?.parentElement?.className,position:a?getComputedStyle(a).position:null,
       styleTop:a?.style.getPropertyValue('--img-score-top'),styleLeft:a?.style.getPropertyValue('--img-score-left'),
       art:r?{top:r.top,left:r.left,width:r.width,height:r.height,bottom:r.bottom}:null,pane:b?{top:b.top,left:b.left,width:b.width,height:b.height}:null,
@@ -159,9 +159,13 @@ class BroadcastSettingsUiTest {
     })()""")
     throw AssertionError("Original preview visibility diagnostic: "+debug)
    }
+   assertEquals("Exactly one Size slider beneath original preview, no percent number","true",js(activity,web,
+    "(function(){const u=document.querySelector('.img-wizard-score-unit'),s=u?.querySelector('.img-wizard-size-control input[data-score-range=size]');return !!u&&!!s&&u.contains(document.querySelector('.img-wizard-score-origin'))&&document.querySelectorAll('.img-wizard-page input[data-score-range=size]').length===1&&!u.textContent.includes('%')})()"))
+   assertEquals("Size slider stays in the SAME anchored unit as the video preview","true",js(activity,web,
+    "(function(){const u=document.querySelector('.img-wizard-score-unit'),s=u?.querySelector('input[data-score-range=size]');return !!u&&u.classList.contains('img-score-pinned')&&getComputedStyle(u).position==='fixed'&&!!s})()"))
    capture(activity,2,"scoreboard")
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
-   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-origin');return !!e&&!e.classList.contains('img-score-pinned')})()")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-unit');return !!e&&!e.classList.contains('img-score-pinned')})()")
 
    // Issue 1: selecting another original on-air graphic never scrolls the pane.
    assertEquals("Choosing a scoreboard must preserve exact scrolling","true",js(activity,web,
@@ -189,7 +193,7 @@ class BroadcastSettingsUiTest {
       slider.dispatchEvent(new Event('input',{bubbles:true}));
       slider.dispatchEvent(new Event('change',{bubbles:true}));
       return p.scrollTop===before&&document.querySelector('[data-score-range="size"]')===original
-       &&document.querySelector('[data-score-range-output="size"]')?.textContent==='75%';
+       &&!document.querySelector('[data-score-range-output="size"]')&&slider.value==='75';
      })()"""))
    assertEquals("Scoreboard frame must have no dark side fill","true",js(activity,web,
     """(function(){
