@@ -289,7 +289,7 @@ async function startPrivateYouTubeFromStudio(){
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
   const game=encodeURIComponent(JSON.stringify({
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
-   sponsorNames:namedSponsors.map(x=>String(x.name||'SPONSOR').trim().slice(0,55)),sponsorImages,sponsorToken,
+   sponsorNames:namedSponsors.map(x=>(String(x.name||'').trim().slice(0,55)||'SPONSOR')),sponsorImages,sponsorToken,
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
    animated:true,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
@@ -501,7 +501,7 @@ async function openNativeOfflineControls(){
    away:String(o.broadcast.awayName||'AWAY').slice(0,24),
    logoHome:await compactImage(o.broadcast.homeLogo||''),
    logoAway:await compactImage(o.broadcast.awayLogo||''),
-   sponsorNames:sponsors.map(v=>String(v.name||'SPONSOR').trim().slice(0,55)),
+   sponsorNames:sponsors.map(v=>(String(v.name||'').trim().slice(0,55)||'SPONSOR')),
    sponsorImages,sponsorToken,graphics:normalizeGraphic(o.overlay),
    size:Math.round(o.overlaySize),quality:o.quality,fps:o.fps,
    shotVisible:o.shotVisible!==false
