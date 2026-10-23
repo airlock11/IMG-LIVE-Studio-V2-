@@ -68,7 +68,7 @@
    logoId(away.logo),logoId(rightLogo)].join('|').slice(0,350);
   if(nativeScoreKey===key||nativeScorePending===key)return true;
   nativeScorePending=key;
-  nativeScoreImage=null;
+  // Keep the previous frame visible until the new native bitmap decodes.
   const game={
    key,style,home:home.name||'HOME',away:away.name||'AWAY',
    homeScore:Math.max(0,Math.min(999,Math.round(Number(l.scores?.[0])||0))),
@@ -87,23 +87,20 @@
  function drawNativeGraphic(ctx,s,w,h){
   if(!syncNativeGraphic(s))return false;
   // When a bitmap is loading, never show an unrelated legacy scoreboard.
-  if(!nativeScoreImage||nativeScoreKey!==nativeScorePending)return true;
+  if(!nativeScoreImage)return true;
   const o=s.options||{},id=['prime-tv','courtside-a','courtside-b','arena-glass',
    'rivalry-plate','center-dial','broadcast-classic','crown-pill',
    'split-box','match-cube','edge-box','legacy-tv'].indexOf(o.overlay);
   const compact=id>=8;
-  const size=clamp(o.overlaySize??60,15,115)/60;
-  const geometry=clamp(Math.min(Number(o.overlayWidth)||100,Number(o.overlayHeight)||100),65,150)/100;
-  let pw=(compact?31:84)*size*geometry;
-  let ph=pw*(960/540)*(compact?1:(144/960));
-  const factor=Math.min(1,85/ph,95/pw);pw*=factor;ph*=factor;
-  const safe=clamp(o.overlaySafe??3,1,10);
-  const pos=o.overlayPosition|| (compact?'bottom-right':'bottom-center');
-  let px=pos.endsWith('left')?safe:pos.endsWith('right')?100-pw-safe:(100-pw)/2;
-  let py=pos.startsWith('top')?safe:100-ph-safe;
-  px=clamp(px+(Number(o.overlayOffsetX)||0),safe,100-pw-safe);
-  py=clamp(py+(Number(o.overlayOffsetY)||0),safe,100-ph-safe);
-  ctx.drawImage(nativeScoreImage,w*px/100,h*py/100,w*pw/100,h*ph/100);
+  // One size slider with locked natural proportions and automatic placement.
+ const size=clamp(o.overlaySize??60,15,115)/60;
+ let pw=(compact?31:84)*size;
+ let ph=pw*(960/540)*(compact?1:144/960);
+ const factor=Math.min(1,85/ph,95/pw);pw*=factor;ph*=factor;
+ const safe=3;
+ const px=compact?100-pw-safe:(100-pw)/2;
+ const py=100-ph-safe;
+ ctx.drawImage(nativeScoreImage,w*px/100,h*py/100,w*pw/100,h*ph/100);
   return true;
  }
  const DB='img-live-offline-clips', STORE='clips';
@@ -297,7 +294,7 @@
   if(!canvases.length)return;
   let state;try{state=overlayReader()}catch(_){return}
   if(state?.sport!=='basketball'||state.options?.basketballMode==='streetball')return;
-  syncNativeGraphic(state);
+  if((state.live?.active&&!state.live?.recordOnly)||(!state.live?.active&&(state.options?.yt||state.options?.fb||state.options?.tiktok)))syncNativeGraphic(state);
   const high=state.options?.quality==='1080p';
   const portrait=state.options?.orientation==='portrait';
   const w=portrait?(high?1080:720):(high?1920:1280);
@@ -319,7 +316,7 @@
    if(!isCameraOn()||!document.querySelector('canvas[data-broadcast-preview]')){
     broadcastPreviewRaf=0;return;
    }
-   if(now-lastBroadcastPreviewFrame>=60){
+   if(now-lastBroadcastPreviewFrame>=32){
     lastBroadcastPreviewFrame=now;
     paintBroadcastPreview();
    }
@@ -527,6 +524,9 @@
   text(ctx,sp.name||'SPONSOR',w/2,h*.58,Math.max(24,w*.055),'900','center','#fff',w*.87);
  }
  function drawFrame(ctx,s,w,h){
+  // Offline video and its preview must contain only the camera picture.
+  const offline=s.live?.recordOnly||(!s.live?.active&&!s.options?.yt&&!s.options?.fb&&!s.options?.tiktok);
+  if(offline){drawVideo(ctx,sourceVideo,w,h);return;}
   if(s.live?.slides)drawSponsor(ctx,s,w,h);
   else{
    drawVideo(ctx,sourceVideo,w,h);
