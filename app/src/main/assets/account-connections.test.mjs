@@ -413,4 +413,7 @@ test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and re
  assert.ok(studio.includes("data.sponsors[i].img=''"));
  assert.ok(studio.includes("preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256)"));
  assert.ok(studio.includes('data.sponsors[i].img=value;persist()'));
+ assert.ok(studio.includes('for(const item of namedSponsors){'),'All sponsors, not only the first three, should supply a bounded thumbnail');
+ assert.ok(studio.includes("if(jpeg.length<=3500)return jpeg;"),'Native image transport must stay bounded');
+ assert.ok(!studio.includes('namedSponsors.slice(0,3)'),'Later sponsor images must not be omitted');
 });
