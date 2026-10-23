@@ -29,7 +29,8 @@ internal object V2Scorecard {
   val awayFouls:Int=0,
   val period:Int=1,
   val clock:String="",
-  val shotClock:Int=24
+  val shotClock:Int=24,
+  val shotVisible:Boolean=true
  )
  data class Award(val team:Int,val points:Int,val progress:Float,val previousScore:Int)
  private const val W=960

@@ -56,12 +56,111 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var stream:GenericStream?=null
  private var saveLocalCopy=false
  private var currentRecordFile:File?=null
+ private var offlineRecording=false
+ private var offlinePaused=false
+ private var sponsorSlides: List<Pair<String, android.graphics.Bitmap?>> = emptyList()
+ private var sponsorFilter:ImageFilterRender?=null
+ private var sponsorShowing=false
+ private var scoreVisibleBeforeSponsor:Boolean?=null
+ private var sponsorSlideIndex=0
+ private val sponsorAdvance=object:Runnable{
+  override fun run(){
+   if(!sponsorShowing||ended)return
+   if(sponsorSlides.isNotEmpty())sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
+   paintSponsorSlide()
+   ui.postDelayed(this,5000)
+  }
+ }
+ fun isOfflineRecording()=offlineRecording
+ fun isOfflinePaused()=offlinePaused
+ fun hasSponsorSlides()=sponsorSlides.isNotEmpty()
+ fun configureSponsorSlides(names:List<String>,images:List<android.graphics.Bitmap?>){
+  if(running||connecting||offlineRecording)return
+  sponsorSlides=names.take(12).mapIndexed {i,name->
+   name.trim().take(55).ifEmpty{"SPONSOR"} to images.getOrNull(i)
+  }
+ }
+ private fun transparentSponsor(){
+  val frame=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
+  try{sponsorFilter?.setImage(frame)}catch(_:Exception){}
+ }
+ private fun initSponsorFilter(){
+  if(sponsorFilter!=null)return
+  try{
+   val gl=stream?.getGlInterface()?:return
+   sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
+   transparentSponsor()
+   sponsorFilter?.setScale(100f,100f)
+   sponsorFilter?.setPosition(0f,0f)
+  }catch(_:Exception){notifyState("Sponsor overlay could not initialize.")}
+ }
+ private fun paintSponsorSlide(){
+  if(!sponsorShowing)return
+  initSponsorFilter()
+  val sponsor=sponsorSlides.getOrNull(sponsorSlideIndex)?:return
+  try{
+   val width=640;val height=360
+   val picture=android.graphics.Bitmap.createBitmap(width,height,android.graphics.Bitmap.Config.ARGB_8888)
+   val canvas=android.graphics.Canvas(picture)
+   canvas.drawColor(android.graphics.Color.rgb(10,28,25))
+   val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+   paint.color=android.graphics.Color.rgb(42,217,150)
+   canvas.drawRoundRect(25f,26f,615f,334f,24f,24f,paint)
+   paint.color=android.graphics.Color.rgb(13,32,28)
+   canvas.drawRoundRect(30f,31f,610f,329f,20f,20f,paint)
+   paint.color=android.graphics.Color.rgb(190,232,210)
+   paint.textSize=19f;paint.textAlign=android.graphics.Paint.Align.CENTER
+   paint.typeface=android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.BOLD)
+   canvas.drawText("IMG LIVE STUDIO  ·  SPONSOR",320f,67f,paint)
+   val img=sponsor.second
+   if(img!=null&&!img.isRecycled){
+    val maxWidth=380f;val maxHeight=155f
+    val factor=minOf(maxWidth/img.width,maxHeight/img.height)
+    val w=img.width*factor;val h=img.height*factor
+    paint.color=android.graphics.Color.WHITE
+    canvas.drawBitmap(img,null,android.graphics.RectF((width-w)/2,(height-h)/2-17f,(width+w)/2,(height+h)/2-17f),paint)
+   }
+   paint.color=android.graphics.Color.WHITE
+   paint.textSize=27f;paint.textAlign=android.graphics.Paint.Align.CENTER
+   paint.typeface=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD)
+   canvas.drawText(sponsor.first.take(32),320f,292f,paint)
+   sponsorFilter?.setImage(picture)
+   sponsorFilter?.setScale(100f,100f)
+   sponsorFilter?.setPosition(0f,0f)
+  }catch(_:Exception){notifyState("Sponsor overlay unavailable; camera remains active.")}
+ }
+ fun setSponsorSlideshow(enabled:Boolean){
+  ui.removeCallbacks(sponsorAdvance)
+  val willShow=enabled&&sponsorSlides.isNotEmpty()&&!ended
+  if(willShow){
+   // Preserve visibility set by the operator before sponsor presentation.
+   if(!sponsorShowing)scoreVisibleBeforeSponsor=scoreVisible
+   sponsorShowing=true
+   setScorecardVisible(false)
+   sponsorSlideIndex=0
+   paintSponsorSlide()
+   ui.postDelayed(sponsorAdvance,5000)
+  }else{
+   sponsorShowing=false
+   transparentSponsor()
+   val previous=scoreVisibleBeforeSponsor
+   scoreVisibleBeforeSponsor=null
+   if(previous!=null)setScorecardVisible(previous)
+  }
+ }
+ fun nextSponsorSlide(){
+  if(!sponsorShowing||sponsorSlides.isEmpty())return
+  sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
+  paintSponsorSlide()
+  ui.removeCallbacks(sponsorAdvance);ui.postDelayed(sponsorAdvance,5000)
+ }
+
  fun configureLocalRecording(enabled:Boolean){
   if(running||connecting)return
   saveLocalCopy=enabled
  }
- private fun beginLocalRecording(engine:GenericStream){
-  if(!saveLocalCopy)return
+ private fun beginLocalRecording(engine:GenericStream):Boolean{
+  if(!saveLocalCopy)return false
   try{
    val folder=getExternalFilesDir(Environment.DIRECTORY_MOVIES)?:filesDir
    if(!folder.exists()&&!folder.mkdirs())throw IllegalStateException("Recording folder unavailable")
@@ -71,9 +170,11 @@ class V2BroadcastService:Service(),ConnectChecker {
    engine.startRecord(file.absolutePath){ _ -> }
    currentRecordFile=file
    notifyState("Local MP4 recording started")
+   return true
   }catch(_:Exception){
    currentRecordFile=null
-   notifyState("Local recording could not start. YouTube upload continues.")
+   notifyState(if(offlineRecording)"This phone could not start local MP4 recording." else "Local recording could not start. YouTube upload continues.")
+   return false
   }
  }
  private fun finishLocalRecording(engine:GenericStream?){
@@ -83,6 +184,23 @@ class V2BroadcastService:Service(),ConnectChecker {
   // The Android encoder may flush the MP4 trailer after stopRecord returns.
   // Finalize and publish on a worker, not on the UI/binder thread.
   val finalScore=scoreboard.copy()
+  // Preserve bounded team emblems in each successfully saved recording's
+  // local metadata. No full-resolution logos or OAuth credentials are stored.
+  fun thumbnail(bitmap:android.graphics.Bitmap?):String{
+   if(bitmap==null||bitmap.isRecycled)return ""
+   return try{
+    val edge=52
+    val small=android.graphics.Bitmap.createScaledBitmap(bitmap,edge,edge,true)
+    val buffer=java.io.ByteArrayOutputStream()
+    val ok=small.compress(android.graphics.Bitmap.CompressFormat.JPEG,65,buffer)
+    if(small!==bitmap)small.recycle()
+    val bytes=buffer.toByteArray()
+    if(ok&&bytes.size in 1..7000) "data:image/jpeg;base64,"+
+     android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP) else ""
+   }catch(_:Exception){""}
+  }
+  val savedHomeLogo=thumbnail(graphicsHomeLogo)
+  val savedAwayLogo=thumbnail(graphicsAwayLogo)
   if(Build.VERSION.SDK_INT>=29){
    Thread {
     try{
@@ -124,6 +242,8 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("away",finalScore.away)
        .put("scores",org.json.JSONArray().put(finalScore.homeScore).put(finalScore.awayScore))
        .put("sport",finalScore.sport)
+       .put("homeLogo",savedHomeLogo)
+       .put("awayLogo",savedAwayLogo)
        .put("platform","YouTube")
       previous.put(clip)
       prefs.edit().putString("clips",previous.toString()).apply()
@@ -353,7 +473,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }catch(_:Exception){}
   publish()
  }
- fun isActive()=running||connecting
+ fun isActive()=running||connecting||offlineRecording
  fun isEnded()=ended
  fun isPortrait()=portrait
  fun frontCamera()=front
@@ -406,11 +526,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   },PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
   return Notification.Builder(this,channel)
    .setSmallIcon(android.R.drawable.ic_menu_camera)
-   .setContentTitle("IMG LIVE Studio V2 • Private video")
+   .setContentTitle(if(offlineRecording)"IMG LIVE Studio V2 • Offline Recording" else "IMG LIVE Studio V2 • Private video")
    .setContentText(title.take(90))
    .setContentIntent(open).setOngoing(true)
    .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,
-    "Stop Upload",stop).build()).build()
+    if(offlineRecording)"Stop Recording" else "Stop Upload",stop).build()).build()
  }
  fun activateForeground():Boolean {
   refreshNetwork()
@@ -501,6 +621,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     stream=engine
     applyFraming()
     applyScorecard()
+    initSponsorFilter()
     notifyState("Camera and microphone ready • "+videoWidth+"×"+videoHeight+" / "+videoFps+" FPS")
     true
    }
@@ -537,6 +658,39 @@ class V2BroadcastService:Service(),ConnectChecker {
   // It must NOT release encoder, camera or microphone.
   if(stream?.isOnPreview==true)try{stream?.stopPreview()}catch(_:Exception){}
   preview=null
+ }
+ fun activateOfflineForeground():Boolean{
+  if(!prepareCamera())return false
+  if(foreground)return true
+  return try{
+   androidx.core.content.ContextCompat.startForegroundService(this,
+    Intent(this,V2BroadcastService::class.java).setAction(actionActivate))
+   val n=notification()
+   if(Build.VERSION.SDK_INT>=29)startForeground(notificationId,n,
+    ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+   else startForeground(notificationId,n)
+   foreground=true;true
+  }catch(_:Exception){notifyState("Unable to start local recording service.");false}
+ }
+ fun startOfflineRecording():Boolean{
+  if(ended||offlineRecording||running||connecting)return false
+  if(!activateOfflineForeground())return false
+  val engine=stream?:return false
+  if(!engine.isOnPreview){notifyState("Camera preview is not ready. Allow Camera permission.");return false}
+  offlineRecording=true;offlinePaused=false;saveLocalCopy=true
+  if(!beginLocalRecording(engine)){offlineRecording=false;return false}
+  notifyState("Recording on this device • no streaming platform connected")
+  return true
+ }
+ fun pauseOfflineRecording():Boolean{
+  if(!offlineRecording||offlinePaused||currentRecordFile==null)return false
+  return try{stream?.pauseRecord();offlinePaused=true;notifyState("Recording paused • Resume or End");true}
+  catch(_:Exception){notifyState("Could not pause recording.");false}
+ }
+ fun resumeOfflineRecording():Boolean{
+  if(!offlineRecording||!offlinePaused||currentRecordFile==null)return false
+  return try{stream?.resumeRecord();offlinePaused=false;notifyState("Recording resumed");true}
+  catch(_:Exception){notifyState("Could not resume recording.");false}
  }
  fun startPrivateUpload(draftId:String){
   if(!Regex("^[a-f0-9]{32}$").matches(draftId) || !foreground ||
@@ -595,6 +749,13 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
+ fun shotClockVisible()=scoreboard.shotVisible
+ fun setShotClockVisible(visible:Boolean){
+  if(scoreboard.shotVisible==visible)return
+  scoreboard=scoreboard.copy(shotVisible=visible)
+  updateScorecard()
+ }
+ fun isStarting()=connecting
  fun graphicsStyle()=graphicsStyle
  fun graphicsSize()=graphicsSize
  fun graphicsPosition()=graphicsPosition
@@ -622,7 +783,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   graphicsOpacity=1f
   graphicsWidth=100;graphicsHeight=100
   graphicsX=0;graphicsY=0;graphicsMargin=3
-  scoreEffectsEnabled=effects
+  // All approved scoreboards animate when scores change; no manual switch.
+  scoreEffectsEnabled=true
   graphicsHomeLogo=homeLogo
   graphicsAwayLogo=awayLogo
   lastGraphicsStyle=-1
@@ -935,6 +1097,16 @@ class V2BroadcastService:Service(),ConnectChecker {
   },delay)
  }
  fun stopBroadcast(){
+  val wasOffline=offlineRecording
+  ui.removeCallbacks(sponsorAdvance)
+  sponsorShowing=false;transparentSponsor()
+  // Next recording or live stream must not inherit a hidden scoreboard.
+  scoreVisibleBeforeSponsor?.let{
+   scoreVisible=it;scoreAlpha=if(it)1f else 0f
+   scoreTransitionEpoch++
+  }
+  scoreVisibleBeforeSponsor=null
+  offlineRecording=false;offlinePaused=false
   generation++
   connecting=false;running=false;ended=true
   ingestDestination=null
@@ -949,12 +1121,13 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
   stream=null
+  sponsorFilter=null
   scoreFilter=null
   latestGraphics=null
   lastScoreAlpha=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
-  notifyState("Upload stopped. Your YouTube account remains connected.")
+  notifyState(if(wasOffline)"Recording ended; MP4 is finalizing on this device." else "Upload stopped. Your YouTube account remains connected.")
   if(foreground){
    stopForeground(STOP_FOREGROUND_REMOVE)
    foreground=false

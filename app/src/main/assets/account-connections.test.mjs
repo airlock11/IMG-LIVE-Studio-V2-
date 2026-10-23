@@ -109,7 +109,7 @@ test('verification failures retain session as unverified rather than falsely cla
 test('disabled staging OAuth reports a clear message without allowing login',async()=>{
  const {accounts}=controller(cmd=>({ok:false,error:'oauth_not_enabled'}));
  accounts.enableNative();
- await assert.rejects(accounts.connect('facebook'),/login is not available yet/i);
+ await assert.rejects(accounts.connect('facebook'),/expired or is disabled/i);
  assert.equal(accounts.getStatus().facebook,'disconnected');
 });
 
@@ -272,15 +272,15 @@ test('private draft cannot be created after signed-out session even with late re
  await accounts.signOut();
  await assert.rejects(accounts.createYoutubePrivateDraft({title:'IMG Private Practice',scheduledStartTime:new Date(Date.now()+3600000).toISOString(),madeForKids:false,draftRequestId:'b'.repeat(32)}),/Check YouTube Live readiness/);
 });
-test('YouTube platform selection can switch off without logging out the account',async()=>{
+test('Collapsing YouTube dropdown preserves account and stream settings',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const start=studio.indexOf("if(name==='destination-yt')");
  const end=studio.indexOf("if(name==='youtube-connect')",start);
  assert.ok(start>0&&end>start,'Destination controller missing');
  const handler=studio.slice(start,end);
- assert.ok(handler.includes('o.yt=!o.yt'));
- assert.ok(handler.includes('else {youtubeExpanded=false'));
- assert.ok(!handler.includes("accounts.disconnect("),'Turning off selection must not revoke OAuth');
+ assert.ok(handler.includes('youtubeExpanded=!youtubeExpanded'),'Header must only fold connection controls');
+ assert.ok(!handler.includes('o.yt=!o.yt'),'Collapsing must not deselect YouTube');
+ assert.ok(!handler.includes("accounts.disconnect("),'Collapsing must not revoke OAuth');
  assert.ok(studio.includes("if(name==='youtube-disconnect')"),'Explicit disconnect must remain available');
  assert.ok(studio.includes("window.IMGMedia?.stopCamera?.()"));
  assert.ok(studio.includes("native-private-video-start:"));
@@ -289,15 +289,13 @@ test('main private YouTube flow requires operator audience choice and stays priv
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
  const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
- assert.ok(!wizard.includes('data-youtube-audience'),'Audience classification must not be required in Step 4');
- assert.ok(studio.includes("if(o.yt&&!youtubeAudience){dialog={type:'youtube-classification'};return render(true)}"),'Go Live must ask for audience classification');
- assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Audience is required before YouTube draft creation');
- assert.ok(studio.includes("if(d.type==='youtube-classification')"),'Audience confirmation dialog must exist');
- assert.ok(studio.includes('return startPrivateYouTubeFromStudio()'),'Audience confirmation must start a private broadcast');
- assert.ok(studio.includes('youtube-classification-yes'));
- assert.ok(studio.includes('youtube-classification-no'));
- assert.ok(studio.includes('Made for kids?'));
- assert.ok(studio.includes('img-wizard-sticky-preview'));
+ assert.ok(wizard.includes('data-youtube-audience'),'Step 4 Stream Details must contain audience choices');
+ assert.ok(wizard.includes('Not made for kids')&&wizard.includes('Made for kids'));
+ assert.ok(studio.includes("if(o.yt&&!youtubeAudience)return toast("),'Audience must be required before Go Live');
+ assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Server draft creation must reject missing audience');
+ assert.ok(!studio.includes("dialog={type:'youtube-classification'}"),'No audience popup may interrupt Go Live');
+ assert.ok(!studio.includes("if(d.type==='youtube-classification')"),'Remove the obsolete audience modal');
+ assert.ok(studio.includes('img-score-pinned'));
  assert.ok(studio.includes('updateWizardStickyScoreboard'));
  assert.ok(studio.includes('accounts.createYoutubePrivateDraft'));
  assert.ok(studio.includes("madeForKids:youtubeAudience==='yes'"));
@@ -307,4 +305,173 @@ test('main private YouTube flow requires operator audience choice and stays priv
  assert.ok(native.includes('img_autostart'));
  assert.ok(!studio.includes('startPublicBroadcast'));
  assert.doesNotThrow(()=>new Script(studio));
+});
+
+test('IMG V2 Issues 1–3: scoreboard selection and size do not re-render or jump scroll',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const setOption=studio.slice(studio.indexOf('function setOption(input)'),studio.indexOf('let orientationRequestId=',studio.indexOf('function setOption(input)')));
+ assert.ok(setOption.includes("if(k==='overlay'&&screen==='setup'&&setupStep===1)"),'Artwork selection needs a stable in-place branch');
+ assert.ok(setOption.includes("button.classList.toggle('active',active)")&&setOption.includes("paintSetupScoreboard?.()"));
+ assert.ok(setOption.indexOf("if(k==='overlay'&&screen==='setup'")<setOption.indexOf("render(true)"),'Artwork selection must not force full-page render');
+ const change=studio.slice(studio.indexOf("if(t.dataset.graphicsRange){persist();return}"),studio.indexOf("if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}"));
+ assert.ok(change.includes("if(t.dataset.scoreRange||t.dataset.scoreColor){persist();window.IMGMedia?.paintSetupScoreboard?.();return}"));
+ assert.ok(!change.includes("render(true)"),'Releasing size slider must not rebuild the page');
+ assert.ok(css.includes('.img-wizard-page .img-wizard-scroll{overflow-anchor:none!important;scroll-behavior:auto!important}'));
+ assert.ok(css.includes('.img-wizard-page .img-wizard-score-origin{background:transparent!important}'));
+ assert.ok(studio.includes("img-score-pinned"),'Pin the original preview, not a second docking canvas');
+});
+test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confirmation',async()=>{
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const confirm=native.slice(native.indexOf('private fun confirmStopUpload()'),native.indexOf('private var operatorSheet'));
+ assert.ok(native.includes('liveNow->"STOP STREAMING"'));
+ assert.ok(native.includes('Color.rgb(181,34,44)'),'Live button should be red');
+ assert.ok(native.includes('start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)'),'No stop square');
+ assert.ok(native.includes('resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset")'));
+ assert.ok(native.includes('clockHeader.addView(resetClockButton'));
+ assert.ok(native.includes('val timeout=iconButton(darkButton("TIMEOUT")'));
+ assert.ok(native.includes('showTimeoutPreview(timeout)'));
+ assert.ok(native.includes('CLOCKS PAUSED')&&native.includes('RESUME GAME'),'Timeout pauses clock and has resume controls');
+ assert.ok(native.includes('broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)'),'Only opt-in timeout slideshow pushes sponsor art into encoded video');
+ assert.ok(confirm.includes('customSheet("END STREAM?")'));
+ assert.ok(confirm.includes('dangerButton("END STREAM")'));
+ assert.ok(confirm.includes('greenButton("KEEP STREAMING")'));
+ assert.ok(!confirm.includes('iconButton(')&&!confirm.includes('END UPLOAD')&&!confirm.includes('PRIVATE'));
+});
+
+test('phone issues: one scoreboard canvas, no lineup, no animation switch, compact tools and main shot switch',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const renderer=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastGraphicsRenderer.kt',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ const settings=native.slice(native.indexOf('private fun openOperatorSettings()'),native.indexOf('private fun unavailableFeature('));
+ assert.ok(!wizard.includes('Lineup setup (optional)'));
+ assert.ok(!wizard.includes('graphics-switch-row'));
+ assert.ok(!wizard.includes('Score animation'));
+ assert.ok(!wizard.includes('img-wizard-sticky-preview'),'No duplicate sticky preview container');
+ assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
+ assert.ok(studio.includes("preview.classList.add('img-score-pinned')"));
+ assert.ok(studio.includes("preview.classList.remove('img-score-pinned')"));
+ assert.ok(!studio.includes("dock.appendChild(preview)"));
+ assert.ok(!studio.includes("Save or update team for next matches"));
+ assert.ok(studio.includes("if(!scoreboardSizeFrame)scoreboardSizeFrame=requestAnimationFrame"));
+ assert.ok(studio.includes("marker.style.display='none'"));
+ assert.ok(native.includes('android.widget.Switch(this).apply')&&native.includes('setShotClockVisible(checked)'));
+ assert.ok(native.includes('shotClockDisplay=ink('));
+ assert.ok(native.includes('intent.getBooleanExtra("img_autostart",false)'));
+ assert.ok(native.includes('maybeStartPrivateUpload()'));
+ assert.ok(settings.includes('SCOREBOARD SIZE'));
+ for(const old of ['heading("Graphics")','styleButtons','Score animation','Undo score','Game clock','Shot clock','heading("Fouls")'])
+  assert.ok(!settings.includes(old),'Old tools panel content still present: '+old);
+ assert.ok(renderer.includes('shotVisible'),'The actual native artwork should respect visibility');
+});
+
+test('phone recheck: expired OAuth is never presented as both platforms permanently unavailable',async()=>{
+ const accounts=await readFile(new URL('./account-connections.js',import.meta.url),'utf8');
+ assert.ok(!accounts.includes('Facebook and YouTube login is not available yet.'));
+ assert.ok(accounts.includes('Secure YouTube testing has expired or is disabled'));
+});
+
+test('phone recheck: Step 2 slider travels under the same sticky scoreboard without percent',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ assert.ok(wizard.includes('img-wizard-score-sticky-unit'));
+ assert.ok(wizard.includes('img-wizard-score-size-control'));
+ assert.ok(wizard.includes('data-score-range="size"'));
+ assert.ok(wizard.includes('scoreSettings(false,true)'));
+ assert.equal((wizard.match(/data-score-range="size"/g)||[]).length,1,'Exactly one Step 2 Size slider');
+ assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1,'Exactly one preview canvas');
+ assert.ok(!wizard.includes('data-score-range-output="size"'),'Remove preview slider percent output');
+ assert.ok(studio.includes("const preview=root?.querySelector('.img-wizard-score-sticky-unit')"),'Pin the whole original preview and slider');
+ assert.ok(css.includes('.img-wizard-score-sticky-unit.img-score-pinned'));
+ assert.ok(css.includes('.img-wizard-score-sticky-unit .img-wizard-score-size-control'));
+});
+
+test('Step 4 provider panels stay independent of connection dropdown collapse',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ const yt=wizard.slice(wizard.indexOf('  (ytConnected?'),wizard.indexOf('  (fbConnected?'));
+ const fb=wizard.slice(wizard.indexOf('  (fbConnected?'),wizard.indexOf('  card(String(2+Number'));
+ assert.ok(yt.startsWith('  (ytConnected?'),'Connected YouTube keeps settings visible');
+ assert.ok(!yt.includes('youtubeExpanded'),'YouTube settings cannot depend on dropdown expansion');
+ assert.ok(yt.includes('img-wizard-provider-title')&&yt.includes('YouTube</span>'));
+ assert.ok(yt.includes('data-youtube-audience'));
+ assert.ok(fb.startsWith('  (fbConnected?'),'Facebook settings use own connected-provider card');
+ assert.ok(!fb.includes('fbExpanded'),'Facebook settings cannot depend on dropdown expansion');
+ assert.ok(fb.includes('Facebook</span>'));
+ assert.ok(fb.includes('facebookLiveTitle')&&fb.includes('facebookLiveDescription'));
+ assert.ok(wizard.indexOf('  (ytConnected?')<wizard.indexOf('  (fbConnected?'),'Facebook settings follow YouTube');
+ assert.ok(!wizard.includes("card('2','Stream Details'"),'Generic heading must be removed');
+});
+test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and remove',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const block=studio.slice(studio.indexOf('function sponsorSettings(){'),studio.indexOf('// Shared public graphic'));
+ assert.ok(block.includes("data-upload='sponsor-"),'Each row has separate image input');
+ assert.ok(block.includes("s.img?")&&block.includes("<img src="),'Image thumbnail appears when set');
+ assert.ok(block.includes('Change image')&&block.includes('Add image'));
+ assert.ok(block.includes("data-action='sponsor-clear-img-"),'Remove image independently');
+ assert.ok(studio.includes("data.sponsors[i].img=''"));
+ assert.ok(studio.includes("preparedLogoData(file,t.dataset.upload.startsWith('sponsor-')?512:256)"));
+ assert.ok(studio.includes('data.sponsors[i].img=value;persist()'));
+ assert.ok(studio.includes('for(const item of namedSponsors){'),'All sponsors, not only the first three, should supply a bounded thumbnail');
+ assert.ok(studio.includes("if(jpeg.length<=3500)return jpeg;"),'Native image transport must stay bounded');
+ assert.ok(!studio.includes('namedSponsors.slice(0,3)'),'Later sponsor images must not be omitted');
+});
+
+test('Edit Sponsor Name dialog only edits name; Step 3 retains separate image uploads',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const start=studio.indexOf("if(d.type==='sponsor-edit')body=");
+ const end=studio.indexOf("if(d.type==='team-edit')body=",start);
+ assert.ok(start>=0&&end>start,'Sponsor name edit dialog found');
+ const modal=studio.slice(start,end);
+ assert.ok(modal.includes('Edit Sponsor Name'));
+ assert.ok(modal.includes('Sponsor name'));
+ assert.ok(modal.includes('id="sponsor-title"'));
+ assert.ok(modal.includes('maxlength="50"'));
+ assert.ok(modal.includes('data-action="save-sponsor"'));
+ assert.ok(modal.includes('Save Name'));
+ assert.ok(modal.includes('data-action="close-modal"'));
+ for(const excluded of ['Add sponsor image','optional local logo','data-upload','accept="image/*"','Add sponsor name'])
+  assert.ok(!modal.includes(excluded),'Remove extraneous popup content: '+excluded);
+ assert.ok(studio.includes("data.sponsors[dialog.i].name=n"),'Only name should be saved by edit');
+ assert.ok(studio.includes("data-upload='sponsor-"),'Sponsor images remain in separate Step 3 rows');
+ assert.ok(css.includes('.img-sponsor-name-editor-actions'));
+});
+
+test('native offline mode reuses real operator, pauses for Resume or End and never requires OAuth',async()=>{
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const service=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const main=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ assert.ok(main.includes('native-offline-controls:')&&main.includes('.putExtra("img_offline_recording",true)'));
+ assert.ok(app.includes("if(name==='setup-record-offline')return openNativeOfflineControls()"));
+ assert.ok(activity.includes('start=greenButton(if(offlineMode)"RECORD" else "GO LIVE")'));
+ assert.ok(activity.includes('offlineMode&&offlineNow->"STOP"'));
+ assert.ok(activity.includes('confirmStopOfflineRecording()')&&activity.includes('greenButton("RESUME")')&&activity.includes('dangerButton("END")'));
+ assert.ok(activity.includes('if(!offlineMode&&(!Regex('),'Offline entry cannot demand YouTube draft');
+ assert.ok(service.includes('fun startOfflineRecording():Boolean')&&service.includes('fun pauseOfflineRecording():Boolean')&&service.includes('fun resumeOfflineRecording():Boolean'));
+ assert.ok(service.includes('stream?.pauseRecord()')&&service.includes('stream?.resumeRecord()'));
+ assert.ok(app.includes("window.IMGNativeChannel.postMessage('native-offline-controls:'"));
+});
+test('Timeout suspends game clock and native GL sponsor slides reach real recording/stream video',async()=>{
+ const a=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const svc=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const timeout=a.slice(a.indexOf('private fun setTimeoutMode('),a.indexOf('private fun confirmStopUpload()'));
+ assert.ok(timeout.includes('gameRunning=false;lastTick=0L'));
+ assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)'));
+ assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(false)'));
+ assert.ok(timeout.includes('gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0'));
+ assert.ok(svc.includes('ImageFilterRender().also{gl.addFilter(it)}'));
+ assert.ok(svc.includes('sponsorFilter?.setImage(picture)'));
+ assert.ok(svc.includes('ui.postDelayed(sponsorAdvance,5000)'));
+ assert.ok(svc.includes('ui.removeCallbacks(sponsorAdvance)'));
+ assert.ok(a.includes('android.widget.Switch(this)'),'Timeout offers operator slideshow switch');
+ assert.ok(a.includes('Show Slideshow')&&a.includes('nextSponsor.isEnabled=timeoutSlideshowEnabled'));
+ assert.ok(!timeout.includes('Sponsor slideshow preview'),'No slideshow preview dialog');
+ assert.ok(svc.includes('scoreVisibleBeforeSponsor=scoreVisible'),'Remember scoreboard visibility');
+ assert.ok(svc.includes('setScorecardVisible(false)'),'Hide scoreboard while slides run');
+ assert.ok(svc.includes('if(previous!=null)setScorecardVisible(previous)'),'Restore previous scoreboard visibility after slides');
+ assert.ok(timeout.includes('gameWasRunningBeforeTimeout=gameRunning'),'Capture pre-timeout run state');
 });

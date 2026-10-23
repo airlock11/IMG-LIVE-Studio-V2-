@@ -33,6 +33,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var resumed=false
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
+ private val offlineMode by lazy {intent.getBooleanExtra("img_offline_recording",false)}
+ private var timeoutActive=false
+ private var timeoutSlideshowEnabled=false
+ private var gameWasRunningBeforeTimeout=false
  private var draftReady=true
  private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
@@ -82,7 +86,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
-   draftReady=broadcast?.prepareNextDraft(draftId)==true
+   draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
     autoLaunchAllowed=false
     refresh()
@@ -92,13 +96,21 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val fps=intent.getIntExtra("img_video_fps",30)
     videoProfileReady=broadcast?.isActive()==true||broadcast?.configureVideoProfile(resolution,fps)==true
     if(!videoProfileReady)autoLaunchAllowed=false
-    broadcast?.configureLocalRecording(intent.getBooleanExtra("img_record_local",false))
+    broadcast?.configureLocalRecording(!offlineMode&&intent.getBooleanExtra("img_record_local",false))
+    val names=intent.getStringExtra("img_sponsor_names").orEmpty().split("\n")
+     .map{it.trim()}.filter{it.isNotEmpty()}.take(12)
+    val images=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
+     catch(_:Exception){org.json.JSONArray()}
+    broadcast?.configureSponsorSlides(names,names.indices.map{i->
+     decodeSponsorImage(images.optString(i))
+    })
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
     intent.getStringExtra("img_home")?:"HOME",
     intent.getStringExtra("img_away")?:"AWAY"
    )
-   val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
+   broadcast?.setShotClockVisible(shotClockVisible)
+    val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
     "rivalry-plate","center-dial","broadcast-classic","crown-pill",
     "split-box","match-cube","edge-box","legacy-tv")
    val graphicsIndex=ids.indexOf(intent.getStringExtra("img_graphics")).coerceAtLeast(0)
@@ -112,7 +124,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     intent.getIntExtra("img_graphics_offset_x",0),
     intent.getIntExtra("img_graphics_offset_y",0),
     intent.getIntExtra("img_graphics_margin",3),
-    intent.getBooleanExtra("img_graphics_animated",true),
+    true,
     decodeLogo(intent.getStringExtra("img_logo_home")),
     decodeLogo(intent.getStringExtra("img_logo_away"))
    )
@@ -143,6 +155,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
   }catch(_:Exception){null}
  }
+ private fun decodeSponsorImage(raw:String?):android.graphics.Bitmap?{
+  if(raw.isNullOrEmpty()||raw.length>5000||!raw.startsWith("data:image/jpeg;base64,"))return null
+  return try{
+   val bytes=android.util.Base64.decode(raw.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..3500)return null
+   val opts=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,opts)
+   if(opts.outWidth !in 1..64||opts.outHeight !in 1..64)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
  private fun dp(n:Int)=(resources.displayMetrics.density*n+.5f).toInt()
  private fun text(value:String,size:Float=14f)=TextView(this).apply {
   text=value;textSize=size;setTextColor(Color.WHITE)
@@ -161,7 +184,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var awayFoulsDisplay:TextView
  private lateinit var clockToggleButton:Button
  private var displayedClockPlaying:Boolean?=null
- private lateinit var undoButton:Button
+ private lateinit var resetClockButton:Button
+ private lateinit var shotClockDisplay:TextView
+ private var configuredGameSeconds=600
+ private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
@@ -208,6 +234,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   setTextColor(Color.rgb(157,191,172))
   letterSpacing=.06f
  }
+ private fun resetGameClock(){
+  gameSeconds=configuredGameSeconds
+  gameRunning=false
+  lastTick=0L
+  updateGameClock()
+ }
  private fun adjustClock(delta:Int){
   gameSeconds=(gameSeconds+delta).coerceIn(0,5999)
   gameRunning=false
@@ -252,6 +284,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    "camera"->R.drawable.img_icon_camera
    "clock"->R.drawable.img_icon_clock
    "undo"->R.drawable.img_icon_undo
+   "reset"->R.drawable.img_icon_reset
    "tools"->R.drawable.img_icon_tools
    "live"->R.drawable.img_icon_live
    "stop"->R.drawable.img_icon_stop
@@ -287,13 +320,15 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
   if(::clockToggleButton.isInitialized){
-   clockToggleButton.text=if(gameRunning)"PAUSE" else "START"
+   clockToggleButton.text=if(timeoutActive)"PAUSED" else if(gameRunning)"PAUSE" else "START"
+   clockToggleButton.isEnabled=!timeoutActive
    if(displayedClockPlaying!=gameRunning){
     iconButton(clockToggleButton,if(gameRunning)"pause" else "play",true)
     displayedClockPlaying=gameRunning
    }
   }
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
+  if(::shotClockDisplay.isInitialized)shotClockDisplay.text=shotSeconds.toString()
   if(broadcast?.scorecard()?.shotClock!=shotSeconds)broadcast?.setShotClock(shotSeconds)
  }
  // Compact, dark broadcast UI dialogs replace Android's generic gray system dialogs.
@@ -365,62 +400,118 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(m==null||m !in 0..99||sec==null||sec !in 0..59){
     android.widget.Toast.makeText(this,"Enter valid minutes and seconds",android.widget.Toast.LENGTH_SHORT).show()
    }else{
-    gameSeconds=m*60+sec;gameRunning=false;lastTick=0L
+    gameSeconds=m*60+sec;configuredGameSeconds=gameSeconds;gameRunning=false;lastTick=0L
     updateGameClock();dialog.dismiss()
    }
   },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
   panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
  }
+ private fun setTimeoutMode(enabled:Boolean){
+  if(enabled==timeoutActive)return
+  timeoutActive=enabled
+  if(enabled){
+   // Both game and shot clocks count down only while gameRunning is true.
+   // Keep video upload and local MP4 recording continuous through timeout.
+   gameWasRunningBeforeTimeout=gameRunning
+   gameRunning=false;lastTick=0L
+   timeoutSlideshowEnabled=false
+   broadcast?.setSponsorSlideshow(false)
+  }else{
+   // A timeout does not implicitly start a previously stopped clock.
+   timeoutSlideshowEnabled=false
+   broadcast?.setSponsorSlideshow(false)
+   gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0
+   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+   gameWasRunningBeforeTimeout=false
+  }
+  updateGameClock()
+ }
  private fun showTimeoutPreview(anchor:View){
+  if(!timeoutActive)setTimeoutMode(true)
   timeoutPreview?.dismiss()
   val content=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
    background=rounded(Color.rgb(17,30,27),13)
    setPadding(dp(12),dp(10),dp(12),dp(10))
   }
-  content.addView(smallLabel("TIMEOUT"),LinearLayout.LayoutParams(-1,dp(24)))
-  content.addView(iconButton(darkButton("Sponsor slideshow preview"){
-   timeoutPreview?.dismiss()
-   val (dialog,panel)=customSheet("SPONSOR SLIDESHOW")
-   val names=intent.getStringExtra("img_sponsor_names").orEmpty()
-    .split("\n").map{it.trim()}.filter{it.isNotEmpty()}.take(12)
-   val title=ink(if(names.isEmpty())"No sponsors were added" else names[0],18f)
-   panel.addView(title,LinearLayout.LayoutParams(-1,dp(44)))
-   val thumbnails=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
-    catch(_:Exception){org.json.JSONArray()}
-   val artwork=android.widget.ImageView(this).apply{
-    scaleType=android.widget.ImageView.ScaleType.FIT_CENTER
-    adjustViewBounds=true
-    setBackgroundColor(Color.rgb(13,26,23))
+  content.addView(smallLabel("TIMEOUT  •  CLOCKS PAUSED"),LinearLayout.LayoutParams(-1,dp(28)))
+  // Slideshow has no separate preview box: the native GL compositor
+  // displays sponsors directly over the camera in the actual on-air video.
+  val nextSponsor=iconButton(darkButton("NEXT SPONSOR"){
+   broadcast?.nextSponsorSlide()
+  },"play").apply{isEnabled=timeoutSlideshowEnabled}
+  val showRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+  }
+  showRow.addView(ink("Show Slideshow",14f),LinearLayout.LayoutParams(0,dp(45),1f))
+  val toggle=android.widget.Switch(this).apply{
+   isChecked=timeoutSlideshowEnabled
+   isEnabled=broadcast?.hasSponsorSlides()==true
+   thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(225,245,233))
+   trackTintList=android.content.res.ColorStateList(
+    arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
+    intArrayOf(Color.rgb(35,170,112),Color.rgb(74,91,80)))
+   setOnCheckedChangeListener{_,checked->
+    timeoutSlideshowEnabled=checked&&broadcast?.hasSponsorSlides()==true
+    broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)
+    nextSponsor.isEnabled=timeoutSlideshowEnabled
    }
-   if(names.isNotEmpty())panel.addView(artwork,LinearLayout.LayoutParams(-1,dp(115)))
-   fun showSponsor(index:Int){
-    title.text=names.getOrNull(index)?:"No sponsor"
-    val raw=if(index<thumbnails.length())thumbnails.optString(index) else ""
-    artwork.setImageBitmap(if(raw.startsWith("data:image/"))decodeLogo(raw) else null)
-   }
-   if(names.isNotEmpty())showSponsor(0)
-   if(names.size>1){
-    var position=0
-    val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-    nav.addView(iconButton(darkButton("Previous"){
-     position=(position-1+names.size)%names.size;showSponsor(position)
-    },"undo"),LinearLayout.LayoutParams(0,dp(43),1f))
-    nav.addView(iconButton(darkButton("Next"){
-     position=(position+1)%names.size;showSponsor(position)
-    },"play"),LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(8)})
-    panel.addView(nav)
-   }
-   panel.addView(darkButton("CLOSE"){dialog.dismiss()},
-    LinearLayout.LayoutParams(-1,dp(42)).apply{topMargin=dp(9)})
-  },"play"),LinearLayout.LayoutParams(-1,dp(45)))
-  val pop=android.widget.PopupWindow(content,dp(285),dp(92),true).apply{
+  }
+  showRow.addView(toggle,LinearLayout.LayoutParams(dp(56),dp(45)))
+  content.addView(showRow,LinearLayout.LayoutParams(-1,dp(48)))
+  if(broadcast?.hasSponsorSlides()==true){
+   content.addView(nextSponsor,LinearLayout.LayoutParams(-1,dp(40)))
+  }else{
+   content.addView(smallLabel("Add sponsors in Step 3 to enable the slideshow."),
+    LinearLayout.LayoutParams(-1,dp(34)))
+  }
+  content.addView(iconButton(greenButton("RESUME GAME"){
+   timeoutPreview?.dismiss();timeoutPreview=null
+   setTimeoutMode(false)
+  },"play"),LinearLayout.LayoutParams(-1,dp(40)).apply{topMargin=dp(6)})
+  val popup=android.widget.PopupWindow(content,dp(285),-2,true).apply{
    setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
    isOutsideTouchable=true
    elevation=dp(12).toFloat()
   }
-  timeoutPreview=pop
-  pop.showAsDropDown(anchor,0,-dp(92)-anchor.height-dp(9),Gravity.CENTER_HORIZONTAL)
+  timeoutPreview=popup
+  popup.showAsDropDown(anchor,0,-anchor.height-dp(120),Gravity.CENTER_HORIZONTAL)
+ }
+ private fun confirmStopOfflineRecording(){
+  if(broadcast?.isOfflineRecording()!=true)return
+  val wasClockRunning=gameRunning
+  gameRunning=false;lastTick=0L;updateGameClock()
+  broadcast?.pauseOfflineRecording()
+  refresh()
+  val (dialog,panel)=customSheet("STOP RECORDING?")
+  panel.addView(smallLabel("Recording paused. Resume or finish and save to your phone."),
+   LinearLayout.LayoutParams(-1,dp(48)))
+  val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  buttons.addView(greenButton("RESUME"){
+   if(broadcast?.resumeOfflineRecording()==true){
+    dialog.dismiss()
+    if(wasClockRunning&&!timeoutActive){
+     gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
+    }
+    updateGameClock()
+   }
+   refresh()
+  },LinearLayout.LayoutParams(0,dp(49),1f))
+  buttons.addView(dangerButton("END"){
+   dialog.dismiss()
+   setTimeoutMode(false)
+   broadcast?.stopBroadcast()
+   setResult(Activity.RESULT_OK,Intent().putExtra("img_native_stream_ended",true)
+    .putExtra("img_local_recording_requested",true))
+   finish()
+  },LinearLayout.LayoutParams(0,dp(49),1f).apply{leftMargin=dp(10)})
+  panel.addView(buttons)
+  dialog.setOnCancelListener{
+   if(broadcast?.resumeOfflineRecording()==true&&wasClockRunning&&!timeoutActive){
+    gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
+   }
+   updateGameClock();refresh()
+  }
  }
  private fun confirmStopUpload(){
   val (dialog,panel)=customSheet("END STREAM?")
@@ -446,132 +537,44 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val outer=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
    background=rounded(Color.rgb(18,31,27),17)
-   setPadding(dp(12),dp(8),dp(12),dp(8))
+   setPadding(dp(13),dp(9),dp(13),dp(12))
   }
-  val grip=View(this).apply{background=rounded(Color.rgb(98,128,111),3)}
-  val gripRow=FrameLayout(this)
-  gripRow.addView(grip,FrameLayout.LayoutParams(dp(42),dp(4),Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-  outer.addView(gripRow,LinearLayout.LayoutParams(-1,dp(10)))
-  val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
+  val header=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
+  }
   header.addView(ink("Broadcast tools",16f).apply{
    gravity=Gravity.CENTER_VERTICAL
    setTypeface(typeface,android.graphics.Typeface.BOLD)
-  },LinearLayout.LayoutParams(0,dp(35),1f))
-  header.addView(iconButton(darkButton("Close"){dialog.dismiss()},"close"),LinearLayout.LayoutParams(dp(82),dp(33)))
+  },LinearLayout.LayoutParams(0,dp(39),1f))
+  header.addView(iconButton(darkButton("Close"){dialog.dismiss()},"close"),
+   LinearLayout.LayoutParams(dp(81),dp(34)))
   outer.addView(header)
-  val scrolling=android.widget.ScrollView(this).apply{
-   isFillViewport=false
-   isVerticalScrollBarEnabled=false
-  }
-  val tools=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
-  fun heading(label:String){
-   tools.addView(smallLabel(label).apply{gravity=Gravity.CENTER_VERTICAL},
-    LinearLayout.LayoutParams(-1,dp(21)).apply{topMargin=dp(3)})
-  }
-  fun tool(name:String,work:()->Unit)=darkButton(name,work).apply{textSize=12f}
-  fun pair(left:Button,right:Button){
-   val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-   line.addView(left,LinearLayout.LayoutParams(0,dp(43),1f))
-   line.addView(right,LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(7)})
-   tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
-  }
-  heading("Graphics")
-  val names=V2BroadcastGraphicsRenderer.names
-  val styleButtons=mutableListOf<Button>()
-  for(i in names.indices step 3){
-   val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-   for(j in i until minOf(i+3,names.size)){
-    val btn=tool(names[j]){
-     broadcast?.setGraphicsStyle(j)
-     styleButtons.forEachIndexed{n,b->
-      b.background=touchSurface(
-       if(n==j)Color.rgb(27,123,86) else Color.rgb(39,67,57),10)
-     }
-     refresh()
-    }.apply{
-     textSize=if(names[j].length>11)10f else 11f
-     background=touchSurface(
-      if(broadcast?.graphicsStyle()==j)Color.rgb(27,123,86) else Color.rgb(39,67,57),10)
-    }
-    styleButtons.add(btn)
-    val params=LinearLayout.LayoutParams(0,dp(39),1f)
-    if(j>i)params.leftMargin=dp(4)
-    line.addView(btn,params)
-   }
-   tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
-  }
-  heading("Scoreboard size")
-  // A single continuous size slider: no technical X/Y, width, height,
-  // margin or fixed-position buttons. The original artwork stays intact.
-  val sizeReadout=ink("${broadcast?.graphicsSize()?:60}%",15f)
-  val sizeRow=LinearLayout(this).apply{
-   orientation=LinearLayout.HORIZONTAL
+  outer.addView(smallLabel("SCOREBOARD SIZE").apply{
    gravity=Gravity.CENTER_VERTICAL
+  },LinearLayout.LayoutParams(-1,dp(27)).apply{topMargin=dp(4)})
+  val sizeRow=LinearLayout(this).apply{
+   orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL
   }
+  val sizeReadout=ink("${broadcast?.graphicsSize()?:60}%",14f)
   val sizeSlider=android.widget.SeekBar(this).apply{
-   max=100
-   progress=(broadcast?.graphicsSize()?:60)-15
+   max=100;progress=(broadcast?.graphicsSize()?:60)-15
    progressTintList=android.content.res.ColorStateList.valueOf(Color.rgb(46,214,146))
    thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(67,233,166))
    setOnSeekBarChangeListener(object:android.widget.SeekBar.OnSeekBarChangeListener{
     override fun onProgressChanged(seekBar:android.widget.SeekBar?,value:Int,fromUser:Boolean){
      if(fromUser){
-      val newSize=value+15
-      sizeReadout.text="${newSize}%"
-      broadcast?.setGraphicsSize(newSize)
+      val size=value+15
+      sizeReadout.text="${size}%"
+      broadcast?.setGraphicsSize(size)
      }
     }
     override fun onStartTrackingTouch(seekBar:android.widget.SeekBar?){}
     override fun onStopTrackingTouch(seekBar:android.widget.SeekBar?){}
    })
   }
-  sizeRow.addView(sizeSlider,LinearLayout.LayoutParams(0,dp(44),1f))
-  sizeRow.addView(sizeReadout,LinearLayout.LayoutParams(dp(58),dp(44)).apply{
-   leftMargin=dp(9)
-  })
-  tools.addView(sizeRow,LinearLayout.LayoutParams(-1,dp(48)))
-  fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
-   return android.widget.Switch(this).apply{
-    text=name
-    textSize=13f
-    setTextColor(Color.rgb(230,249,235))
-    setPadding(dp(8),0,dp(12),0)
-    isChecked=value
-    thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(236,252,240))
-    trackTintList=android.content.res.ColorStateList(
-     arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
-     intArrayOf(Color.rgb(25,171,102),Color.rgb(70,91,79))
-    )
-    setOnCheckedChangeListener{_,checked->onToggle(checked)}
-   }
-  }
-  tools.addView(settingsToggle("Score animation",
-   broadcast?.scoreEffectsEnabled()==true){broadcast?.setScoreEffectsEnabled(it)
-  },LinearLayout.LayoutParams(-1,dp(42)))
-  heading("Camera")
-  tools.addView(settingsToggle("Show graphics",broadcast?.scorecardVisible()==true){
-   broadcast?.setScorecardVisible(it)
-  },LinearLayout.LayoutParams(-1,dp(42)))
-  tools.addView(settingsToggle("Vibration",touchFeedback){
-   touchFeedback=it
-  },LinearLayout.LayoutParams(-1,dp(42)))
-  pair(iconButton(tool("Flip camera"){broadcast?.flipCamera();refresh()},"camera"),
-   iconButton(tool("Undo score"){undoScore()},"undo"))
-  heading("Game clock")
-  pair(iconButton(tool("Set time"){dialog.dismiss();editClock()},"clock"),
-   tool("Reset 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
-  heading("Shot clock")
-  pair(tool("24s reset"){shotSeconds=24;updateGameClock()},
-   tool("14s reset"){shotSeconds=14;updateGameClock()})
-  pair(tool("−1s"){shotSeconds=(shotSeconds-1).coerceAtLeast(0);updateGameClock()},
-   tool("+1s"){shotSeconds=(shotSeconds+1).coerceAtMost(99);updateGameClock()})
-  if(intent.getStringExtra("img_sport")!="pickleball"){
-   heading("Fouls")
-   pair(tool("Home −1"){broadcast?.adjustFoul(0,-1);refreshScoreboard()},
-    tool("Away −1"){broadcast?.adjustFoul(1,-1);refreshScoreboard()})
-  }
-  scrolling.addView(tools)
-  outer.addView(scrolling,LinearLayout.LayoutParams(-1,0,1f))
+  sizeRow.addView(sizeSlider,LinearLayout.LayoutParams(0,dp(46),1f))
+  sizeRow.addView(sizeReadout,LinearLayout.LayoutParams(dp(52),dp(46)))
+  outer.addView(sizeRow)
   dialog.setContentView(outer)
   dialog.setCanceledOnTouchOutside(true)
   dialog.setOnDismissListener{if(operatorSheet===dialog)operatorSheet=null}
@@ -580,13 +583,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   dialog.window?.apply{
    setBackgroundDrawableResource(android.R.color.transparent)
    addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-   setDimAmount(.28f)
-   val maxWidth=resources.displayMetrics.widthPixels
-   val maxHeight=resources.displayMetrics.heightPixels
-   setLayout(minOf((maxWidth*.84f).toInt(),dp(880)),minOf((maxHeight*.92f).toInt(),dp(525)))
-   attributes=attributes.apply{gravity=Gravity.BOTTOM or Gravity.RIGHT;x=dp(6);y=dp(4)}
-   decorView.translationY=dp(200).toFloat()
-   decorView.animate().translationY(0f).setDuration(190).start()
+   setDimAmount(.18f)
+   val width=resources.displayMetrics.widthPixels
+   setLayout(minOf((width*.56f).toInt(),dp(550)),-2)
+   attributes=attributes.apply{gravity=Gravity.RIGHT or Gravity.CENTER_VERTICAL;x=dp(7)}
   }
  }
  private fun unavailableFeature(name:String){
@@ -599,9 +599,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(savedInstanceState!=null){
    gameSeconds=savedInstanceState.getInt("v2_clock_seconds",600).coerceIn(0,5999)
    shotSeconds=savedInstanceState.getInt("v2_shot_seconds",24).coerceIn(0,99)
+    configuredGameSeconds=savedInstanceState.getInt("v2_initial_clock_seconds",600).coerceIn(0,5999)
+    shotClockVisible=savedInstanceState.getBoolean("v2_shot_visible",true)
    gameRunning=false
   }
-  autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
+  if(savedInstanceState==null)shotClockVisible=intent.getBooleanExtra("img_shot_visible",true)
+   autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
   // Operator is landscape-only; never expose portrait for normal sports.
@@ -631,6 +634,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.BLACK,11)
    clipToOutline=true
   }
+  val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
+   contentDescription="Flip camera";setPadding(0,0,0,0)
+  }
   monitor=SurfaceView(this)
   camera.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   // Separate native operator preview of the *same* GL-uploaded Bitmap.
@@ -643,6 +649,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
   camera.addView(graphicsPreview,FrameLayout.LayoutParams(1,1,Gravity.TOP or Gravity.LEFT))
+  camera.addView(flip,FrameLayout.LayoutParams(dp(34),dp(34),Gravity.TOP or Gravity.RIGHT).apply{
+   rightMargin=dp(7);topMargin=dp(7)
+  })
   camera.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
    val maxW=r-l;val maxH=b-t
    if(maxW>0&&maxH>0){
@@ -661,13 +670,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val clockCard=card()
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
-  undoButton=iconButton(darkButton(""){undoScore()},"undo").apply{
-   contentDescription="Undo last score"
+  resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset").apply{
+   contentDescription="Reset game clock to its configured starting time"
    minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
    compoundDrawablePadding=0
    setPadding(0,0,0,0)
   }
-  clockHeader.addView(undoButton,LinearLayout.LayoutParams(dp(31),dp(26)))
+  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(31),dp(26)))
   clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(28)))
   val clockMain=horizontal()
   clockDisplay=ink("10:00",26f).apply{
@@ -676,9 +685,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   clockMain.addView(clockDisplay,LinearLayout.LayoutParams(0,-1,1f))
   clockToggleButton=greenButton("START"){
-   gameRunning=!gameRunning
-   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
-   updateGameClock()
+   if(!timeoutActive){
+    gameRunning=!gameRunning
+    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
+    updateGameClock()
+   }
   }.apply{textSize=11f}
   clockMain.addView(clockToggleButton,LinearLayout.LayoutParams(dp(76),dp(38)))
   clockCard.addView(clockMain,LinearLayout.LayoutParams(-1,0,1f))
@@ -778,6 +789,42 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    fouls.addView(foulCounter(1),LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
    body.addView(fouls,sized(.14f))
   }
+  // Main-screen compact shot controls and a genuine on-air visibility switch.
+  val shotRow=horizontal().apply{
+   background=rounded(Color.rgb(23,37,32),10)
+   setPadding(dp(6),0,dp(6),0)
+  }
+  shotRow.addView(smallLabel("SHOT"),LinearLayout.LayoutParams(dp(43),dp(25)))
+  shotClockDisplay=ink(shotSeconds.toString(),15f).apply{
+   setTypeface(typeface,android.graphics.Typeface.BOLD)
+  }
+  shotRow.addView(shotClockDisplay,LinearLayout.LayoutParams(dp(29),dp(29)))
+  val shotButtons=listOf(
+   darkButton("24"){shotSeconds=24;updateGameClock()},
+   darkButton("14"){shotSeconds=14;updateGameClock()},
+   darkButton("−1"){shotSeconds=(shotSeconds-1).coerceAtLeast(0);updateGameClock()},
+   darkButton("+1"){shotSeconds=(shotSeconds+1).coerceAtMost(99);updateGameClock()}
+  )
+  for((index,btn) in shotButtons.withIndex())
+   shotRow.addView(btn,LinearLayout.LayoutParams(0,dp(29),1f).apply{
+    if(index>0)leftMargin=dp(3)
+   })
+  val visibleSwitch=android.widget.Switch(this).apply{
+   contentDescription="Show or hide shot clock on live video"
+   text="SHOW";textSize=10f
+   setTextColor(Color.rgb(230,245,235))
+   isChecked=shotClockVisible
+   thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(237,254,239))
+   trackTintList=android.content.res.ColorStateList(
+    arrayOf(intArrayOf(android.R.attr.state_checked),intArrayOf()),
+    intArrayOf(Color.rgb(26,157,103),Color.rgb(70,91,79)))
+   setOnCheckedChangeListener{_,checked->
+    shotClockVisible=checked
+    broadcast?.setShotClockVisible(checked)
+   }
+  }
+  shotRow.addView(visibleSwitch,LinearLayout.LayoutParams(dp(87),dp(30)).apply{leftMargin=dp(5)})
+  body.addView(shotRow,LinearLayout.LayoutParams(-1,dp(35)).apply{topMargin=dp(3)})
   panel.addView(body,LinearLayout.LayoutParams(-1,0,1f))
 
   // Always-available broadcast/navigation row. Status is condensed above it.
@@ -795,8 +842,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   footer.addView(status,LinearLayout.LayoutParams(-1,dp(16)))
   val actions=horizontal()
-  start=greenButton("GO LIVE"){
+  start=greenButton(if(offlineMode)"RECORD" else "GO LIVE"){
    val service=broadcast
+   if(offlineMode){
+    if(service?.isOfflineRecording()==true){confirmStopOfflineRecording();return@greenButton}
+    if(!checkPermissions())return@greenButton
+    if(!videoProfileReady){refresh();return@greenButton}
+    if(service?.startOfflineRecording()!=true)status.text=service?.getStatus()?:"Camera service is not ready."
+    refresh()
+    return@greenButton
+   }
    if(service?.isActive()==true){confirmStopUpload();return@greenButton}
    if(!checkPermissions())return@greenButton
    if(!draftReady||!videoProfileReady){refresh();return@greenButton}
@@ -805,7 +860,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  iconButton(start,"live",true)
+  if(!offlineMode)iconButton(start,"live",true)
   val timeout=iconButton(darkButton("TIMEOUT"){},"clock")
   timeout.setOnClickListener{showTimeoutPreview(timeout)}
   val keys=listOf(start,timeout,
@@ -837,7 +892,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
   timer.post(tick)
 
-  if(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank()){
+  if(!offlineMode&&(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank())){
    status.text="Choose a verified private V2 draft from Connected Accounts."
    start.isEnabled=false
    return
@@ -865,7 +920,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private fun maybeStartPrivateUpload(){
-  if(!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
+  if(offlineMode||!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
   val service=broadcast?:return
   if(service.isActive()||service.isEnded()){autoLaunchAllowed=false;return}
   autoLaunchAllowed=false
@@ -893,23 +948,42 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    button.background=touchSurface(if(active)Color.rgb(35,189,117) else Color.rgb(39,67,57),9)
    button.setTextColor(if(active)Color.rgb(8,35,27) else Color.rgb(231,247,237))
   }
-  if(::undoButton.isInitialized)undoButton.isEnabled=lastScoreChange!=null
+  if(::resetClockButton.isInitialized)resetClockButton.isEnabled=true
  }
  private fun refresh(){
   val service=broadcast
   if(!::start.isInitialized)return
   val usable=service!=null&&checkPermissions()
+  val offlineNow=service?.isOfflineRecording()==true
   val liveNow=service?.isActive()==true
-  start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true
-  val label=if(liveNow)"STOP STREAMING" else "GO LIVE"
+  val starting=service?.isStarting()==true
+  start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true&&
+   (offlineMode||!starting)
+  val label=when{
+   offlineMode&&offlineNow->"STOP"
+   offlineMode->"RECORD"
+   liveNow->"STOP STREAMING"
+   starting->"STARTING STREAM…"
+   else->"GO LIVE"
+  }
   if(start.text.toString()!=label){
    start.text=label
-   iconButton(start,if(liveNow)"stop" else "live",true)
+   if(offlineMode&&offlineNow||!offlineMode&&liveNow){
+    start.background=touchSurface(Color.rgb(181,34,44),11)
+    start.setTextColor(Color.WHITE)
+    start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
+   }else{
+    start.background=touchSurface(Color.rgb(30,220,130),11)
+    start.setTextColor(Color.rgb(7,36,27))
+    if(offlineMode||starting)start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
+    else iconButton(start,"live",true)
+   }
   }
-  if(service!=null) {
+  if(service!=null){
    status.text=when{
     !draftReady->"This YouTube event has ended. Create a new broadcast from IMG setup."
-    !videoProfileReady->"Selected video quality is unavailable. Return to setup and choose a supported profile."
+    !videoProfileReady->"Selected video quality is unavailable. Return to setup."
+    offlineMode->service.getStatus()
     else->service.getStatus()+" • "+service.connectionSummary()
    }
    refreshScoreboard()
@@ -944,6 +1018,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  override fun onSaveInstanceState(outState:Bundle){
   outState.putInt("v2_clock_seconds",gameSeconds)
   outState.putInt("v2_shot_seconds",shotSeconds)
+   outState.putInt("v2_initial_clock_seconds",configuredGameSeconds)
+   outState.putBoolean("v2_shot_visible",shotClockVisible)
   outState.putBoolean("v2_clock_running",gameRunning)
   super.onSaveInstanceState(outState)
  }

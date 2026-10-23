@@ -57,7 +57,12 @@ const svgPaths={
  sports:'<circle cx="6.8" cy="6.8" r="3.3"/><path d="M4.5 4.5c1.6 1.2 2.9 2.6 4.6 4.6M4.6 9l4.3-4.3M14 10l7-7M13 11l-2.6 2.6a4.5 4.5 0 0 0 6.4 6.4l2.5-2.5a4.5 4.5 0 0 0-6.3-6.5Z"/>',
  basketball:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.7 5.7C9.7 9.8 9.7 14.2 5.7 18.3M18.3 5.7c-4 4.1-4 8.5 0 12.6"/>',
  user:'<circle cx="12" cy="8" r="4"/><path d="M4.5 21v-2.5c0-3.7 3.2-6 7.5-6s7.5 2.3 7.5 6V21"/>',
- pickleball:'<ellipse cx="8" cy="8" rx="5.5" ry="6.7" transform="rotate(-35 8 8)"/><path d="m12 12 7.6 7.5a1.4 1.4 0 0 0 2-2L14 10"/><circle cx="5.7" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="9.8" cy="6" r=".65" fill="currentColor" stroke="none"/><circle cx="7.3" cy="10" r=".65" fill="currentColor" stroke="none"/><circle cx="11.2" cy="9.8" r=".65" fill="currentColor" stroke="none"/><circle cx="19" cy="4.5" r="3"/><circle cx="18" cy="3.5" r=".45" fill="currentColor" stroke="none"/><circle cx="20" cy="5.2" r=".45" fill="currentColor" stroke="none"/>'};
+ pickleball:'<ellipse cx="8.7" cy="8.4" rx="5.9" ry="7.3" transform="rotate(-33 8.7 8.4)"/><path d="M12.8 13.1 19 20a1.6 1.6 0 0 0 2.2-2.2l-6.1-6.6"/><circle cx="6.3" cy="5.9" r=".55" fill="currentColor" stroke="none"/><circle cx="9.3" cy="5.5" r=".55" fill="currentColor" stroke="none"/><circle cx="6.6" cy="9.3" r=".55" fill="currentColor" stroke="none"/><circle cx="10" cy="9.4" r=".55" fill="currentColor" stroke="none"/><circle cx="19" cy="5.2" r="3"/><circle cx="18.2" cy="4.3" r=".42" fill="currentColor" stroke="none"/><circle cx="20.1" cy="5.7" r=".42" fill="currentColor" stroke="none"/>',
+ wifi:'<path d="M2.5 8.8a14.2 14.2 0 0 1 19 0M5.6 12.3a9.6 9.6 0 0 1 12.8 0M9.1 15.8a4.5 4.5 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.1" fill="currentColor" stroke="none"/>',
+ 'layout-broadcast':'<rect x="2.5" y="3.5" width="19" height="17" rx="2.5"/><path d="M3 15.8h18M8 16v4.2M16 16v4.2M7 8.5h10M7 11.5h7"/>',
+ microphone:'<rect x="9" y="3" width="6" height="12" rx="3"/><path d="M6 11v1a6 6 0 0 0 12 0v-1M12 18v3M8.5 21h7"/>',
+ record:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5" fill="currentColor" stroke="none"/>'
+};
 function ic(name,size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${svgPaths[name]||svgPaths.more}</svg>`}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const uid=()=>String(Date.now())+Math.random().toString(36).slice(2,6);
@@ -92,7 +97,7 @@ o.overlayPosition=graphicIsCompact(o.overlay)?'bottom-right':'bottom-center';
 for(const [field,min,max,standard] of [['overlayOffsetX',-30,30,0],['overlayOffsetY',-30,30,0],['overlayWidth',65,150,100],['overlayHeight',65,150,100],['overlaySafe',1,10,3]]){
  o[field]=Math.max(min,Math.min(max,Number.isFinite(Number(o[field]))?Number(o[field]):standard));
 }
-o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=o.overlayAnimated!==false;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
+o.overlayWidth=100;o.overlayHeight=100;o.overlayOffsetX=0;o.overlayOffsetY=0;o.overlaySafe=3;o.overlayOpacity=100;o.overlayAnimated=true;o.overlaySize=saved.version<8&&Number(o.overlaySize)===100?45:Math.max(15,Math.min(95,Number(o.overlaySize)||60));o.overlayOpacity=Math.max(30,Math.min(100,o.overlayOpacity==null?100:Number(o.overlayOpacity)));if(!/^#[0-9a-fA-F]{6}$/.test(o.overlayColor||''))o.overlayColor='#E66D48';o.micInputs=Array.isArray(saved.options?.micInputs)&&saved.options.micInputs.length?saved.options.micInputs:d.options.micInputs;if(saved.version===6){o.orientation='landscape';o.micInputs[0].enabled=Boolean(saved.options?.mic??true)}const savedSponsors=Array.isArray(saved.sponsors)?saved.sponsors:[];
  const cannedNames=['COURTSIDE','NORTHSTAR','PEAK SPORT'];
  const onlyCannedSponsors=savedSponsors.length===3&&savedSponsors.every((item,i)=>item?.name===cannedNames[i]&&!item?.img);
  return {...d,...saved,sponsors:onlyCannedSponsors||!savedSponsors.length?d.sponsors:savedSponsors.map(item=>({...item,video:item.video?.startsWith('blob:')?'':item.video||''})),version:8,options:o,live:{...d.live,...saved.live,active:false,recordOnly:false,clockRunning:false,slides:false,timeout:false,lockedOrientation:null}}}}catch(e){}return d}
@@ -104,7 +109,8 @@ function applyAppearance(){
  if(meta)meta.setAttribute('content',theme==='dark'?'#10191f':'#f8f6f2');
 }
 applyAppearance();
-let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
+let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;
+let offlineStartBusy=false,offlineStopBusy=false,offlinePlaybackUrl=null;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
 let youtubeExpanded=false,youtubeBusy=false,youtubeConnectBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
 let fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''},fbConnecting=false,fbExpanded=false,fbMessage='',fbGeneration=0,fbAttemptTimer=null,fbFeedbackState='idle';
@@ -277,10 +283,31 @@ async function startPrivateYouTubeFromStudio(){
   const logoAway=await compactBadge(data.options.broadcast.awayLogo);
   const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
   const namedSponsors=data.sponsors.filter(x=>String(x.name||'').trim()).slice(0,12);
+  // Send a small thumbnail for EACH named sponsor (not only the first 3).
+  // The native bridge caps this JSON extra at 60 KB. Each image is bounded,
+  // and name/image arrays retain their matching position.
+  async function compactSponsorPreview(raw){
+   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   try{
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=raw;});
+    if(!image.naturalWidth||!image.naturalHeight)return '';
+    for(const [dimension,quality] of [[48,.68],[36,.55],[28,.42]]){
+     const canvas=document.createElement('canvas');canvas.width=dimension;canvas.height=dimension;
+     const ctx=canvas.getContext('2d');if(!ctx)break;
+     ctx.fillStyle='#0d1a17';ctx.fillRect(0,0,dimension,dimension);
+     const factor=Math.min((dimension-2)/image.naturalWidth,(dimension-2)/image.naturalHeight);
+     ctx.drawImage(image,(dimension-image.naturalWidth*factor)/2,
+       (dimension-image.naturalHeight*factor)/2,image.naturalWidth*factor,image.naturalHeight*factor);
+     const jpeg=canvas.toDataURL('image/jpeg',quality);
+     if(jpeg.length<=3500)return jpeg;
+    }
+   }catch(_){}
+   return '';
+  }
   const sponsorImages=[];
-  for(const item of namedSponsors.slice(0,3)){
-   const image=await compactBadge(item.img||'');
-   sponsorImages.push(image.length<=18000?image:'');
+  for(const item of namedSponsors){
+   sponsorImages.push(await compactSponsorPreview(item.img||''));
   }
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
@@ -288,9 +315,9 @@ async function startPrivateYouTubeFromStudio(){
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
    sponsorNames:namedSponsors.map(x=>String(x.name).trim().slice(0,55)),sponsorImages,
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
-   animated:data.options.overlayAnimated!==false,logoHome,logoAway,
+   animated:true,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
-    recordLocal:Boolean(data.options.recordLocal)
+    recordLocal:Boolean(data.options.recordLocal),shotVisible:data.options.shotVisible!==false
   }));
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
@@ -383,12 +410,63 @@ function recordings(){
  (offlineClips.length?offlineClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.name)+'</strong><small>'+new Date(c.createdAt).toLocaleString()+' · '+Math.max(1,Math.round(c.size/1048576*10)/10)+' MB · '+(c.duration||0)+'s</small></div><div class="offline-clip-actions"><button data-action="download-recording-'+c.id+'">Download</button><button data-action="delete-recording-'+c.id+'" aria-label="Delete recording">Delete</button></div></div>').join(''):
  (nativeClips.length?'':'<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>'))+'</main>';
 }
+// Native Offline Recording shares the EXACT camera, clock, scoring, fouls,
+// Timeout and Tools controls used by native YouTube. Opening this screen does
+// not start recording or request an online streaming account.
+let offlineNativeOpening=false;
+async function openNativeOfflineControls(){
+ if(offlineNativeOpening)return;
+ if(typeof window.IMGNativeChannel?.postMessage!=='function')
+  return toast('Offline native controls require IMG LIVE Studio V2 Android.');
+ offlineNativeOpening=true;
+ try{
+  if(data.live.active)return toast('End the current session before recording offline.');
+  const o=data.options;
+  o.yt=false;o.fb=false;o.tiktok=false;
+  youtubeExpanded=false;fbExpanded=false;
+  window.IMGMedia?.stopCamera?.();
+  const compactImage=async(raw,maxEdge=64,format='png')=>{
+   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   try{
+    const img=new Image();
+    await new Promise((ok,fail)=>{img.onload=ok;img.onerror=fail;img.src=raw});
+    if(!img.naturalWidth||!img.naturalHeight)return '';
+    const c=document.createElement('canvas');c.width=maxEdge;c.height=maxEdge;
+    const ctx=c.getContext('2d');if(!ctx)return '';
+    if(format==='jpeg'){ctx.fillStyle='#0d1a17';ctx.fillRect(0,0,maxEdge,maxEdge);}
+    const f=Math.min((maxEdge-4)/img.naturalWidth,(maxEdge-4)/img.naturalHeight);
+    ctx.drawImage(img,(maxEdge-img.naturalWidth*f)/2,(maxEdge-img.naturalHeight*f)/2,img.naturalWidth*f,img.naturalHeight*f);
+    const out=c.toDataURL('image/'+format,format==='jpeg'?.5:undefined);
+    return out.length<=(format==='jpeg'?3500:35000)?out:'';
+   }catch(_){return ''}
+  };
+  const sponsors=data.sponsors.filter(v=>String(v.name||'').trim()).slice(0,12);
+  const sponsorImages=[];
+  for(const item of sponsors)sponsorImages.push(await compactImage(item.img||'',36,'jpeg'));
+  const game={
+   sport:activeSport(),home:String(o.broadcast.homeName||'HOME').slice(0,24),
+   away:String(o.broadcast.awayName||'AWAY').slice(0,24),
+   logoHome:await compactImage(o.broadcast.homeLogo||''),
+   logoAway:await compactImage(o.broadcast.awayLogo||''),
+   sponsorNames:sponsors.map(v=>String(v.name).trim().slice(0,55)),
+   sponsorImages,graphics:normalizeGraphic(o.overlay),
+   size:Math.round(o.overlaySize),quality:o.quality,fps:o.fps,
+   shotVisible:o.shotVisible!==false
+  };
+  persist();
+  window.IMGNativeChannel.postMessage('native-offline-controls:'+encodeURIComponent(JSON.stringify(game)));
+ }catch(error){toast('Offline controls could not open: '+String(error?.message||error))}
+ finally{offlineNativeOpening=false}
+}
 async function startOfflineRecording(){
+ if(offlineStartBusy||offlineStopBusy||data.live.active||screen!=='offline-ready')return;
+ offlineStartBusy=true;
  const media=window.IMGMedia;
- if(!media?.canCamera())return toast('Camera is unavailable. Use HTTPS Chrome on a device with a camera.');
+ if(!media?.canCamera()){offlineStartBusy=false;return toast('Camera is unavailable. Allow access on this Android device.');}
  const o=data.options,l=data.live;
  try{
   await media.openCamera({quality:o.quality,fps:o.fps});
+  if(screen!=='offline-ready'){media.stopCamera();return;}
   if(!recordOnly())return toast('Recording mode requires every broadcast destination to be off.');
   const opts={quality:o.quality,orientation:o.orientation,fps:o.fps,microphone:o.micInputs?.some(x=>x.type==='device'&&x.enabled)};
   const result=await media.startRecording(recordingState,opts);
@@ -399,16 +477,27 @@ async function startOfflineRecording(){
   persist();screen='live';history.pushState({screen},'','#/live');render(false);
   requestOrientation(o.orientation,true);
   if(opts.microphone&&!result.audio)toast('Recording started without mic audio. Check microphone permission.');
- }catch(e){toast(media.readableError(e));}
+ }catch(e){media?.stopCamera?.();toast(media?.readableError?.(e)||String(e));}
+ finally{offlineStartBusy=false;}
 }
 
-function home(){const upcomingEvents=upcoming(),leagues=sportLeagues();const savedStreams=[...offlineClips,...nativeClips.map(c=>({...c,native:true,metadata:{home:c.home,away:c.away,scores:c.scores,platform:c.platform,sport:c.sport}}))].sort((a,b)=>b.createdAt-a.createdAt);return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
+function home(){const upcomingEvents=upcoming(),leagues=sportLeagues();const savedStreams=[...offlineClips.filter(c=>c.saved===true),...nativeClips.map(c=>({...c,native:true,metadata:{home:c.home,away:c.away,homeLogo:c.homeLogo,awayLogo:c.awayLogo,scores:c.scores,platform:c.platform,sport:c.sport}}))].filter(c=>Number.isFinite(Number(c.createdAt))&&Number(c.createdAt)>0).sort((a,b)=>b.createdAt-a.createdAt);return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
 ${savedStreams.length?
-'<section class="img-my-streams"><div class="section-heading"><h2>My Streams</h2><button class="text-link" data-go="recordings">See all</button></div><div class="img-my-streams-rail" aria-label="Saved completed recordings">'+
-savedStreams.slice(0,12).map(c=>'<button class="img-my-stream-card" data-go="recordings" aria-label="Open recording '+esc(c.name)+'">'+
-'<div class="img-my-stream-teams"><div class="img-my-stream-logo">'+(c.metadata?.homeLogo?'<img alt="" src="'+esc(c.metadata.homeLogo)+'">':ic(c.metadata?.sport==='pickleball'?'pickleball':'basketball',24))+'</div>'+
-'<div class="img-my-stream-score"><span>'+esc(c.metadata?.home||'Home')+'</span><strong>'+Number(c.metadata?.scores?.[0]||0)+'</strong><span>'+esc(c.metadata?.away||'Away')+'</span><strong>'+Number(c.metadata?.scores?.[1]||0)+'</strong></div></div>'+
-'<div class="img-my-stream-foot"><span>'+ic(c.native?'youtube':'video',16)+' '+esc(c.native?'YouTube · Saved to phone':'Saved to phone')+'</span><b>COMPLETED</b></div></button>').join('')+'</div></section>':''}
+'<section class="img-my-streams"><div class="section-heading"><h2>My Streams</h2><button class="text-link" data-go="recordings">See all</button></div><div class="img-my-streams-rail" aria-label="Locally saved broadcasts, scroll horizontally">'+
+savedStreams.slice(0,12).map(c=>{
+ const m=c.metadata||{},scores=Array.isArray(m.scores)?m.scores:[],
+ home=String(m.home||'Home'),away=String(m.away||'Away');
+ const logo=(v,sport)=>v&&/^data:image\/(png|jpeg|webp);base64,/i.test(v)&&v.length<=35000?
+  '<img src="'+esc(v)+'" alt="">':ic(sport==='pickleball'?'pickleball':'basketball',22);
+ const date=new Date(c.createdAt).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
+ const platform=c.native?'YouTube':String(m.platform||'Offline Recording');
+ const click=(c.native?'open-native-recording-':'play-recording-')+c.id;
+ return '<button class="img-my-stream-card" data-action="'+esc(click)+'" aria-label="Play saved '+esc(platform)+' recording">'+
+  '<div class="img-my-stream-teams"><div class="img-my-stream-logo">'+logo(m.homeLogo,m.sport)+'</div>'+
+  '<div class="img-my-stream-score"><span>'+esc(home)+'</span><strong>'+(Number.isFinite(Number(scores[0]))&&scores[0]!=null?Math.max(0,Number(scores[0])):'—')+'</strong><span>'+esc(away)+'</span><strong>'+(Number.isFinite(Number(scores[1]))&&scores[1]!=null?Math.max(0,Number(scores[1])):'—')+'</strong></div>'+
+  '<div class="img-my-stream-logo">'+logo(m.awayLogo,m.sport)+'</div></div>'+
+  '<div class="img-my-stream-foot"><span>'+ic(c.native?'youtube':'video',16)+' '+esc(platform)+'</span><b>'+esc(date)+'</b></div></button>';
+}).join('')+'</div></section>':''}
 <button class="action-line recordings-home-link" data-go="recordings">${ic('video',19)}<span>Offline Recordings</span>${ic('arrow',19)}</button><p class="offline-indicator">Choose a connected destination in Broadcast Settings to start a stream.</p></main>`}
 function eventRow(e){const l=data.leagues.find(x=>x.id===e.leagueId);const h=l?.teams?.find(t=>t.id===e.home),a=l?.teams?.find(t=>t.id===e.away);const dt=new Date(e.date+'T12:00:00');return `<button class="event-row" data-event="${e.id}"><div class="date-block"><span>${Number.isNaN(dt.valueOf())?'GAME':dt.toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</span>${Number.isNaN(dt.valueOf())?'–':dt.getDate()}</div><div class="grow"><div class="names">${esc(h?.name||'Home')} vs ${esc(a?.name||'Away')}</div><div class="detail">${esc(e.time||'TBD')} · ${esc(e.venue||'Venue TBD')}</div></div><span class="arrow">${ic('arrow',17)}</span></button>`}
 function leagues(){const list=sportLeagues();return `<main class="page" data-scroll="main"><div class="row between" style="padding:3px 0 20px"><div><div class="eyebrow">MANAGEMENT</div><h1 style="margin:5px 0 0">My Leagues</h1></div><button class="icon-btn dark" data-go="create" aria-label="Create league">${ic('plus',20)}</button></div>${!list.length?`<div style="padding:50px 6px;text-align:center">${ic('trophy',40)}<h2 style="margin:20px 0 8px">Start your first ${sportName()} league</h2><p class="lead">Add teams, choose a format, and manage your game schedule.</p><button class="solid-btn" data-go="create" style="margin-top:24px">${ic('plus',18)} Create League</button></div>`:list.map(l=>`<button class="list-link" data-league="${l.id}"><div class="logo-circle" style="width:57px;height:57px">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name[0])}</span>`}</div><span class="main">${esc(l.name)}<span class="sub">${esc(l.season||'Season')} · ${l.teams.length} teams</span></span>${ic('arrow',19)}</button>`).join('')}</main>`}
@@ -575,16 +664,17 @@ function setupWizard(){
  const card=(n,title,content)=>`<section class="img-wizard-card" ${step===1&&n==='3'?'data-img-scoreboard-settings="true"':''}><div class="img-wizard-card-head"><span class="img-wizard-number">${n}</span><h2>${title}</h2></div>${content}</section>`;
  const upload=(key,title)=>`<label class="img-wizard-logo-upload">${b[key+'Logo']?`<img src="${esc(b[key+'Logo'])}" alt="${title} logo">`:ic('upload',21)}<span>${b[key+'Logo']?'Change logo':'Add logo'}</span><input type="file" accept="image/*" data-upload="quick-${key}-logo" hidden></label>`;
  const saved=Array.isArray(data.savedTeams)?data.savedTeams.filter(t=>t.sport===activeSport()).slice(0,8):[];
- const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div><details class="img-wizard-lineup"><summary>${ic('users',15)} Lineup setup (optional)</summary><p class="helper">Enter player names, one per line. The lineup is saved with this team.</p><textarea class="input" rows="3" maxlength="900" data-quick="${key}Lineup" placeholder="Player names (one per line)">${esc(b[key+'Lineup']||'')}</textarea></details><button type="button" class="img-wizard-save-team" data-action="save-team-${key}">${ic('check-circle',16)} Save or update team for next matches</button>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
+ const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
  const sportContent=card('1','Choose your sport',`<div class="img-wizard-sports">${SPORTS.map(s=>`<button class="img-wizard-sport ${activeSport()===s.id?'selected':''}" data-action="setup-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="img-wizard-sport-icon">${ic(s.icon,30)}</span><span><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?ic('check-circle',20):ic('chevron',18)}</button>`).join('')}</div>`) +
  (activeSport()==='basketball'?card('2','Game format',`<div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div>`):'');
  const selected=normalizeGraphic(o.overlay);
  const realArt=realGraphicsThumbnails[selected]||'';
  const fallbackArtwork=realArt?`<img class="img-wizard-score-fallback" src="${realArt}" alt="Selected original native scoreboard graphic">`:'';
- const graphicsPreview=`<div class="img-wizard-score-art img-wizard-score-origin" aria-label="Landscape 16:9 broadcast scoreboard preview">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div>`;
+ const previewSliderValue=Math.min(streetballActive()?115:95,Math.max(15,Number(streetballActive()?o.streetOverlaySize:o.overlaySize)||60));
+ const graphicsPreview=`<div class="img-wizard-score-sticky-unit" aria-label="Scoreboard preview and size control"><div class="img-wizard-score-art img-wizard-score-origin" aria-label="Landscape 16:9 broadcast scoreboard preview">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div><label class="img-wizard-score-size-control"><span>Size</span><input type="range" min="15" max="${streetballActive()?115:95}" step="1" value="${previewSliderValue}" data-score-range="size" aria-label="Scoreboard size"></label></div>`;
  const teamContent=card('1','Team names & logos',team('home','First team')+team('away','Second team'))+
  card('2','Tournament or league',`<label class="form-group"><span class="small-label">Tournament / League name (optional)</span><input class="input" maxlength="55" data-quick="leagueName" value="${esc(b.leagueName||'')}" placeholder="Enter tournament or league name"></label><label class="img-wizard-league-toggle"><span>Show league name on video</span><button class="toggle ${b.showLeagueName?'active':''}" data-action="toggle-league-name" role="switch" aria-checked="${b.showLeagueName}" aria-label="Show league name"></button></label>`)+
- card('3','Scoreboard',`${graphicsPreview}${scoreSettings()}`)+
+ card('3','Scoreboard',`${graphicsPreview}${scoreSettings(false,true)}`)+
  (activeSport()==='pickleball'?card('4','Pickleball match format',`<label class="form-group"><span class="small-label">Scoring</span><select class="input" data-input="pickleballScoring"><option value="sideout" ${o.pickleballScoring==='sideout'?'selected':''}>Standard · side-out</option><option value="rally" ${o.pickleballScoring==='rally'?'selected':''}>Rally</option></select></label><label class="form-group"><span class="small-label">Points per game</span><select class="input" data-input="pickleballTarget">${[11,15,21].map(n=>`<option value="${n}" ${o.pickleballTarget===n?'selected':''}>${n} points</option>`).join('')}</select></label>`):'');
  const sponsorContent=card('1','Sponsor logos and images',`${sponsorSettings()}`)+
  card('2','Sponsor video clips',`<label class="img-wizard-upload-clip">${ic('video',22)}<span>Choose a short MP4 video</span><input type="file" data-upload="sponsor-clip" accept="video/mp4" hidden></label>${data.sponsors.filter(item=>item.video).map(x=>`<p class="helper">${ic('check-circle',16)} ${esc(x.name)} · silent video</p>`).join('')}`)+
@@ -595,36 +685,82 @@ function setupWizard(){
  const quality=String(o.quality)==='1080p'?'1080p':'720p',fps=Number(o.fps)===60?60:30;
  const destinationContent=
   card('1','Streaming Platform',`${youtubeDestination()}${facebookDestination()}`)+
-  ((ytSelected&&ytConnected)||(fbSelected&&fbConnected)?
-   card('2','Stream Details',`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
+  (ytConnected?
+   card('2',`<span class='img-wizard-provider-title'><svg class='img-wizard-platform-logo' viewBox='0 0 24 24' aria-hidden='true'><rect x='1' y='5' width='22' height='14' rx='5' fill='#FF0033'/><path d='M10 8.6L16 12l-6 3.4Z' fill='#fff'/></svg> YouTube</span>`,`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
     <label class="form-group"><span class="small-label">Description</span><textarea class="input" rows="3" data-quick="liveDescription" placeholder="Description">${esc(b.liveDescription||'')}</textarea></label>
-    ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
+    ${ytConnected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
+      <fieldset class="img-wizard-audience"><legend>Audience · Is this video made for kids?</legend><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="no" ${youtubeAudience==='no'?'checked':''}> Not made for kids</label><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="yes" ${youtubeAudience==='yes'?'checked':''}> Made for kids</label></fieldset>
       <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
-  card('3','Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
+  (fbConnected?card(ytConnected?'3':'2',`<span class='img-wizard-provider-title'><svg class='img-wizard-platform-logo' viewBox='0 0 24 24' aria-hidden='true'><circle cx='12' cy='12' r='11' fill='#1877F2'/><path d='M13.6 22.9v-9.3h3.1l.5-3.6h-3.6V7.7c0-1 .3-1.7 1.8-1.7h1.9V2.8a24 24 0 0 0-2.8-.2c-2.8 0-4.7 1.7-4.7 4.8V10H6.7v3.6h3.1v9.1Z' fill='#fff'/></svg> Facebook</span>`,
+`<label class='form-group'><span class='small-label'>Stream title</span><input class='input' data-quick='facebookLiveTitle' maxlength='100' value='${esc(b.facebookLiveTitle||'')}' placeholder='Facebook stream title'></label>
+<label class='form-group'><span class='small-label'>Description</span><textarea class='input' rows='3' data-quick='facebookLiveDescription' placeholder='Facebook description'>${esc(b.facebookLiveDescription||'')}</textarea></label>
+<p class='helper'>Facebook publishing details are managed in Facebook Live Producer. These values are saved separately from YouTube.</p>`):'')+
+  card(String(2+Number(ytConnected)+Number(fbConnected)),'Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
    <div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${fps===v?'active':''}" data-set="fps:${v}" ${ytSelected&&!profileSupported('720p',v)&&!profileSupported('1080p',v)?'disabled':''}>${v} FPS</button>`).join('')}</div></div>
    ${ytSelected&&!profileSupported(quality,fps)?'<p class="img-wizard-quality-warning">Selected quality is unsupported by this phone.</p>':''}</div>`)+
-  card('4','Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
+  card(String(3+Number(ytConnected)+Number(fbConnected)),'Recording',`<div class="img-wizard-switch-row"><span>Save locally</span><button class="toggle ${o.recordLocal?'active':''}" data-action="toggle-record-local" role="switch" aria-checked="${!!o.recordLocal}" aria-label="Save locally"></button></div>
   <div class="img-wizard-switch-row"><button type="button" class="img-wizard-offline-btn" data-action="setup-record-offline">${ic('video',18)} Offline Recording ${ic('arrow',17)}</button></div>`);
  const content=step===0?sportContent:step===1?teamContent:step===2?sponsorContent:destinationContent;
- return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div>${step===1?`<aside class="img-wizard-sticky-preview" hidden aria-label="Landscape scoreboard preview"><div class="img-wizard-score-art">${fallbackArtwork}<canvas data-setup-scoreboard width="1280" height="720" aria-label="Real on-air scoreboard"></canvas></div></aside>`:''}<main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
+ return `<div class="studio-page img-wizard-page"><div class="img-wizard-head"><button class="img-wizard-back" data-action="${step?'setup-prev':'exit-setup'}" aria-label="${step?'Previous setup step':'Back home'}">${ic('back',20)}</button><span>IMG LIVE STUDIO</span><span class="img-wizard-progress-caption">${step+1} of 4</span></div><main class="img-wizard-scroll" data-scroll="controls"><div class="img-wizard-topline"><span>PRE-BROADCAST SETUP</span><strong>Step ${step+1} of 4</strong></div><div class="img-wizard-track">${stages.map((s,i)=>`<div class="${i<=step?'complete':''}" aria-label="${esc(s)}"></div>`).join('')}</div><h1>${stages[step]}</h1>${content}</main><footer class="img-wizard-footer"><button class="solid-btn green" data-action="${step===3?'start-broadcast':'setup-next'}">${step===3?ic('radio',16):''}${step===3?broadcastStartLabel():'Next Step'} ${step<3?ic('arrow',16):''}</button></footer></div>`;
 }
 function updateWizardStickyScoreboard(){
  const root=document.querySelector('.img-wizard-page');
  const pane=root?.querySelector('.img-wizard-scroll');
- const holder=root?.querySelector('.img-wizard-sticky-preview');
- const source=root?.querySelector('.img-wizard-score-origin');
- const section=root?.querySelector('[data-img-scoreboard-settings]');
- if(!pane||!holder||!source||!section)return;
- const frame=pane.getBoundingClientRect(),origin=source.getBoundingClientRect();
- // Once the original preview scrolls above the Step 2 viewport, keep the
- // exact live-preview canvas docked at TOP until scrolling back reveals it.
- // Do not unpin merely because the remaining scoreboard card scrolls away.
- const pin=origin.bottom<=frame.top+8;
- holder.hidden=!pin;
- if(pin)window.IMGMedia?.paintSetupScoreboard?.();
+ // The original preview stays inside its ORIGINAL Step 2 Scoreboard card.
+ // No dock, portal, copy, clone, floating second card or replacement canvas.
+ const card=pane?.querySelector('[data-img-scoreboard-settings]');
+ const preview=root?.querySelector('.img-wizard-score-sticky-unit');
+ if(!pane||!card||!preview)return;
+ let marker=card.querySelector('.img-wizard-score-anchor');
+ if(!marker){
+  marker=document.createElement('div');
+  marker.className='img-wizard-score-anchor';
+  marker.hidden=true;preview.before(marker);
+ }
+ const boundary=pane.getBoundingClientRect();
+ const pinned=preview.classList.contains('img-score-pinned');
+ if(!pinned){
+  const box=preview.getBoundingClientRect();
+  if(box.top>=boundary.top+3)return;
+  // Reserve the original slot invisibly; never draw another scoreboard.
+  // Size the frame in physical CSS pixels; some Android WebViews collapse
+  // aspect-ratio to the two border pixels when the canvas is absolute.
+  const originalHeight=Math.max(Math.ceil(box.height),Math.round(box.width*9/16)+2);
+  marker.style.height=originalHeight+'px';
+  marker.hidden=false;
+  marker.style.display='block';
+  preview.style.setProperty('--img-score-top',Math.round(boundary.top)+'px');
+  preview.style.setProperty('--img-score-left',Math.round(box.left)+'px');
+  preview.style.setProperty('--img-score-width',Math.round(box.width)+'px');
+  preview.style.setProperty('--img-score-height',originalHeight+'px');
+  // Lift the SAME element above the scroll container's clipping boundary.
+  // No second preview, image, canvas or extra visual frame is created.
+  root.appendChild(preview);
+  preview.classList.add('img-score-pinned');
+ }else{
+  const original=marker.getBoundingClientRect();
+  // The SAME original element is put back by lifting the fixed style.
+  if(original.top>=boundary.top+3){
+   preview.classList.remove('img-score-pinned');
+   marker.after(preview);
+   marker.hidden=true;marker.style.display='none';
+   preview.style.removeProperty('--img-score-top');
+   preview.style.removeProperty('--img-score-left');
+   preview.style.removeProperty('--img-score-width');
+   preview.style.removeProperty('--img-score-height');
+  }else{
+   const pos=marker.getBoundingClientRect();
+   preview.style.setProperty('--img-score-top',Math.round(boundary.top)+'px');
+   preview.style.setProperty('--img-score-left',Math.round(pos.left)+'px');
+   preview.style.setProperty('--img-score-width',Math.round(pos.width)+'px');
+  }
+ }
 }
+let scoreboardStickyTick=false;
 document.addEventListener('scroll',event=>{
- if(event.target?.classList?.contains('img-wizard-scroll'))updateWizardStickyScoreboard();
+ if(!event.target?.classList?.contains('img-wizard-scroll')||scoreboardStickyTick)return;
+ scoreboardStickyTick=true;
+ requestAnimationFrame(()=>{scoreboardStickyTick=false;updateWizardStickyScoreboard();});
 },true);
 function setupOpts(){const o=data.options,b=o.broadcast;const ev=selectedEvent();const icons=['home','away'];return `<section class="control-section instant-intro"><span class="sport-setup-tag">${ic(activeSport(),15)} ${sportName().toUpperCase()}</span><h3>${ev?'Scheduled game':'Instant broadcast'}</h3><p class="helper">${ev?'Game selected from your schedule. You can adjust the on-air labels below.':'Set up the teams and select where to broadcast.'}</p>${upcoming().length?`<label class="form-group"><span class="small-label">Optional scheduled game</span><select class="input" data-input="selected-event"><option value="">Instant game (no league)</option>${upcoming().map(e=>{const league=data.leagues.find(l=>l.id===e.leagueId);const home=league?.teams.find(t=>t.id===e.home),away=league?.teams.find(t=>t.id===e.away);return `<option value="${e.id}" ${selectedEventId===e.id?'selected':''}>${esc(home?.name)} vs ${esc(away?.name)} · ${datestr(e.date)}</option>`}).join('')}</select></label>`:''}</section>${activeSport()==='basketball'?`<section class="control-section basketball-broadcast-mode"><h3>Basketball broadcast mode</h3><div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div><p class="helper">Streetball uses a custom portrait scoreboard with players on opposite sides.</p></section>`:''}${streetballActive()?streetballSettings():''}${streetballActive()?'':`<section class="control-section setup-teams-editor"><h3>Team names & logos</h3><p class="helper">Both teams are editable even without creating a league.</p>${[0,1].map(i=>{const home=i===0,key=home?'home':'away',name=home?b.homeName:b.awayName,logo=home?b.homeLogo:b.awayLogo;return `<div class="broadcast-team-edit"><div class="setup-team-heading"><span class="small-label">${home?'HOME':'AWAY'} TEAM</span>${logo?`<button class="text-link" data-action="clear-brand-${key}-logo">Remove logo</button>`:''}</div><div class="row" style="gap:12px"><label class="quick-logo-upload" title="Upload ${key} team logo">${logo?`<img alt="${key} logo" src="${esc(logo)}">`:ic('upload',21)}<input type="file" accept="image/*" data-upload="quick-${key}-logo" aria-label="Upload ${key} team logo" hidden></label><label class="grow"><span class="sr-only">${key} team name</span><input class="input" data-quick="${key}Name" maxlength="40" placeholder="${home?'Home':'Away'} team name" value="${esc(name)}"></label></div></div>`}).join('')}</section>` }<section class="control-section broadcast-destinations-section"><h3 class="broadcast-primary-heading">Destinations</h3>${youtubeDestination()}${facebookDestination()}<div class="broadcast-quick-note"></div></section><details class="broadcast-advanced" id="img-production-advanced" ${advancedOpen?'open':''}><summary>${ic('sliders',17)} Advanced</summary><div class="broadcast-advanced-content">${remoteHostPanel()}<section class="control-section"><h3>League branding <span class="subtle-title">optional</span></h3><div class="broadcast-team-edit"><label class="form-group"><span class="small-label">League name (can be left blank)</span><input class="input" data-quick="leagueName" maxlength="55" placeholder="e.g. City Basketball Cup" value="${esc(b.leagueName)}"></label><div class="row" style="gap:12px;align-items:center"><label class="quick-logo-upload" title="Upload league logo">${b.leagueLogo?`<img alt="League logo" src="${esc(b.leagueLogo)}">`:ic('upload',21)}<input type="file" data-upload="quick-league-logo" accept="image/*" aria-label="Upload league logo" hidden></label><div class="grow"><div class="main">League logo</div><p class="helper">Displayed over video only when uploaded.</p></div>${b.leagueLogo?`<button class="text-link" data-action="clear-brand-league-logo">Remove</button>`:''}</div></div><div class="setting-row"><span class="main">Show league name<span class="sub">Turn off for a clean broadcast without a league title</span></span><button class="toggle ${b.showLeagueName?'active':''}" data-action="toggle-league-name" role="switch" aria-checked="${b.showLeagueName}" aria-label="Show league name"></button></div></section>${activeSport()==='pickleball'?`<section class="control-section pickle-rules-setup"><h3>Official Pickleball scoring · 2026</h3><p class="helper">USA Pickleball standard side-out scoring is the default; rally scoring is a provisional 2026 option. Tap the winning side after each rally and the app calculates the scores and serve.</p>
 <div class="pickle-rule-grid">
@@ -635,7 +771,7 @@ function setupOpts(){const o=data.options,b=o.broadcast;const ev=selectedEvent()
 </div><p class="pickle-scoring-explainer">Win by two. Standard doubles begins at 0–0–2. In singles, one player serves per turn. Use Undo to correct the previous rally.</p>
 <a class="pickle-rules-source" href="https://usapickleball.org/rules/" target="_blank" rel="noopener noreferrer">USA Pickleball official rules ↗</a></section>
 <section class="control-section"><h3>Pickleball scoreboard appearance</h3>${recordOnly()?'<p class="helper">Offline recording uses the camera without a scoreboard.</p>':scoreSettings()}</section>`:`<section class="control-section"><h3>${streetballActive()?'Streetball Graphics':'Broadcast Graphics'}</h3><p class="helper">${streetballActive()?'Side-by-side vertical scores, photos and names in portrait. Adjust overall size, opacity and color.':'Select a scoreboard below.'}</p>${recordOnly()&&!streetballActive()?'<p class="helper">Scoreboard graphics appear during live broadcasts only.</p>':scoreSettings()}${streetballActive()||recordOnly()?'':`<div class="setting-row"><span class="main">Shot clock</span><button class="toggle ${o.shotVisible?'active':''}" data-action="toggle-shot-visible" role="switch" aria-checked="${o.shotVisible}" aria-label="Show shot clock"></button></div>`}</section>`}${activeSport()==='pickleball'||streetballActive()?'':`<section class="control-section"><h3>${ic('sliders',17)} Fouls</h3><div class="setting-row"><span class="main">Bonus after</span><select class="input" style="width:120px;min-height:42px" data-input="penalty">${[4,5,6].map(n=>`<option value="${n}" ${o.penalty===n?'selected':''}>${n} fouls</option>`).join('')}</select></div></section>`}<section class="control-section"><h3>Orientation</h3><p class="helper">${streetballActive()?'Streetball portrait output will be available in a future update.':'Landscape 16:9'}</p></section><section class="control-section"><h3>${ic('video',17)} Video</h3>${o.yt&&window.IMGNativeChannel?.postMessage?'<p class="helper">YouTube Live video: 960×540 · 30 FPS</p>':`<div class="quality-group"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${o.quality===v?'active':''}" data-set="quality:${v}">${v}</button>`).join('')}</div></div><div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${Number(o.fps)===v?'active':''}" data-set="fps:${v}">${v} FPS</button>`).join('')}</div></div></div>`}</section><section class="control-section"><h3>${ic('sound',17)} Audio</h3><p class="helper">Built-in mic only; mixing unavailable.</p>${o.micInputs.map(m=>`<div class="setting-row"><span class="main">${esc(m.name)}<span class="sub">${m.type==='device'?'Built-in device microphone':'Additional microphone (not yet available)'}</span></span><div class="row" style="gap:7px"><button class="toggle ${m.enabled?'active':''}" data-action="mic-source-${m.id}" role="switch" aria-checked="${m.enabled}" aria-label="Use ${esc(m.name)}"></button>${m.type!=='device'?`<button class="icon-btn ghost" data-action="remove-mic-${m.id}" aria-label="Remove ${esc(m.name)}">${ic('x',17)}</button>`:''}</div></div>`).join('')}<button class="action-line" data-action="add-mic" disabled aria-disabled="true">${ic('plus',17)}<span>Additional microphones unavailable</span>${ic('arrow',16)}</button></section><section class="control-section" style="border-bottom:0"><div class="dropdown"><button data-action="toggle-sponsors" aria-expanded="${sponsorOpen}"><span>Sponsors & Timeout Slides <span class="chip-inline">${data.sponsors.length} slides</span></span>${ic(sponsorOpen?'up':'chevron',19)}</button>${sponsorOpen?sponsorSettings():''}</div></section></div></details>`}
-function sponsorSettings(){const o=data.options;return `<div class="dropdown-body"><p class="hint">Only the camera video switches to sponsor slides. Your phone controls remain visible.</p><div class="sponsor-list">${data.sponsors.map((s,i)=>`<div class="sponsor-row"><span class="sponsor-number">${i+1}</span><span>${esc(s.name)}${s.img?' ✓':s.video?' · video':''}</span><button data-action="sponsor-up-${i}" aria-label="Move sponsor up" ${i===0?'disabled':''}>${ic('up',16)}</button><button data-action="sponsor-edit-${i}" aria-label="Edit sponsor">${ic('edit',16)}</button><button data-action="sponsor-remove-${i}" aria-label="Remove sponsor" ${data.sponsors.length<2?'disabled':''}>${ic('x',16)}</button></div>`).join('')}</div><button class="action-line" data-action="sponsor-add" style="font-size:12px">${ic('plus',16)} <span>Add sponsor slide</span>${ic('arrow',15)}</button><div class="small-label" style="margin:16px 0 8px">Slide duration</div><div class="chips">${[3,5,10,0].map(s=>`<button class="chip ${o.slideSecs===s?'active':''}" data-set="slideSecs:${s}">${s?s+' sec':'Manual'}</button>`).join('')}</div><div class="small-label" style="margin:18px 0 8px">Transition</div><div class="chips">${['fade','slide'].map(t=>`<button class="chip ${o.slideTransition===t?'active':''}" data-set="slideTransition:${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div>`}
+function sponsorSettings(){const o=data.options;return `<div class="dropdown-body"><p class="hint">Only the camera video switches to sponsor slides. Your phone controls remain visible.</p><div class="sponsor-list">${data.sponsors.map((s,i)=>`<div class='sponsor-row img-wizard-sponsor-row'><span class='sponsor-number'>${i+1}</span><div class='img-wizard-sponsor-main'><span class='img-wizard-sponsor-name'>${esc(s.name||'Sponsor '+(i+1))}${s.video?' · video':''}</span><div class='img-wizard-sponsor-image-actions'><label class='img-wizard-sponsor-image-upload' aria-label='Add or replace sponsor image'>${s.img?`<img src='${esc(s.img)}' alt='Image for ${esc(s.name)}'>`:ic('image',20)}<span>${s.img?'Change image':'Add image'}</span><input type='file' accept='image/*' data-upload='sponsor-${i}' aria-label='Image for sponsor ${i+1}' hidden></label>${s.img?`<button type='button' class='img-wizard-sponsor-clear-image' data-action='sponsor-clear-img-${i}' aria-label='Remove image for sponsor ${i+1}'>${ic('x',13)} Remove image</button>`:''}</div></div><div class='img-wizard-sponsor-row-actions'><button data-action='sponsor-up-${i}' aria-label='Move sponsor up' ${i===0?'disabled':''}>${ic('up',16)}</button><button data-action='sponsor-edit-${i}' aria-label='Edit sponsor name'>${ic('edit',16)}</button><button data-action='sponsor-remove-${i}' aria-label='Remove sponsor' ${data.sponsors.length<2?'disabled':''}>${ic('x',16)}</button></div></div>`).join('')}</div><button class="action-line" data-action="sponsor-add" style="font-size:12px">${ic('plus',16)} <span>Add sponsor slide</span>${ic('arrow',15)}</button><div class="small-label" style="margin:16px 0 8px">Slide duration</div><div class="chips">${[3,5,10,0].map(s=>`<button class="chip ${o.slideSecs===s?'active':''}" data-set="slideSecs:${s}">${s?s+' sec':'Manual'}</button>`).join('')}</div><div class="small-label" style="margin:18px 0 8px">Transition</div><div class="chips">${['fade','slide'].map(t=>`<button class="chip ${o.slideTransition===t?'active':''}" data-set="slideTransition:${t}">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}</div></div>`}
 
 // Shared public graphic identifiers are mirrored by V2BroadcastService.
 // The first 8 styles are wide and default to bottom-center. The last 4
@@ -682,7 +818,7 @@ const graphicIsCompact=id=>SCOREBOARD_STYLES.some(x=>x[0]===id&&x[2]==="compact"
 const normalizeGraphic=id=>SCOREBOARD_IDS.includes(id)?id:"prime-tv";
 const SCOREBOARD_PALETTE=["#E66D48","#C33F4B","#225AA9","#21846D","#B88637","#6E5CAC"];
 function scoreStyleName(value){const found=SCOREBOARD_STYLES.find(x=>x[0]===value);return found?found[1]:'Prime TV'}
-function scoreSettings(compact=false){
+function scoreSettings(compact=false,sliderUnderPreview=false){
  if(!realGraphicsRequested){
   realGraphicsRequested=true;
   setTimeout(()=>window.IMGNativeChannel?.postMessage?.('native-graphics-gallery'),0);
@@ -697,7 +833,7 @@ function scoreSettings(compact=false){
   '<button type="button" class="graphics-pack '+(selected===id?'active':'')+'" data-set="overlay:'+id+'" aria-pressed="'+(selected===id)+'" title="'+esc(name)+'">'+
   '<span class="graphics-art '+(realGraphicsThumbnails[id]?'has-renderer-preview':'')+'">'+
  (realGraphicsThumbnails[id]?'<img loading="lazy" draggable="false" alt="On-air '+esc(name)+' artwork" src="'+realGraphicsThumbnails[id]+'">':'<small>On-air preview</small>')+'</span>'+
-  '<span class="graphics-copy"><strong>'+name+'</strong>'+ (selected===id?ic('check',15):'')+'<small>'+(type==='compact'?'Corner':'Wide')+'</small></span>'+
+  '<span class="graphics-copy"><strong>'+name+'</strong>'+ (selected===id?'<span class="graphics-selected-check">'+ic('check',15)+'</span>':'')+'<small>'+(type==='compact'?'Corner':'Wide')+'</small></span>'+
   '</button>';
  const row=(label,key,min,max,step=5)=>
   '<label class="scoreboard-adjust"><span>'+label+' <output data-graphics-output="'+key+'">'+o[key]+'</output></span>'+
@@ -706,9 +842,8 @@ function scoreSettings(compact=false){
  (activeSport()==='pickleball'||isolated?'<p class="helper">Independent '+(isolated?'Streetball':'Pickleball')+' graphics controls</p>':
  '<div class="graphics-header"><h3>'+ic('layout-broadcast',19)+' Graphics</h3><p>Choose a style and adjust its size.</p></div>'+
  '<div class="graphics-library" role="group" aria-label="Broadcast Graphics style library">'+SCOREBOARD_STYLES.map(styleCard).join('')+'</div>'+
- '<label class="graphics-switch-row"><span>Score animation</span><input type="checkbox" data-graphics-check="overlayAnimated" '+(o.overlayAnimated?'checked':'')+'></label>')+
- '<div class="scoreboard-adjust-grid">'+
- '<label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>'+
+ '')+
+ (sliderUnderPreview?'':'<div class="scoreboard-adjust-grid"><label class="scoreboard-adjust"><span>Size <output data-score-range-output="size">'+size+'%</output></span><input type="range" min="15" max="'+(isolated?115:95)+'" step="1" value="'+size+'" data-score-range="size" aria-label="Scoreboard size"></label></div>')+
  (isolated||activeSport()==='pickleball'?'<div class="score-color-row"><span class="small-label">Accent</span><div class="score-color-palette>'+
  SCOREBOARD_PALETTE.map(hex=>'<button class="score-color-swatch '+(color.toLowerCase()===hex.toLowerCase()?'selected':'')+'" style="--swatch:'+hex+'" data-set="overlayColor:'+hex+'" aria-pressed="'+(color.toLowerCase()===hex.toLowerCase())+'" aria-label="Accent '+hex+'"></button>').join('')+
  '<label class="score-color-custom"><input type="color" data-score-color="1" value="'+color+'" aria-label="Custom accent color"><span>Custom</span></label></div></div>':'')+
@@ -925,7 +1060,19 @@ function streetballGlassScreen(){
 }
 
 function studio(){
- if(screen==='offline-ready')return `<div class="studio-page img-offline-ready-page"><div class="studio-top"><div><p class="eyebrow">OFFLINE RECORDING</p><h1>Broadcasting</h1></div><button class="icon-btn" data-action="offline-ready-back" aria-label="Back to setup">${ic('back',19)}</button></div>${camera()}<div class="img-offline-ready-note">Ready to record on this device</div><div class="fixed-cta"><button class="solid-btn green" data-action="start-offline-recording">${ic('video',18)} START RECORDING</button></div></div>`;
+ if(screen==='offline-ready'){
+  const b=data.options.broadcast,o=data.options;
+  const mic=Boolean(o.micInputs?.some(item=>item.type==='device'&&item.enabled));
+  return `<div class="studio-page img-offline-ready-page"><div class="studio-top"><div><p class="eyebrow">OFFLINE RECORDING</p><h1>Broadcasting</h1></div><button class="icon-btn" data-action="offline-ready-back" aria-label="Back to setup">${ic('back',19)}</button></div>
+   ${camera()}
+   <div class="img-offline-ready-controls">
+    <div class="img-offline-ready-teams"><span>${esc(b.homeName||'Home')}</span><strong>${ic('video',15)} OFFLINE</strong><span>${esc(b.awayName||'Away')}</span></div>
+    <div class="img-offline-ready-setting"><span>${ic('video',17)} ${esc(o.quality)} · ${Number(o.fps)===60?60:30} FPS</span><span>Device recording</span></div>
+    <div class="img-offline-ready-setting"><span>${ic('microphone',17)} Microphone</span><button class="toggle ${mic?'active':''}" data-action="toggle-mic" role="switch" aria-checked="${mic}" aria-label="Record microphone audio"></button></div>
+    <p class="img-offline-ready-note">Use Start Recording to enter game and broadcast controls. No online platform is required.</p>
+   </div>
+   <div class="fixed-cta"><button class="solid-btn green" data-action="start-offline-recording">${ic('record',18)} START RECORDING</button></div></div>`;
+ }
  if(screen==='setup')return setupWizard();if(screen==='live'&&streetballActive())return streetballGlassScreen();const isLive=screen==='live';const liveLandscape=isLive&&data.options.orientation==='landscape';const setupLandscape=screen==='setup'&&useLandscapeSetup();if(liveLandscape)return `<div class="studio-page live-landscape-page">${recordingMode()?'<button class="img-v2-stop-recording" data-action="finish-broadcast">STOP RECORDING</button>':''}${liveLandscapeLayout()}</div>`;if(setupLandscape)return setupLandscapeLayout();return `<div class="studio-page ${isLive?'live-standard-page':''}">${!isLive?`<div class="setup-floating-exit"><button class="icon-btn" data-action="exit-setup" aria-label="Back to home">${ic('back',19)}</button></div>`:`<div class="studio-top"><div><p class="eyebrow">${isLive?(recordingMode()?'● RECORDING · OFFLINE':data.options.fb?(window.IMGFacebookLive?.status()?.phase==='sending'?'● SENDING TO FACEBOOK':'● FACEBOOK VIDEO DISCONNECTED'):'● GAME SESSION'):'PRE-BROADCAST'}</p><h1>${isLive?'Live game controls':'Broadcast settings'}</h1></div><button class="icon-btn" data-action="${isLive?'exit-live':'exit-setup'}" aria-label="${isLive?'End broadcast':'Leave setup'}">${ic('x',19)}</button></div>`}${camera()}${isLive&&recordingMode()?'<button class="img-v2-stop-recording" data-action="finish-broadcast">STOP RECORDING</button>':''}<div class="scroll-controls safe-pad" data-scroll="controls">${isLive?liveControls():setupOpts()}</div>${!isLive&&!fbExpanded?`<div class="fixed-cta"><button class="solid-btn orange" data-action="start-broadcast">${ic(recordOnly()?'video':'radio',17)} ${broadcastStartLabel()}</button></div>`:''}</div>`}
 
 /* Preserve phone camera and keyboard focus across UI updates.
@@ -1021,10 +1168,10 @@ function resetForNewBroadcast(){
 }
 
 function navigate(where){if(where!=='remote'){remoteApi()?.stopScan?.();remoteScanning=false;window.IMGRemoteConsole?.exitLandscape?.()}if(where==='recordings')refreshOfflineClips();if(screen==='setup'&&where!=='setup'&&where!=='live'&&!data.live.active)window.IMGMedia?.stopCamera?.();if(data.live.active&&where!=='live'){dialog={type:'exit-live'};return render(true)}if(where==='add-game'){startNewGame();return}screen=where;if(where==='create'){draft=newDraft();createStep=0}if(where==='league-detail'&&!thisLeague()){screen='leagues'}if(where==='setup'&&screen!=='setup')resetForNewBroadcast();if(where==='setup'){setupStep=0;queueRemotePublish();}history.pushState({screen},'', '#/'+screen);render(false)}
-function modal(){if(!dialog)return '';const d=dialog;let body='';if(d.type==='youtube-classification')body='<h2>Made for kids?</h2><p>YouTube requires this classification before publishing.</p><button class="solid-btn" data-action="youtube-classification-no">Not made for kids</button><button class="outline-btn" data-action="youtube-classification-yes">Made for kids</button><button class="outline-btn" data-action="close-modal">Cancel</button>';if(d.type==='remote-manager')body=`<h2>Remote scoring</h2>${remoteHostPanel()}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;if(d.type==='sport-switch')body=`<div class="sport-switch-heading"><span class="eyebrow">IMG LIVE STUDIO</span><h2>Choose your sport</h2><p>Choose a sport to set up its leagues, events and broadcast controls.</p></div><div class="sport-choice-list">${SPORTS.map(s=>`<button class="sport-choice ${activeSport()===s.id?'active':''}" data-action="select-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="sport-choice-icon sport-choice-${s.id}">${ic(s.icon,28)}</span><span class="sport-choice-copy"><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?`<span class="sport-choice-selected">${ic('check',18)}</span>`:ic('arrow',18)}</button>`).join('')}</div><p class="sport-more-coming">${ic('plus',14)} More sports coming soon</p>`;if(d.type==='exit-live')body=`<h2>${recordingMode()?'Stop and save recording?':'End game session?'}</h2><p>${recordingMode()?'The recording will stop, be saved in this browser if storage is available, and you can download the video file.':'This ends the scoring session. Stop any separate native upload from its broadcast controls.'}</p>${selectedEventId?'<p>The game result will be saved to the selected event.</p>':''}<button class="solid-btn" data-action="finish-broadcast">${ic('check',18)} ${recordingMode()?'STOP & SAVE':'End game session'}</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Keep broadcasting</button>`;if(d.type==='recording-saving')body=`<h2>Saving recording...</h2><p>Please wait while the video is finalized and stored on your device.</p>`;
+function modal(){if(!dialog)return '';const d=dialog;let body='';if(d.type==='remote-manager')body=`<h2>Remote scoring</h2>${remoteHostPanel()}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;if(d.type==='clip-playback')body=`<h2>${esc(d.name||'Saved recording')}</h2><video class="img-local-recording-player" controls playsinline preload="metadata" src="${esc(offlinePlaybackUrl||'')}">Your phone cannot play this MP4 recording.</video><button class="outline-btn" data-action="close-modal">Close</button>`;if(d.type==='sport-switch')body=`<div class="sport-switch-heading"><span class="eyebrow">IMG LIVE STUDIO</span><h2>Choose your sport</h2><p>Choose a sport to set up its leagues, events and broadcast controls.</p></div><div class="sport-choice-list">${SPORTS.map(s=>`<button class="sport-choice ${activeSport()===s.id?'active':''}" data-action="select-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="sport-choice-icon sport-choice-${s.id}">${ic(s.icon,28)}</span><span class="sport-choice-copy"><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?`<span class="sport-choice-selected">${ic('check',18)}</span>`:ic('arrow',18)}</button>`).join('')}</div><p class="sport-more-coming">${ic('plus',14)} More sports coming soon</p>`;if(d.type==='exit-live')body=`<h2>${recordingMode()?'Stop and save recording?':'End game session?'}</h2><p>${recordingMode()?'The recording will stop, be saved in this browser if storage is available, and you can download the video file.':'This ends the scoring session. Stop any separate native upload from its broadcast controls.'}</p>${selectedEventId?'<p>The game result will be saved to the selected event.</p>':''}<button class="solid-btn" data-action="finish-broadcast">${ic('check',18)} ${recordingMode()?'STOP & SAVE':'End game session'}</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Keep broadcasting</button>`;if(d.type==='recording-saving')body=`<h2>Saving recording...</h2><p>Please wait while the video is finalized and stored on your device.</p>`;
 if(d.type==='recording-finished')body=`<h2>${d.clip?.saved?'Recording saved offline':'Recording ready'}</h2><p>${d.clip?.saved?'This recording is saved in this browser on your device.':'Browser storage could not save the file; download it now to your phone.'} ${d.clip?.error?esc(d.clip.error):''}</p>${d.clip?.name?`<p class="recording-file-name">${esc(d.clip.name)}</p><button class="solid-btn orange" data-action="download-last-recording">${ic('video',16)} Download video</button>`:'<p>Recording data could not be created. Please try again.</p>'}${d.clip?.saved?'<button class="outline-btn" data-action="open-recordings" style="width:100%;margin-top:8px">View saved recordings</button>':''}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;
 if(d.type==='delete-recording')body=`<h2>Delete offline recording?</h2><p>This permanently removes the browser-local copy. Download any videos you want to keep first.</p><button class="solid-btn orange" data-action="confirm-delete-recording">Delete recording</button><button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Cancel</button>`;
-if(d.type==='sponsor-edit')body=`<h2>Edit sponsor</h2><p>Add a sponsor name and optional local logo.</p><div class="form-group"><label>Sponsor name</label><input id="sponsor-title" class="input" value="${esc(data.sponsors[d.i]?.name)}"></div><label class="upload">${ic('upload')} <span>Add sponsor image</span><input type="file" accept="image/*" data-upload="sponsor-${d.i}" hidden></label><button class="solid-btn" data-action="save-sponsor" style="margin-top:20px">Save sponsor</button>`;if(d.type==='team-edit')body=`<h2>Edit team</h2><p>Change this team's display name and logo.</p><div class="form-group"><label>Team name</label><input id="edit-team-name" class="input" value="${esc(thisLeague()?.teams.find(t=>t.id===d.id)?.name)}"></div><label class="upload">${ic('upload')}<span>Replace team logo</span><input type="file" accept="image/*" data-upload="saved-team-${d.id}" hidden></label><button class="solid-btn" data-action="save-team" style="margin-top:18px">Save team</button>`;if(d.type==='reset')body=`<h2>Reset studio data?</h2><p>This deletes locally saved leagues, games, and scores from this device.</p><button class="solid-btn orange" data-action="confirm-reset">Reset studio data</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='reset-clock')body=`<h2>Reset the game clock?</h2><p>The game clock will pause and return to the configured quarter length. Scores and fouls stay unchanged.</p><button class="solid-btn" data-action="confirm-reset-clock">Reset clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-clock')body=`<h2>Set game time</h2><p>Adjust the game clock manually. The timer pauses when you save.</p><div class="manual-time-grid"><label>Minutes<input id="manual-minutes" class="input" type="number" inputmode="numeric" min="0" max="99" value="${Math.floor(data.live.seconds/60)}"></label><label>Seconds<input id="manual-seconds" class="input" type="number" inputmode="numeric" min="0" max="59" value="${Math.floor(data.live.seconds)%60}"></label><label>Milliseconds<input id="manual-millis" class="input" type="number" inputmode="numeric" min="0" max="999" value="${Math.round(data.live.seconds*1000)%1000}"></label></div><p>Below one minute the clock displays seconds and milliseconds.</p><button class="solid-btn" data-action="confirm-set-clock">Save game time</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-shot')body=`<h2>Set shot clock</h2><p>Manually set the shot clock time (0–99 seconds).</p><div class="form-group"><label>Seconds</label><input class="input" id="manual-shot" type="number" inputmode="numeric" min="0" max="99" value="${data.live.shot}"></div><button class="solid-btn" data-action="confirm-set-shot">Save shot clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='overlay-customize')body=`<h2>Scoreboard appearance</h2><p>These changes affect the video graphic, not your game scores or time.</p>${scoreSettings(true)}<button class="solid-btn" data-action="close-modal">Done</button>`;if(d.type==='add-mic')body=`<h2>Add microphone source</h2><p>Multiple microphone mixing is not yet available Android app, not in Chrome.</p><div class="form-group"><label>Microphone name</label><input class="input" id="new-mic-name" maxlength="50" placeholder="e.g. Court-side USB microphone"></div><button class="solid-btn" data-action="confirm-add-mic">Add source</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;return `<div class="modal-backdrop" data-action="close-modal"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(d.type)}"><div class="handle"></div>${body}</div></div>`}
+if(d.type==='sponsor-edit')body=`<h2>Edit Sponsor Name</h2><div class="form-group"><label for="sponsor-title">Sponsor name</label><input id="sponsor-title" class="input" type="text" maxlength="50" value="${esc(data.sponsors[d.i]?.name||'')}" placeholder="Enter sponsor name"></div><div class="img-sponsor-name-editor-actions"><button type="button" class="outline-btn" data-action="close-modal">Cancel</button><button type="button" class="solid-btn" data-action="save-sponsor">Save Name</button></div>`;if(d.type==='team-edit')body=`<h2>Edit team</h2><p>Change this team's display name and logo.</p><div class="form-group"><label>Team name</label><input id="edit-team-name" class="input" value="${esc(thisLeague()?.teams.find(t=>t.id===d.id)?.name)}"></div><label class="upload">${ic('upload')}<span>Replace team logo</span><input type="file" accept="image/*" data-upload="saved-team-${d.id}" hidden></label><button class="solid-btn" data-action="save-team" style="margin-top:18px">Save team</button>`;if(d.type==='reset')body=`<h2>Reset studio data?</h2><p>This deletes locally saved leagues, games, and scores from this device.</p><button class="solid-btn orange" data-action="confirm-reset">Reset studio data</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='reset-clock')body=`<h2>Reset the game clock?</h2><p>The game clock will pause and return to the configured quarter length. Scores and fouls stay unchanged.</p><button class="solid-btn" data-action="confirm-reset-clock">Reset clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-clock')body=`<h2>Set game time</h2><p>Adjust the game clock manually. The timer pauses when you save.</p><div class="manual-time-grid"><label>Minutes<input id="manual-minutes" class="input" type="number" inputmode="numeric" min="0" max="99" value="${Math.floor(data.live.seconds/60)}"></label><label>Seconds<input id="manual-seconds" class="input" type="number" inputmode="numeric" min="0" max="59" value="${Math.floor(data.live.seconds)%60}"></label><label>Milliseconds<input id="manual-millis" class="input" type="number" inputmode="numeric" min="0" max="999" value="${Math.round(data.live.seconds*1000)%1000}"></label></div><p>Below one minute the clock displays seconds and milliseconds.</p><button class="solid-btn" data-action="confirm-set-clock">Save game time</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-shot')body=`<h2>Set shot clock</h2><p>Manually set the shot clock time (0–99 seconds).</p><div class="form-group"><label>Seconds</label><input class="input" id="manual-shot" type="number" inputmode="numeric" min="0" max="99" value="${data.live.shot}"></div><button class="solid-btn" data-action="confirm-set-shot">Save shot clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='overlay-customize')body=`<h2>Scoreboard appearance</h2><p>These changes affect the video graphic, not your game scores or time.</p>${scoreSettings(true)}<button class="solid-btn" data-action="close-modal">Done</button>`;if(d.type==='add-mic')body=`<h2>Add microphone source</h2><p>Multiple microphone mixing is not yet available Android app, not in Chrome.</p><div class="form-group"><label>Microphone name</label><input class="input" id="new-mic-name" maxlength="50" placeholder="e.g. Court-side USB microphone"></div><button class="solid-btn" data-action="confirm-add-mic">Add source</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;return `<div class="modal-backdrop" data-action="close-modal"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(d.type)}"><div class="handle"></div>${body}</div></div>`}
 function goLeague(id){selectedLeagueId=id;data.selectedLeagueId=id;selectedEventId=null;data.selectedEventId=null;persist();navigate('league-detail')}
 function goEvent(id){selectedEventId=id;data.selectedEventId=id;const ev=data.events.find(e=>e.id===id);if(ev){selectedLeagueId=ev.leagueId;data.selectedLeagueId=ev.leagueId}persist();navigate('setup')}
 function saveDraft(){if(!draft.name.trim()){toast('Please enter the league name.');createStep=1;render(true);return}const names=draft.teams.map(t=>t.name.trim());if(names.some(n=>!n)||new Set(names.map(n=>n.toLowerCase())).size!==names.length){toast('Each team needs a different name.');createStep=2;render(true);return}const league={id:uid(),sport:draft.sport||activeSport(),name:draft.name.trim(),season:draft.season||'New season',logo:draft.logo||'',format:draft.format,teams:draft.teams.map(t=>({...t,name:t.name.trim()})),penalty:parseInt(draft.penalty),quarter:parseInt(draft.quarter)};data.leagues.push(league);data.options.sport=league.sport;selectedLeagueId=league.id;data.selectedLeagueId=league.id;if((league.sport||'basketball')==='basketball'){data.options.penalty=league.penalty;data.options.quarterMins=league.quarter}persist();draft=null;toastText='League created successfully';navigate('league-detail');setTimeout(()=>{toastText='';render(true)},1800)}
@@ -1037,7 +1184,11 @@ function pushUndo(){
   pickleballRallyMessage:live.pickleballRallyMessage});
  if(live.undo.length>40)live.undo.shift();
 }
-async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!data.options.fb,media=window.IMGMedia;let recording=null;
+async function finishBroadcast(){
+ if(offlineStopBusy||offlineStartBusy)return;
+ offlineStopBusy=true;
+ const offline=recordingMode(),wasFacebook=!!data.options.fb,media=window.IMGMedia;
+ let recording=null;
  if(wasFacebook)window.IMGFacebookLive?.stop?.();fbFields.streamKey='';
  if(offline){dialog={type:'recording-saving'};render(true);
   const snapshot={home:data.options.broadcast.homeName,away:data.options.broadcast.awayName,league:data.options.broadcast.leagueName,sport:activeSport(),scores:[...data.live.scores],homeLogo:data.options.broadcast.homeLogo,awayLogo:data.options.broadcast.awayLogo,platform:'offline'};
@@ -1052,6 +1203,7 @@ async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!dat
  persist();navigate('home');
  if(offline){await refreshOfflineClips();if(!recording?.saved)toast(recording?.error||'Recording could not be saved to phone.');}
  else toast(wasFacebook?'Facebook upload stopped; end the live video in Facebook Producer.':'Game session ended'+(ev?' · result saved':''));
+ offlineStopBusy=false;
 }
 
 async function remoteAction(name){
@@ -1140,20 +1292,12 @@ if(name.startsWith('setup-sport-')){
 if(name==='toggle-record-local'){o.recordLocal=!o.recordLocal;persist();return render(true)}
 if(name==='start-offline-recording')return startOfflineRecording();
 if(name==='offline-ready-back'){window.IMGMedia?.stopCamera?.();screen='setup';setupStep=3;history.pushState({screen},'','#/setup');return render(false)}
-if(name==='setup-record-offline'){
- if(l.active)return;
- o.yt=false;o.fb=false;o.tiktok=false;youtubeExpanded=false;fbExpanded=false;
- persist();screen='offline-ready';history.pushState({screen},'','#/offline-ready');
- render(false);
- // Open camera for framing only. Recording must NOT begin until Start Recording.
- if(window.IMGMedia?.canCamera?.())window.IMGMedia.openCamera({quality:o.quality,fps:o.fps})
-  .catch(e=>toast(window.IMGMedia?.readableError?.(e)||String(e)));
- return;
-}
+if(name==='setup-record-offline')return openNativeOfflineControls();
 if(name==='setup-destination-facebook'){
- o.fb=!o.fb;
- if(o.fb){o.yt=false;o.tiktok=false;fbExpanded=true;youtubeExpanded=false}
- else fbExpanded=false;
+ fbExpanded=!fbExpanded;
+ if(fbExpanded&&window.IMGFacebookLive?.status?.().phase==='sending'){
+  o.fb=true;o.yt=false;o.tiktok=false;
+ }
  persist();return render(true);
 }
 if(name==='setup-facebook-connect'){if(window.IMGFacebookLive?.status?.().phase==='sending'){window.IMGFacebookLive?.stop?.();fbFeedbackState='idle';fbMessage='';return render(true)}if(!fbFields.streamKey||fbFields.streamKey.length<10)return toast('Enter your Facebook stream key');return startFacebookBroadcast()}
@@ -1213,7 +1357,22 @@ if(name==='edit-scoreboard'){dialog={type:'overlay-customize'};return render(tru
 if(name==='notifications')return toast('No notifications.');
 if(name==='exit-setup'){window.IMGNativeChannel?.postMessage?.('img-orientation:auto');clearTimeout(fbAttemptTimer);fbAttemptTimer=null;if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false}fbFields.streamKey='';window.IMGMedia?.stopCamera?.();return navigate('home')}
 if(name==='enable-camera'){const media=window.IMGMedia;if(!media?.canCamera())return toast('Use HTTPS Chrome on your phone to enable the real camera.');return media.openCamera({quality:o.quality,fps:o.fps}).then(()=>{render(true);toast('Real camera preview enabled')}).catch(e=>toast(media.readableError(e)))}
-if(name==='refresh-recordings')return refreshOfflineClips();
+if(name==='refresh-recordings'){
+ window.IMGNativeChannel?.postMessage?.('img-saved-recordings');
+ return refreshOfflineClips();
+}
+if(name.startsWith('play-recording-')){
+ const id=name.slice('play-recording-'.length);
+ if(!offlineClips.some(c=>c.id===id))return toast('This recording was not saved on this device.');
+ return window.IMGMedia?.getClip(id).then(clip=>{
+  if(!clip?.blob)return toast('The recording file is unavailable.');
+  if(offlinePlaybackUrl){URL.revokeObjectURL(offlinePlaybackUrl);offlinePlaybackUrl=null;}
+  offlinePlaybackUrl=URL.createObjectURL(clip.blob);
+  dialog={type:'clip-playback',name:clip.metadata?.home&&clip.metadata?.away?
+   String(clip.metadata.home)+' vs '+String(clip.metadata.away):clip.name};
+  render(true);
+ }).catch(e=>toast(String(e?.message||'Unable to open recording.')));
+}
 if(name==='download-last-recording'){try{window.IMGMedia?.downloadClip(window.IMGMedia.latestClip());}catch(e){toast(e.message)}return}
 if(name.startsWith('download-recording-')){const id=name.slice('download-recording-'.length);return window.IMGMedia?.getClip(id).then(c=>{if(c)window.IMGMedia.downloadClip(c);else toast('Recording not found on this device.')}).catch(e=>toast(e.message))}
 if(name.startsWith('delete-recording-')){dialog={type:'delete-recording',id:name.slice('delete-recording-'.length)};return render(true)}
@@ -1221,7 +1380,12 @@ if(name==='confirm-delete-recording'){const id=dialog?.id;dialog=null;return win
 if(name.startsWith('open-native-recording-')){const id=name.slice('open-native-recording-'.length);if(nativeClips.some(c=>String(c.id)===id))window.IMGNativeChannel?.postMessage?.('native-open-recording:'+id);return}
 if(name==='open-recordings'){dialog=null;return navigate('recordings')}
 if(name==='exit-live'){dialog={type:'exit-live'};return render(true)}
-if(name==='close-modal'){dialog=null;return render(true)}
+if(name==='close-modal'){
+ if(dialog?.type==='clip-playback'&&offlinePlaybackUrl){
+  URL.revokeObjectURL(offlinePlaybackUrl);offlinePlaybackUrl=null;
+ }
+ dialog=null;return render(true)
+}
 if(name==='finish-broadcast')return finishBroadcast();
 if(name==='toggle-mic'){const m=o.micInputs.find(m=>m.id==='device');if(m)m.enabled=!m.enabled;o.mic=Boolean(m?.enabled);persist();return render(true)}
 if(name==='instant-live'){setupStep=0;selectedEventId=null;data.selectedEventId=null;selectedLeagueId=null;data.selectedLeagueId=null;persist();return navigate('setup')}
@@ -1284,9 +1448,10 @@ if(name==='toggle-facebook-panel'){
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
 if(name==='destination-yt'){
- o.yt=!o.yt;
- if(o.yt){o.fb=false;o.tiktok=false;youtubeExpanded=true;fbExpanded=false}
- else {youtubeExpanded=false;youtubeFeedback=''}
+ youtubeExpanded=!youtubeExpanded;
+ if(youtubeExpanded&&window.IMGAccounts?.getStatus?.().youtube==='connected'){
+  o.yt=true;o.fb=false;o.tiktok=false;
+ }
  persist();return render(true);
 }
 
@@ -1304,19 +1469,20 @@ if(name==='youtube-connect'){
  // rather than opening duplicate browsers or invalidating that pairing.
  return (pending?accounts.verifyPairing('youtube'):accounts.connect('youtube'))
   .then(state=>{youtubeConnectBusy=false;
+   if(accounts.getStatus?.().youtube==='connected'&&!o.fb){o.yt=true;o.tiktok=false;persist();}
    if(pending&&state==='pending')toast('Finish Google sign-in to connect YouTube.');
    render(true)})
   .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
 }
 if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
-if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;persist();render(true);return startPrivateYouTubeFromStudio()}
+
 if(name==='youtube-disconnect'){
  if(!confirm('Disconnect YouTube from IMG LIVE Studio?'))return;
  return window.IMGAccounts?.disconnect('youtube').then(()=>{o.yt=false;persist();render(true)}).catch(e=>toast(e.message))
 }
 if(name.startsWith('destination-')){const p=name.slice(12);if(p==='tiktok')return toast('TikTok broadcasting is not available yet.');if(p==='fb')return; return toast('This platform is unavailable.')}
 if(name==='start-broadcast'){
- if(o.yt&&!youtubeAudience){dialog={type:'youtube-classification'};return render(true)}
+ if(o.yt&&!youtubeAudience)return toast('Choose Made for kids or Not made for kids in Step 4, Stream Details.');
  if(o.yt&&!profileSupported(o.quality,Number(o.fps))){
   return toast('Selected video quality is unsupported by this phone’s H.264 encoder.');
  }
@@ -1343,6 +1509,12 @@ if(name.startsWith('possession-')){l.possession=parseInt(name.slice(-1));persist
 if(name==='toggle-sponsors'){sponsorOpen=!sponsorOpen;return render(true)}
 if(name==='sponsor-add'){data.sponsors.push({name:'NEW SPONSOR',img:''});persist();sponsorOpen=true;return render(true)}
 if(name.startsWith('sponsor-up-')){const i=parseInt(name.slice(11));if(i>0)[data.sponsors[i-1],data.sponsors[i]]=[data.sponsors[i],data.sponsors[i-1]];persist();return render(true)}
+if(name.startsWith('sponsor-clear-img-')){
+ const i=Number(name.slice('sponsor-clear-img-'.length));
+ if(!Number.isInteger(i)||i<0||i>=data.sponsors.length)return;
+ data.sponsors[i].img='';
+ persist();return render(true);
+}
 if(name.startsWith('sponsor-remove-')){if(data.sponsors.length>1){const removed=data.sponsors.splice(parseInt(name.slice(15)),1)[0];if(removed?.video?.startsWith('blob:')){window.IMGMedia?.releaseSponsorVideo?.(removed.video);URL.revokeObjectURL(removed.video);}}l.slideIndex=0;persist();return render(true)}
 if(name.startsWith('sponsor-edit-')){dialog={type:'sponsor-edit',i:parseInt(name.slice(13))};return render(true)}
 if(name==='save-sponsor'){const n=$('#sponsor-title')?.value?.trim();if(n){data.sponsors[dialog.i].name=n;dialog=null;persist();render(true)}else toast('Sponsor name is required.');return}
@@ -1359,7 +1531,29 @@ if(name==='confirm-reset'){const d=defaults();Object.keys(data).forEach(k=>delet
 function setOption(input){const [k,v]=input.split(':');if(k==='overlayColor'&&!/^#[0-9a-fA-F]{6}$/.test(v))return;
 if(k==='overlay'&&!SCOREBOARD_IDS.includes(v))return;
 if(k==='overlayPosition')return;
-if(k==='overlay')data.options.overlayPosition=graphicIsCompact(v)?'bottom-right':'bottom-center';if(k==='orientation'){if(data.live.active){toast('Orientation is locked during broadcasting.');return}if(streetballActive()&&v!=='portrait'){toast('Streetball uses portrait orientation. Select Regular game for landscape.');return}data.options.orientation=v;if(!streetballActive())data.options.regularOrientation=v;persist();render(true);return requestOrientation(v)}data.options[streetballActive()&&k==='overlayColor'?'streetOverlayColor':k]=['penalty','slideSecs','quarterMins','fps'].includes(k)?Number(v):v;persist();render(true)}
+if(k==='overlay')data.options.overlayPosition=graphicIsCompact(v)?'bottom-right':'bottom-center';if(k==='overlay'&&screen==='setup'&&setupStep===1){
+  data.options.overlay=v;persist();
+  // Keep the exact scroll and pointer position; change only graphic state.
+  document.querySelectorAll('.graphics-pack[data-set^="overlay:"]').forEach(button=>{
+   const active=button.dataset.set==='overlay:'+v;
+   button.classList.toggle('active',active);
+   button.setAttribute('aria-pressed',String(active));
+   const selectedIcon=button.querySelector('.graphics-selected-check');
+   if(!active&&selectedIcon)selectedIcon.remove();
+   if(active&&!selectedIcon){
+    const marker=document.createElement('span');
+    marker.className='graphics-selected-check';
+    marker.innerHTML=ic('check',15);
+    button.querySelector('.graphics-copy strong')?.after(marker);
+   }
+  });
+  document.querySelectorAll('.img-wizard-score-fallback').forEach(img=>{
+   const artwork=realGraphicsThumbnails[v];
+   if(artwork){img.src=artwork;img.hidden=false}else img.hidden=true;
+  });
+  window.IMGMedia?.paintSetupScoreboard?.();
+  return;
+ }if(k==='orientation'){if(data.live.active){toast('Orientation is locked during broadcasting.');return}if(streetballActive()&&v!=='portrait'){toast('Streetball uses portrait orientation. Select Regular game for landscape.');return}data.options.orientation=v;if(!streetballActive())data.options.regularOrientation=v;persist();render(true);return requestOrientation(v)}data.options[streetballActive()&&k==='overlayColor'?'streetOverlayColor':k]=['penalty','slideSecs','quarterMins','fps'].includes(k)?Number(v):v;persist();render(true)}
 let orientationRequestId=0;
 async function requestOrientation(mode,liveStart=false){const req=++orientationRequestId;
  if(window.IMGNativeChannel?.postMessage){
@@ -1382,6 +1576,7 @@ if(activeSport()==='pickleball'&&target.hasAttribute('data-score')){
 }
 if(target.hasAttribute('data-score')||target.hasAttribute('data-foul')){const raw=target.dataset.score||target.dataset.foul,[i,d]=raw.split(':').map(Number);if(target.hasAttribute('data-score')){scoreFlashTeam=i;scoreFlashAt=Date.now()}pushUndo();const arr=target.hasAttribute('data-score')?data.live.scores:data.live.fouls;arr[i]=Math.max(0,arr[i]+d);persist();return render(true)}
 });
+let scoreboardSizeFrame=0;
 document.addEventListener('input',e=>{const t=e.target;
  if(t.dataset.facebookField==='streamKey'){
   fbFields.streamKey=t.value;
@@ -1412,7 +1607,26 @@ document.addEventListener('input',e=>{const t=e.target;
   document.querySelectorAll('[data-street-vertical-output]').forEach(el=>el.textContent=Math.round(y*100)+'%');
   persist();window.IMGMedia?.paintStreetballPreview?.();return;
  }
-if(t.dataset.scoreRange){const street=streetballActive(),prop=t.dataset.scoreRange==='size'?(street?'streetOverlaySize':'overlaySize'):(street?'streetOverlayOpacity':'overlayOpacity'),v=Math.round(Number(t.value));data.options[prop]=v;persist();document.querySelectorAll('[data-score-range-output="'+t.dataset.scoreRange+'"]').forEach(el=>el.textContent=v+'%');document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--overlay-size':'--overlay-opacity',v/100));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty(t.dataset.scoreRange==='size'?'--street-size':'--street-alpha',t.dataset.scoreRange==='size'?Math.max(.32,Math.min(1.45,v/60)):v/100));window.IMGMedia?.paintStreetballPreview?.();window.IMGMedia?.paintBroadcastPreview?.();return}
+if(t.dataset.scoreRange){
+ const street=streetballActive(),isSize=t.dataset.scoreRange==='size';
+ const prop=isSize?(street?'streetOverlaySize':'overlaySize'):(street?'streetOverlayOpacity':'overlayOpacity');
+ const v=Math.round(Number(t.value));data.options[prop]=v;
+ document.querySelectorAll('[data-score-range-output="'+t.dataset.scoreRange+'"]').forEach(el=>el.textContent=v+'%');
+ if(screen==='setup'&&setupStep===1){
+  // One screen-owned bitmap; repaint at most once per animation frame.
+  // Don't force localStorage writes, camera repaints or DOM rebuilds on drag.
+  if(!scoreboardSizeFrame)scoreboardSizeFrame=requestAnimationFrame(()=>{
+   scoreboardSizeFrame=0;window.IMGMedia?.paintSetupScoreboard?.();
+  });
+  return;
+ }
+ persist();
+ document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty(isSize?'--overlay-size':'--overlay-opacity',v/100));
+ document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty(isSize?'--street-size':'--street-alpha',isSize?Math.max(.32,Math.min(1.45,v/60)):v/100));
+ window.IMGMedia?.paintStreetballPreview?.();
+ window.IMGMedia?.paintBroadcastPreview?.();
+ return;
+}
 if(t.dataset.scoreColor){data.options[streetballActive()?'streetOverlayColor':'overlayColor']=t.value;persist();document.querySelectorAll('.scorebug,.pickle-scorebug').forEach(el=>el.style.setProperty('--overlay-accent',t.value));document.querySelectorAll('.streetball-score-overlay').forEach(el=>el.style.setProperty('--street-accent',t.value));window.IMGMedia?.paintStreetballPreview?.();return}
 if(t.dataset.streetPlayer){
  const [side,slot]=t.dataset.streetPlayer.split(':').map(Number),p=data.options.streetPlayers?.[side]?.[slot];
@@ -1438,11 +1652,8 @@ document.addEventListener('change',async e=>{const t=e.target;
   data.options.streetWinTarget=points;persist();return render(true);
  }
  if(t.dataset.streetVertical||t.dataset.streetHorizontal){persist();return}
-if(t.dataset.graphicsCheck){
- if(t.dataset.graphicsCheck==='overlayAnimated'){data.options.overlayAnimated=!!t.checked;persist();return render(true)}return;
-}
-if(t.dataset.graphicsRange){persist();return render(true)}
-if(t.dataset.scoreRange||t.dataset.scoreColor){persist();return render(true)}if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}if(!t.dataset.upload||!t.files?.[0])return;const file=t.files[0];
+if(t.dataset.graphicsRange){persist();return}
+if(t.dataset.scoreRange||t.dataset.scoreColor){persist();window.IMGMedia?.paintSetupScoreboard?.();return}if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}if(!t.dataset.upload||!t.files?.[0])return;const file=t.files[0];
 if(t.dataset.upload.startsWith('street-')){
  const match=/^street-([01])-([01])$/.exec(t.dataset.upload);if(!match)return;
  if(!file.type.startsWith('image/'))return toast('Choose a photo image.');
@@ -1463,7 +1674,7 @@ if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(
 function keepKeyboardFieldVisible(){
  const el=document.activeElement;
  if(!isTypingControl(el))return;
- const pane=el.closest?.('.setup-quick-teams, .setup-landscape-settings, .scroll-controls, .content, .page');
+ const pane=el.closest?.('.img-wizard-scroll, .setup-quick-teams, .setup-landscape-settings, .scroll-controls, .content, .page');
  if(!pane)return;
  // Never scroll the left container: its top child is the live camera.
  const left=el.closest?.('.setup-landscape-left');
@@ -1576,7 +1787,18 @@ window.addEventListener('resize',()=>{
  }else keyboardBaseHeight=Math.max(keyboardBaseHeight,window.visualViewport?.height||window.innerHeight);
 });
 window.IMGAccounts?.subscribe?.(status=>{
- if(screen!=='setup'||!youtubeExpanded)return;
+ if(screen!=='setup')return;
+ if(setupStep===3&&status.youtube==='connected'){
+  // A just-authorized account becomes the selected streaming destination.
+  // Folding its connection controls must not turn it off again.
+  if(!data.options.yt&&!data.options.fb){
+   data.options.yt=true;data.options.tiktok=false;persist();
+  }
+  const youtubeDetails=[...document.querySelectorAll('.img-wizard-provider-title')]
+   .some(el=>el.textContent?.includes('YouTube'));
+  if(!youtubeDetails){render(true);return;}
+ }
+ if(!youtubeExpanded)return;
  const label=document.querySelector('#youtube-destination .broadcast-youtube-status');
  if(label){label.textContent=status.youtube==='connected'?'Connected':status.youtube==='verifying'?'Checking account…':
   status.youtube==='authorization-pending'?'Finish Google sign-in':'Not connected';
