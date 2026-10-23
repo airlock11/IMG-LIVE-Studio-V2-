@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.io.File
 import android.graphics.Bitmap
-import android.graphics.Canvas
 
 /** The real bundled WebView must show the four-stage IMG operator wizard, not camera setup. */
 @RunWith(AndroidJUnit4::class)
@@ -55,21 +54,15 @@ class BroadcastSettingsUiTest {
   }
  }
  private fun capture(activity:android.app.Activity,step:Int,part:String=""){
-  val latch=CountDownLatch(1)
   val target=File(activity.filesDir,"img-v2-wizard-step"+step+(if(part.isBlank())"" else "-"+part)+".png")
-  activity.runOnUiThread {
-   try{
-    val root=activity.window.decorView
-    if(root.width>0&&root.height>0){
-     val bitmap=Bitmap.createBitmap(root.width,root.height,Bitmap.Config.ARGB_8888)
-     root.draw(Canvas(bitmap))
-     target.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
-     bitmap.recycle()
-    }
-   }finally{latch.countDown()}
-  }
-  assertTrue("Screenshot capture timed out",latch.await(12,TimeUnit.SECONDS))
-  assertTrue("Step "+step+" screenshot was not saved",target.exists()&&target.length()>0)
+  // WebView is hardware-composited: View.draw(Canvas) can return the PREVIOUS
+  // frame after a successful navigation. Read the actual Android display.
+  SystemClock.sleep(600)
+  val bitmap=InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+  assertTrue("Android could not capture displayed Step "+step,bitmap!=null)
+  target.outputStream().use{bitmap!!.compress(Bitmap.CompressFormat.PNG,100,it)}
+  bitmap!!.recycle()
+  assertTrue("Step "+step+" screenshot missing",target.exists()&&target.length()>0)
  }
  @Test fun fourStepSetupHasNoCameraAndRealQualityControls(){
   val instrument=InstrumentationRegistry.getInstrumentation()
