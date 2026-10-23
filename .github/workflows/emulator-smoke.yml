@@ -29,6 +29,8 @@ jobs:
         run: |
           node --check backend/oauth-worker/src/index.js
           node --check app/src/main/assets/account-connections.js
+          node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/media.js
       - name: Assemble debug APK and real graphics instrumentation tests
         run: gradle :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM acceleration
@@ -53,6 +55,8 @@ jobs:
             grep -q '^OK (' img-v2-graphics-tests.txt
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-native-graphics.png > img-v2-native-graphics.png
             test -s img-v2-native-graphics.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-three-digit.png > img-v2-three-digit.png
+            test -s img-v2-three-digit.png
             adb shell am start -n com.imgofficial.livestudio.v2/.MainActivity
             sleep 18
             adb shell pidof com.imgofficial.livestudio.v2
@@ -77,5 +81,6 @@ jobs:
             img-v2-emulator.png
             img-v2-graphics-tests.txt
             img-v2-native-graphics.png
+            img-v2-three-digit.png
             img-v2-ui.xml
             img-v2-logcat.txt
