@@ -75,7 +75,7 @@ class BroadcastGraphicsRendererTest {
    fitted.recycle()
    image.recycle()
   }
-  val file=File(context.getExternalFilesDir(null),"img-v2-native-graphics.png")
+  val file=File(context.filesDir,"img-v2-native-graphics.png")
   FileOutputStream(file).use{gallery.compress(Bitmap.CompressFormat.PNG,100,it)}
   gallery.recycle()
   assertTrue("Native renderer visual regression must exist",file.isFile&&file.length()>5000L)
