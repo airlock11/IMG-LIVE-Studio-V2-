@@ -1892,3 +1892,21 @@ html.img-native-app .fab{box-shadow:0 5px 16px rgba(0,0,0,.16)}
 .graphics-switch-row input{width:22px;height:22px;accent-color:#39b886}
 @media (max-width:370px){.graphics-art{height:36px}.graphics-positions{grid-template-columns:repeat(2,1fr)}.graphics-geometry{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.graphics-art .shine{animation:none}}
+
+
+/* True on-air graphics previews drawn by Android's native renderer. */
+.graphics-pack .graphics-art{display:flex;align-items:center;justify-content:center;
+ background:radial-gradient(ellipse at center,#172028,#070d11 76%);
+ border:0;border-radius:8px;isolation:auto;overflow:hidden;min-height:60px;height:75px;
+ box-shadow:inset 0 1px #ffffff16,0 3px 11px #0008}
+.graphics-pack .graphics-art::before{display:none}
+.graphics-pack .graphics-art img{display:block;max-width:100%;height:100%;width:100%;
+ object-fit:contain;filter:drop-shadow(0 2px 3px #0008)}
+.graphics-pack .graphics-art small{font-size:10px;color:#9cb7ac;font-weight:700}
+.graphics-pack .graphics-art:not(.has-renderer-preview) .shine{display:none}
+.graphics-pack .graphics-art.style-split-box,
+.graphics-pack .graphics-art.style-match-cube,
+.graphics-pack .graphics-art.style-edge-box,
+.graphics-pack .graphics-art.style-legacy-tv{
+ width:100%;height:100px;margin:0;background:radial-gradient(ellipse at center,#172028,#070d11 76%);border:0;border-radius:8px}
+.graphics-pack:focus-visible{outline:2px solid #7bf4b3;outline-offset:2px}
