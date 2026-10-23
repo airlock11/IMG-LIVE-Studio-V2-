@@ -1990,3 +1990,12 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
   display:none!important
  }
 }
+
+/* While the name keyboard is open, preserve the earlier compact preview size. */
+@media (orientation:portrait){
+ html.img-native-app body.img-physical-portrait.img-keyboard-active
+ .app.headerless-setup-app:not(.immersive-setup-app)
+ .studio-page:not(.setup-landscape-page)>.preview-wrap>.camera{
+  height:96px!important;min-height:96px!important;max-height:96px!important
+ }
+}
