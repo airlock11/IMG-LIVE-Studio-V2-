@@ -272,11 +272,15 @@ class BroadcastSettingsUiTest {
    // appears. Expanding the YouTube row alone never starts Google OAuth.
    assertEquals("No premature Connecting below Connect","false",js(activity,web,
     "Boolean(document.querySelector('#youtube-destination .img-wizard-platform-error'))"))
-   assertEquals("Clicking Offline Recording opens Broadcasting ready state","true",js(activity,web,
+   assertEquals("Offline Recording action is available in Step 4","true",js(activity,web,
     "Boolean(document.querySelector('[data-action=setup-record-offline]'))"))
+   assertEquals("Opening offline controls must NOT start recording","false",js(activity,web,
+    "Boolean(window.IMGMedia?.isRecording?.())"))
    click(activity,web,"setup-record-offline")
-   waitFor(activity,web,"Boolean(document.querySelector('[data-action=start-offline-recording]'))")
-   assertEquals("Offline entry must NOT start recording","false",js(activity,web,
+   // The actual native operator Activity is launched, not a fake WebView
+   // offline-ready screen; its RECORD button requires an explicit tap.
+   SystemClock.sleep(700)
+   assertEquals("No WebView recording was auto-started","false",js(activity,web,
     "Boolean(window.IMGMedia?.isRecording?.())"))
 
   }finally{
@@ -317,3 +321,6 @@ class BroadcastSettingsUiTest {
   }
  }
 }
+
+// Native offline uses the existing Android scoreboard and controls, without
+// requiring a YouTube draft. An actual camera/encoder cycle is for phone QA.
