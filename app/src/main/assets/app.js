@@ -104,7 +104,8 @@ function applyAppearance(){
  if(meta)meta.setAttribute('content',theme==='dark'?'#10191f':'#f8f6f2');
 }
 applyAppearance();
-let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
+let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;
+let offlineStartBusy=false,offlineStopBusy=false,offlinePlaybackUrl=null;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
 let youtubeExpanded=false,youtubeBusy=false,youtubeConnectBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
 let fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''},fbConnecting=false,fbExpanded=false,fbMessage='',fbGeneration=0,fbAttemptTimer=null,fbFeedbackState='idle';
@@ -405,11 +406,14 @@ function recordings(){
  (nativeClips.length?'':'<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>'))+'</main>';
 }
 async function startOfflineRecording(){
+ if(offlineStartBusy||offlineStopBusy||data.live.active||screen!=='offline-ready')return;
+ offlineStartBusy=true;
  const media=window.IMGMedia;
- if(!media?.canCamera())return toast('Camera is unavailable. Use HTTPS Chrome on a device with a camera.');
+ if(!media?.canCamera()){offlineStartBusy=false;return toast('Camera is unavailable. Allow access on this Android device.');}
  const o=data.options,l=data.live;
  try{
   await media.openCamera({quality:o.quality,fps:o.fps});
+  if(screen!=='offline-ready'){media.stopCamera();return;}
   if(!recordOnly())return toast('Recording mode requires every broadcast destination to be off.');
   const opts={quality:o.quality,orientation:o.orientation,fps:o.fps,microphone:o.micInputs?.some(x=>x.type==='device'&&x.enabled)};
   const result=await media.startRecording(recordingState,opts);
@@ -420,7 +424,8 @@ async function startOfflineRecording(){
   persist();screen='live';history.pushState({screen},'','#/live');render(false);
   requestOrientation(o.orientation,true);
   if(opts.microphone&&!result.audio)toast('Recording started without mic audio. Check microphone permission.');
- }catch(e){toast(media.readableError(e));}
+ }catch(e){media?.stopCamera?.();toast(media?.readableError?.(e)||String(e));}
+ finally{offlineStartBusy=false;}
 }
 
 function home(){const upcomingEvents=upcoming(),leagues=sportLeagues();const savedStreams=[...offlineClips.filter(c=>c.saved===true),...nativeClips.map(c=>({...c,native:true,metadata:{home:c.home,away:c.away,homeLogo:c.homeLogo,awayLogo:c.awayLogo,scores:c.scores,platform:c.platform,sport:c.sport}}))].filter(c=>Number.isFinite(Number(c.createdAt))&&Number(c.createdAt)>0).sort((a,b)=>b.createdAt-a.createdAt);return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
@@ -1098,7 +1103,7 @@ function resetForNewBroadcast(){
 }
 
 function navigate(where){if(where!=='remote'){remoteApi()?.stopScan?.();remoteScanning=false;window.IMGRemoteConsole?.exitLandscape?.()}if(where==='recordings')refreshOfflineClips();if(screen==='setup'&&where!=='setup'&&where!=='live'&&!data.live.active)window.IMGMedia?.stopCamera?.();if(data.live.active&&where!=='live'){dialog={type:'exit-live'};return render(true)}if(where==='add-game'){startNewGame();return}screen=where;if(where==='create'){draft=newDraft();createStep=0}if(where==='league-detail'&&!thisLeague()){screen='leagues'}if(where==='setup'&&screen!=='setup')resetForNewBroadcast();if(where==='setup'){setupStep=0;queueRemotePublish();}history.pushState({screen},'', '#/'+screen);render(false)}
-function modal(){if(!dialog)return '';const d=dialog;let body='';if(d.type==='remote-manager')body=`<h2>Remote scoring</h2>${remoteHostPanel()}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;if(d.type==='sport-switch')body=`<div class="sport-switch-heading"><span class="eyebrow">IMG LIVE STUDIO</span><h2>Choose your sport</h2><p>Choose a sport to set up its leagues, events and broadcast controls.</p></div><div class="sport-choice-list">${SPORTS.map(s=>`<button class="sport-choice ${activeSport()===s.id?'active':''}" data-action="select-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="sport-choice-icon sport-choice-${s.id}">${ic(s.icon,28)}</span><span class="sport-choice-copy"><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?`<span class="sport-choice-selected">${ic('check',18)}</span>`:ic('arrow',18)}</button>`).join('')}</div><p class="sport-more-coming">${ic('plus',14)} More sports coming soon</p>`;if(d.type==='exit-live')body=`<h2>${recordingMode()?'Stop and save recording?':'End game session?'}</h2><p>${recordingMode()?'The recording will stop, be saved in this browser if storage is available, and you can download the video file.':'This ends the scoring session. Stop any separate native upload from its broadcast controls.'}</p>${selectedEventId?'<p>The game result will be saved to the selected event.</p>':''}<button class="solid-btn" data-action="finish-broadcast">${ic('check',18)} ${recordingMode()?'STOP & SAVE':'End game session'}</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Keep broadcasting</button>`;if(d.type==='recording-saving')body=`<h2>Saving recording...</h2><p>Please wait while the video is finalized and stored on your device.</p>`;
+function modal(){if(!dialog)return '';const d=dialog;let body='';if(d.type==='remote-manager')body=`<h2>Remote scoring</h2>${remoteHostPanel()}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;if(d.type==='clip-playback')body=`<h2>${esc(d.name||'Saved recording')}</h2><video class="img-local-recording-player" controls playsinline preload="metadata" src="${esc(offlinePlaybackUrl||'')}">Your phone cannot play this MP4 recording.</video><button class="outline-btn" data-action="close-modal">Close</button>`;if(d.type==='sport-switch')body=`<div class="sport-switch-heading"><span class="eyebrow">IMG LIVE STUDIO</span><h2>Choose your sport</h2><p>Choose a sport to set up its leagues, events and broadcast controls.</p></div><div class="sport-choice-list">${SPORTS.map(s=>`<button class="sport-choice ${activeSport()===s.id?'active':''}" data-action="select-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="sport-choice-icon sport-choice-${s.id}">${ic(s.icon,28)}</span><span class="sport-choice-copy"><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?`<span class="sport-choice-selected">${ic('check',18)}</span>`:ic('arrow',18)}</button>`).join('')}</div><p class="sport-more-coming">${ic('plus',14)} More sports coming soon</p>`;if(d.type==='exit-live')body=`<h2>${recordingMode()?'Stop and save recording?':'End game session?'}</h2><p>${recordingMode()?'The recording will stop, be saved in this browser if storage is available, and you can download the video file.':'This ends the scoring session. Stop any separate native upload from its broadcast controls.'}</p>${selectedEventId?'<p>The game result will be saved to the selected event.</p>':''}<button class="solid-btn" data-action="finish-broadcast">${ic('check',18)} ${recordingMode()?'STOP & SAVE':'End game session'}</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Keep broadcasting</button>`;if(d.type==='recording-saving')body=`<h2>Saving recording...</h2><p>Please wait while the video is finalized and stored on your device.</p>`;
 if(d.type==='recording-finished')body=`<h2>${d.clip?.saved?'Recording saved offline':'Recording ready'}</h2><p>${d.clip?.saved?'This recording is saved in this browser on your device.':'Browser storage could not save the file; download it now to your phone.'} ${d.clip?.error?esc(d.clip.error):''}</p>${d.clip?.name?`<p class="recording-file-name">${esc(d.clip.name)}</p><button class="solid-btn orange" data-action="download-last-recording">${ic('video',16)} Download video</button>`:'<p>Recording data could not be created. Please try again.</p>'}${d.clip?.saved?'<button class="outline-btn" data-action="open-recordings" style="width:100%;margin-top:8px">View saved recordings</button>':''}<button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Close</button>`;
 if(d.type==='delete-recording')body=`<h2>Delete offline recording?</h2><p>This permanently removes the browser-local copy. Download any videos you want to keep first.</p><button class="solid-btn orange" data-action="confirm-delete-recording">Delete recording</button><button class="outline-btn" data-action="close-modal" style="width:100%;margin-top:8px">Cancel</button>`;
 if(d.type==='sponsor-edit')body=`<h2>Edit Sponsor Name</h2><div class="form-group"><label for="sponsor-title">Sponsor name</label><input id="sponsor-title" class="input" type="text" maxlength="50" value="${esc(data.sponsors[d.i]?.name||'')}" placeholder="Enter sponsor name"></div><div class="img-sponsor-name-editor-actions"><button type="button" class="outline-btn" data-action="close-modal">Cancel</button><button type="button" class="solid-btn" data-action="save-sponsor">Save Name</button></div>`;if(d.type==='team-edit')body=`<h2>Edit team</h2><p>Change this team's display name and logo.</p><div class="form-group"><label>Team name</label><input id="edit-team-name" class="input" value="${esc(thisLeague()?.teams.find(t=>t.id===d.id)?.name)}"></div><label class="upload">${ic('upload')}<span>Replace team logo</span><input type="file" accept="image/*" data-upload="saved-team-${d.id}" hidden></label><button class="solid-btn" data-action="save-team" style="margin-top:18px">Save team</button>`;if(d.type==='reset')body=`<h2>Reset studio data?</h2><p>This deletes locally saved leagues, games, and scores from this device.</p><button class="solid-btn orange" data-action="confirm-reset">Reset studio data</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='reset-clock')body=`<h2>Reset the game clock?</h2><p>The game clock will pause and return to the configured quarter length. Scores and fouls stay unchanged.</p><button class="solid-btn" data-action="confirm-reset-clock">Reset clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-clock')body=`<h2>Set game time</h2><p>Adjust the game clock manually. The timer pauses when you save.</p><div class="manual-time-grid"><label>Minutes<input id="manual-minutes" class="input" type="number" inputmode="numeric" min="0" max="99" value="${Math.floor(data.live.seconds/60)}"></label><label>Seconds<input id="manual-seconds" class="input" type="number" inputmode="numeric" min="0" max="59" value="${Math.floor(data.live.seconds)%60}"></label><label>Milliseconds<input id="manual-millis" class="input" type="number" inputmode="numeric" min="0" max="999" value="${Math.round(data.live.seconds*1000)%1000}"></label></div><p>Below one minute the clock displays seconds and milliseconds.</p><button class="solid-btn" data-action="confirm-set-clock">Save game time</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='set-shot')body=`<h2>Set shot clock</h2><p>Manually set the shot clock time (0–99 seconds).</p><div class="form-group"><label>Seconds</label><input class="input" id="manual-shot" type="number" inputmode="numeric" min="0" max="99" value="${data.live.shot}"></div><button class="solid-btn" data-action="confirm-set-shot">Save shot clock</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;if(d.type==='overlay-customize')body=`<h2>Scoreboard appearance</h2><p>These changes affect the video graphic, not your game scores or time.</p>${scoreSettings(true)}<button class="solid-btn" data-action="close-modal">Done</button>`;if(d.type==='add-mic')body=`<h2>Add microphone source</h2><p>Multiple microphone mixing is not yet available Android app, not in Chrome.</p><div class="form-group"><label>Microphone name</label><input class="input" id="new-mic-name" maxlength="50" placeholder="e.g. Court-side USB microphone"></div><button class="solid-btn" data-action="confirm-add-mic">Add source</button><button class="outline-btn" style="width:100%;margin-top:8px" data-action="close-modal">Cancel</button>`;return `<div class="modal-backdrop" data-action="close-modal"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(d.type)}"><div class="handle"></div>${body}</div></div>`}
@@ -1114,7 +1119,11 @@ function pushUndo(){
   pickleballRallyMessage:live.pickleballRallyMessage});
  if(live.undo.length>40)live.undo.shift();
 }
-async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!data.options.fb,media=window.IMGMedia;let recording=null;
+async function finishBroadcast(){
+ if(offlineStopBusy||offlineStartBusy)return;
+ offlineStopBusy=true;
+ const offline=recordingMode(),wasFacebook=!!data.options.fb,media=window.IMGMedia;
+ let recording=null;
  if(wasFacebook)window.IMGFacebookLive?.stop?.();fbFields.streamKey='';
  if(offline){dialog={type:'recording-saving'};render(true);
   const snapshot={home:data.options.broadcast.homeName,away:data.options.broadcast.awayName,league:data.options.broadcast.leagueName,sport:activeSport(),scores:[...data.live.scores],homeLogo:data.options.broadcast.homeLogo,awayLogo:data.options.broadcast.awayLogo,platform:'offline'};
@@ -1129,6 +1138,7 @@ async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!dat
  persist();navigate('home');
  if(offline){await refreshOfflineClips();if(!recording?.saved)toast(recording?.error||'Recording could not be saved to phone.');}
  else toast(wasFacebook?'Facebook upload stopped; end the live video in Facebook Producer.':'Game session ended'+(ev?' · result saved':''));
+ offlineStopBusy=false;
 }
 
 async function remoteAction(name){
@@ -1291,7 +1301,22 @@ if(name==='edit-scoreboard'){dialog={type:'overlay-customize'};return render(tru
 if(name==='notifications')return toast('No notifications.');
 if(name==='exit-setup'){window.IMGNativeChannel?.postMessage?.('img-orientation:auto');clearTimeout(fbAttemptTimer);fbAttemptTimer=null;if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false}fbFields.streamKey='';window.IMGMedia?.stopCamera?.();return navigate('home')}
 if(name==='enable-camera'){const media=window.IMGMedia;if(!media?.canCamera())return toast('Use HTTPS Chrome on your phone to enable the real camera.');return media.openCamera({quality:o.quality,fps:o.fps}).then(()=>{render(true);toast('Real camera preview enabled')}).catch(e=>toast(media.readableError(e)))}
-if(name==='refresh-recordings')return refreshOfflineClips();
+if(name==='refresh-recordings'){
+ window.IMGNativeChannel?.postMessage?.('img-saved-recordings');
+ return refreshOfflineClips();
+}
+if(name.startsWith('play-recording-')){
+ const id=name.slice('play-recording-'.length);
+ if(!offlineClips.some(c=>c.id===id))return toast('This recording was not saved on this device.');
+ return window.IMGMedia?.getClip(id).then(clip=>{
+  if(!clip?.blob)return toast('The recording file is unavailable.');
+  if(offlinePlaybackUrl){URL.revokeObjectURL(offlinePlaybackUrl);offlinePlaybackUrl=null;}
+  offlinePlaybackUrl=URL.createObjectURL(clip.blob);
+  dialog={type:'clip-playback',name:clip.metadata?.home&&clip.metadata?.away?
+   String(clip.metadata.home)+' vs '+String(clip.metadata.away):clip.name};
+  render(true);
+ }).catch(e=>toast(String(e?.message||'Unable to open recording.')));
+}
 if(name==='download-last-recording'){try{window.IMGMedia?.downloadClip(window.IMGMedia.latestClip());}catch(e){toast(e.message)}return}
 if(name.startsWith('download-recording-')){const id=name.slice('download-recording-'.length);return window.IMGMedia?.getClip(id).then(c=>{if(c)window.IMGMedia.downloadClip(c);else toast('Recording not found on this device.')}).catch(e=>toast(e.message))}
 if(name.startsWith('delete-recording-')){dialog={type:'delete-recording',id:name.slice('delete-recording-'.length)};return render(true)}
@@ -1299,7 +1324,12 @@ if(name==='confirm-delete-recording'){const id=dialog?.id;dialog=null;return win
 if(name.startsWith('open-native-recording-')){const id=name.slice('open-native-recording-'.length);if(nativeClips.some(c=>String(c.id)===id))window.IMGNativeChannel?.postMessage?.('native-open-recording:'+id);return}
 if(name==='open-recordings'){dialog=null;return navigate('recordings')}
 if(name==='exit-live'){dialog={type:'exit-live'};return render(true)}
-if(name==='close-modal'){dialog=null;return render(true)}
+if(name==='close-modal'){
+ if(dialog?.type==='clip-playback'&&offlinePlaybackUrl){
+  URL.revokeObjectURL(offlinePlaybackUrl);offlinePlaybackUrl=null;
+ }
+ dialog=null;return render(true)
+}
 if(name==='finish-broadcast')return finishBroadcast();
 if(name==='toggle-mic'){const m=o.micInputs.find(m=>m.id==='device');if(m)m.enabled=!m.enabled;o.mic=Boolean(m?.enabled);persist();return render(true)}
 if(name==='instant-live'){setupStep=0;selectedEventId=null;data.selectedEventId=null;selectedLeagueId=null;data.selectedLeagueId=null;persist();return navigate('setup')}
