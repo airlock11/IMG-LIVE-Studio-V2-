@@ -2159,3 +2159,63 @@ body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:c
 .img-wizard-save-team{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border-radius:11px;border:1px solid #427d67;background:#143d31;color:#76eeb5;min-height:43px;font-size:12px;font-weight:780;padding:10px}
 .img-wizard-recent-teams{margin:13px 0 0}
 .img-wizard-recent-teams .chip{font-size:11px;min-height:33px;padding:8px 11px}
+
+
+/* IMG V2 Oct 23: understated controls, full landscape on-air frame. */
+.img-wizard-head .img-wizard-back{
+ background:transparent!important;border:0!important;border-radius:0!important;
+ box-shadow:none!important;width:42px;height:42px;color:#f3f8f6;
+}
+.img-wizard-topline,.img-wizard-intro{display:none!important}
+.img-wizard-track{margin:12px 0 17px}
+.img-wizard-page .img-wizard-score-art{
+ width:100%;max-width:100%;aspect-ratio:16/9;min-height:0!important;
+ padding:0!important;border:1px solid #2f4845;border-radius:12px;
+ background:#101820;position:relative;overflow:hidden;display:block;
+}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{
+ display:block!important;position:absolute!important;inset:0!important;
+ width:100%!important;height:100%!important;max-height:none!important;
+ object-fit:contain!important;background:transparent;
+}
+.img-wizard-page .img-wizard-sticky-preview{
+ flex:0 0 auto;min-height:0;background:#10191f;padding:8px 18px;
+ border-top:1px solid #2b443d;z-index:70;
+}
+.img-wizard-page .img-wizard-sticky-preview[hidden]{display:none!important}
+.img-wizard-page .img-wizard-sticky-preview .img-wizard-score-art{
+ width:min(100%,390px);margin:0 auto;
+}
+.img-wizard-platform{
+ border:1px solid #33534e;border-radius:12px;
+ background:#102224;overflow:hidden;margin:0 0 9px;
+}
+.img-wizard-platform-trigger{
+ display:flex;width:100%;min-height:58px;align-items:center;gap:12px;
+ border:0;background:transparent;color:#f0f9f5;padding:12px 14px;
+ text-align:left;font-size:15px;cursor:pointer;
+}
+.img-wizard-platform-trigger strong{font-size:15px;flex:1}
+.img-wizard-platform-logo{width:28px;height:28px;flex:none}
+.img-wizard-mini-switch{
+ height:21px;width:39px;position:relative;flex:none;background:#53625e;
+ border-radius:18px;transition:background .18s ease;
+}
+.img-wizard-mini-switch:after{
+ content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;
+ background:#fff;border-radius:50%;transition:transform .18s ease;
+}
+.img-wizard-mini-switch.active{background:#24ce98}
+.img-wizard-mini-switch.active:after{transform:translateX(18px)}
+.img-wizard-platform-body{padding:0 13px 13px}
+.img-wizard-platform-body[hidden]{display:none!important}
+.img-wizard-platform-body>.outline-btn,.img-wizard-platform-body>.solid-btn{
+ display:block;width:100%;min-height:43px;margin:0;
+}
+.img-wizard-platform-error{display:block;color:#fbbaaa;font-size:11px;margin:9px 0 0}
+.img-wizard-switch-row{display:flex;align-items:center;justify-content:space-between;
+ min-height:56px;gap:12px;font-size:14px;color:#eef9f3}
+.img-wizard-switch-row+.img-wizard-switch-row{border-top:1px solid #324b45}
+.img-wizard-footer>.solid-btn{width:100%}
+.img-wizard-card .helper{display:none}
+.img-wizard-scroll{padding-top:17px}
