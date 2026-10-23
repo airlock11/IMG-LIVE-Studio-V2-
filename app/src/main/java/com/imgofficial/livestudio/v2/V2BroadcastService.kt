@@ -24,6 +24,10 @@ import android.content.ContentValues
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileInputStream
+import android.media.MediaCodecList
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraCharacteristics
+import android.graphics.SurfaceTexture
 import com.pedro.common.ConnectChecker
 import com.pedro.encoder.input.sources.video.Camera2Source
 import com.pedro.library.generic.GenericStream
@@ -373,11 +377,51 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
  }
 
+ /**
+  * Reject a profile the device cannot actually encode/capture. The selected
+  * resolution and frame rate must not be replaced with 540p or 30fps silently.
+  * This preflight supplements, but cannot replace, a live camera/YouTube test.
+  */
+ private fun checkRequestedVideoProfile():String?{
+  val encoderAvailable=try{
+   MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any{codec->
+    codec.isEncoder && codec.supportedTypes.any{it.equals("video/avc",true)} &&
+     try{codec.getCapabilitiesForType("video/avc").videoCapabilities
+      .areSizeAndRateSupported(videoWidth,videoHeight,videoFps.toDouble())
+     }catch(_:Exception){false}
+   }
+  }catch(_:Exception){false}
+  if(!encoderAvailable)return "This phone has no H.264 encoder for "+videoWidth+"×"+videoHeight+" at "+videoFps+" FPS. Choose a supported profile."
+  val cameraAvailable=try{
+   val mgr=getSystemService(CAMERA_SERVICE) as CameraManager
+   mgr.cameraIdList.any{id->
+    try{
+     val caps=mgr.getCameraCharacteristics(id)
+     val map=caps.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+     val sizes=map?.getOutputSizes(SurfaceTexture::class.java)
+     val rates=caps.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+     val hasResolution=sizes?.any{size->
+      (size.width>=videoWidth&&size.height>=videoHeight)||
+      (size.height>=videoWidth&&size.width>=videoHeight)
+     }==true
+     val hasFrameRate=rates?.any{it.upper>=videoFps}==true
+     hasResolution&&hasFrameRate
+    }catch(_:Exception){false}
+   }
+  }catch(_:Exception){false}
+  if(!cameraAvailable)return "This camera cannot provide "+videoWidth+"×"+videoHeight+" at "+videoFps+" FPS. Select a lower quality."
+  return null
+ }
  fun prepareCamera():Boolean {
   if(stream!=null)return true
   if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED||
      checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED) {
    notifyState("Camera and microphone permissions are required.")
+   return false
+  }
+  val unsupported=checkRequestedVideoProfile()
+  if(unsupported!=null){
+   notifyState(unsupported)
    return false
   }
   return try {
