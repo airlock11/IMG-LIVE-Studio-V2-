@@ -1130,12 +1130,16 @@ if(name.startsWith('setup-sport-')){
 }
 if(name==='toggle-record-local'){o.recordLocal=!o.recordLocal;persist();return render(true)}
 if(name==='start-offline-recording')return startOfflineRecording();
-if(name==='offline-ready-back'){screen='setup';setupStep=3;history.pushState({screen},'','#/setup');return render(false)}
+if(name==='offline-ready-back'){window.IMGMedia?.stopCamera?.();screen='setup';setupStep=3;history.pushState({screen},'','#/setup');return render(false)}
 if(name==='setup-record-offline'){
  if(l.active)return;
  o.yt=false;o.fb=false;o.tiktok=false;youtubeExpanded=false;fbExpanded=false;
  persist();screen='offline-ready';history.pushState({screen},'','#/offline-ready');
- return render(false)
+ render(false);
+ // Open camera for framing only. Recording must NOT begin until Start Recording.
+ if(window.IMGMedia?.canCamera?.())window.IMGMedia.openCamera({quality:o.quality,fps:o.fps})
+  .catch(e=>toast(window.IMGMedia?.readableError?.(e)||String(e)));
+ return;
 }
 if(name==='setup-facebook-connect'){if(window.IMGFacebookLive?.status?.().phase==='sending'){window.IMGFacebookLive?.stop?.();fbFeedbackState='idle';fbMessage='';return render(true)}if(!fbFields.streamKey||fbFields.streamKey.length<10)return toast('Enter your Facebook stream key');return startFacebookBroadcast()}
 if(name.startsWith('create-sport-')){const id=name.slice('create-sport-'.length);if(!SPORTS.some(s=>s.id===id)||!draft)return;draft.sport=id;return render(true)}
