@@ -2102,3 +2102,28 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
 .img-wizard-card .dropdown-body{background:transparent;border:0;padding:0}
 .img-wizard-card .broadcast-destination,.img-wizard-card .facebook-destination{background:#102223;border-color:#37564c;border-radius:12px}
 @media(min-width:680px){.img-wizard-scroll{width:min(100%,660px);margin:0 auto;padding:26px 25px}.img-wizard-footer{padding-left:max(20px,calc((100% - 620px)/2));padding-right:max(20px,calc((100% - 620px)/2))}.img-wizard-card{padding:21px}.img-wizard-card .graphics-library{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Keep the wizard's next/start action inside the real Android viewport.
+   Older setup rules constrain all .studio-page descendants in portrait. */
+.app.headerless-setup-app .img-wizard-page .img-wizard-footer{
+ position:fixed!important;
+ left:50%!important;right:auto!important;bottom:0!important;top:auto!important;
+ transform:translateX(-50%);
+ width:min(100%,480px)!important;
+ z-index:90!important;
+ box-sizing:border-box!important;
+ display:flex!important;
+ visibility:visible!important;
+ margin:0!important;
+}
+.app.headerless-setup-app .img-wizard-page .img-wizard-scroll{
+ padding-bottom:115px!important;
+ overflow-y:auto!important;
+ min-height:0!important;
+}
+.app.headerless-setup-app .img-wizard-page .img-wizard-score-art canvas{
+ display:block;width:100%;height:auto;max-height:160px;object-fit:contain;
+}
+@media(min-width:570px) and (orientation:landscape){
+ .app.headerless-setup-app .img-wizard-page .img-wizard-footer{width:100%!important;max-width:none!important}
+}
