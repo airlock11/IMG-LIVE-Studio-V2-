@@ -114,7 +114,6 @@ class MainActivity : Activity() {
      val localPage=url?.substringBefore('#')?.substringBefore('?')
      if(localPage == "$origin/assets/index.html" || localPage == "$origin/assets/connections.html") {
       view.evaluateJavascript("document.documentElement.classList.add('img-native-app');", null)
-      if(localPage == "$origin/assets/index.html") generateGraphicsGallery()
       if(BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
        // Verified YouTube account state is available directly in Broadcast
        // Settings, without navigating to a separate diagnostics page.
@@ -192,6 +191,9 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
          // Never execute arbitrary unrecognized WebView messages.
         }
+       } else if(action=="native-graphics-gallery"){
+        // Preview generation is on demand only, not during app launch or stream.
+        runOnUiThread { generateGraphicsGallery() }
        } else if(action in setOf("img-orientation:landscape","img-orientation:portrait","img-orientation:auto")) {
         // Only fixed, origin-checked orientation values are accepted. Avoid
         // WebView fullscreen tricks: native system bars remain real/visible.
