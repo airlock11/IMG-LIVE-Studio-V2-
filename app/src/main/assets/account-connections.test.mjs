@@ -370,3 +370,19 @@ test('phone recheck: expired OAuth is never presented as both platforms permanen
  assert.ok(!accounts.includes('Facebook and YouTube login is not available yet.'));
  assert.ok(accounts.includes('Secure YouTube testing has expired or is disabled'));
 });
+
+test('phone recheck: Step 2 slider travels under the same sticky scoreboard without percent',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ assert.ok(wizard.includes('img-wizard-score-sticky-unit'));
+ assert.ok(wizard.includes('img-wizard-score-size-control'));
+ assert.ok(wizard.includes('data-score-range="size"'));
+ assert.ok(wizard.includes('scoreSettings(false,true)'));
+ assert.equal((wizard.match(/data-score-range="size"/g)||[]).length,1,'Exactly one Step 2 Size slider');
+ assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1,'Exactly one preview canvas');
+ assert.ok(!wizard.includes('data-score-range-output="size"'),'Remove preview slider percent output');
+ assert.ok(studio.includes("const preview=root?.querySelector('.img-wizard-score-sticky-unit')"),'Pin the whole original preview and slider');
+ assert.ok(css.includes('.img-wizard-score-sticky-unit.img-score-pinned'));
+ assert.ok(css.includes('.img-wizard-score-sticky-unit .img-wizard-score-size-control'));
+});
