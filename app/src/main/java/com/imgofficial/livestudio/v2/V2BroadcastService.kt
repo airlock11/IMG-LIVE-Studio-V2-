@@ -161,7 +161,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var sponsorVisible=false
  private var sponsorEpoch=0
  private var sponsorIndex=0
- private var sponsorEntries:List<Pair<String,android.graphics.Bitmap?>>=emptyList()
+ private var sponsorEntries:List<Pair<String,android.graphics.Bitmap?>> = emptyList()
  fun isSponsorSlidesVisible()=sponsorVisible
  fun configureSponsorSlides(names:List<String>,images:List<android.graphics.Bitmap?>){
   if(isActive()&&sponsorEntries.isNotEmpty())return
