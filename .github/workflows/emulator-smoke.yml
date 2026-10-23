@@ -58,10 +58,14 @@ jobs:
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-three-digit.png > img-v2-three-digit.png
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-setup-metrics.txt > img-v2-setup-metrics.txt
             test -s img-v2-setup-metrics.txt
-            for step in 1 2 3 4; do
-              adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step${step}.png > img-v2-wizard-step${step}.png
-              test -s img-v2-wizard-step${step}.png
-            done
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step1.png > img-v2-wizard-step1.png
+            test -s img-v2-wizard-step1.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step2.png > img-v2-wizard-step2.png
+            test -s img-v2-wizard-step2.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step3.png > img-v2-wizard-step3.png
+            test -s img-v2-wizard-step3.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step4.png > img-v2-wizard-step4.png
+            test -s img-v2-wizard-step4.png
             test -s img-v2-three-digit.png
             adb shell am start -n com.imgofficial.livestudio.v2/.MainActivity
             sleep 18
