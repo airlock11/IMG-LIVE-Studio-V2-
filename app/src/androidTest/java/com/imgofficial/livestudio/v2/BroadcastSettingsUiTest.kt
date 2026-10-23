@@ -190,11 +190,17 @@ class BroadcastSettingsUiTest {
   try{
    val web=seek(activity.window.decorView)!!
    waitFor(activity,web,"Boolean(document.querySelector('[data-go=create]'))")
-   js(activity,web,"document.querySelector('[data-go=create]')?.click();true")
+   // A navigation click replaces WebView DOM; do not await an evaluateJavascript
+   // return callback that Android is allowed to discard during navigation.
+   activity.runOnUiThread {
+    web.evaluateJavascript("document.querySelector('[data-go=create]')?.click()",null)
+   }
    waitFor(activity,web,"Boolean(document.querySelector('[data-action=create-sport-basketball]'))")
    assertEquals("Create League starts with Choose Sports","true",js(activity,web,
     "(document.querySelector('.create-wizard-page')?.innerText||'').includes('Choose Sports')"))
-   js(activity,web,"document.querySelector('[data-action=create-sport-pickleball]')?.click();true")
+   activity.runOnUiThread {
+    web.evaluateJavascript("document.querySelector('[data-action=create-sport-pickleball]')?.click()",null)
+   }
    assertEquals("Pickleball can be selected","true",js(activity,web,
     "document.querySelector('[data-action=create-sport-pickleball]')?.getAttribute('aria-pressed')==='true'"))
    click(activity,web,"create-next")
