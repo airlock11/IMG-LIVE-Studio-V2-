@@ -241,60 +241,27 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
   setPadding(dp(2),0,dp(2),0)
  }
- private fun iconFor(kind:String,dark:Boolean=false):android.graphics.drawable.Drawable=
-  object:android.graphics.drawable.Drawable(){
-   private val p=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply{
-    color=if(dark)Color.rgb(6,38,24) else Color.rgb(230,245,236)
-    style=android.graphics.Paint.Style.STROKE
-    strokeWidth=2f
-    strokeCap=android.graphics.Paint.Cap.ROUND
-    strokeJoin=android.graphics.Paint.Join.ROUND
-   }
-   override fun draw(c:android.graphics.Canvas){
-    val n=c.save()
-    c.translate(bounds.left.toFloat(),bounds.top.toFloat())
-    c.scale(bounds.width()/24f,bounds.height()/24f)
-    when(kind){
-     "camera"->{
-      c.drawRoundRect(2f,6f,22f,20f,2f,2f,p)
-      c.drawCircle(12f,13f,4f,p)
-      c.drawLine(7f,6f,9f,3f,p)
-      c.drawLine(9f,3f,15f,3f,p)
-      c.drawLine(15f,3f,17f,6f,p)
-     }
-     "clock"->{
-      c.drawCircle(12f,12f,9f,p)
-      c.drawLine(12f,6f,12f,12f,p)
-      c.drawLine(12f,12f,16f,14f,p)
-     }
-     "undo"->{
-      c.drawLine(9f,5f,4f,10f,p);c.drawLine(4f,10f,9f,15f,p)
-      c.drawLine(4f,10f,14f,10f,p)
-      c.drawArc(android.graphics.RectF(8f,8f,21f,21f),-80f,195f,false,p)
-     }
-     "tools"->{
-      c.drawLine(4f,7f,20f,7f,p);c.drawLine(4f,17f,20f,17f,p)
-      c.drawCircle(9f,7f,2.5f,p);c.drawCircle(15f,17f,2.5f,p)
-     }
-     "live"->{
-      c.drawCircle(12f,12f,2.5f,p)
-      c.drawArc(android.graphics.RectF(5f,5f,19f,19f),130f,100f,false,p)
-      c.drawArc(android.graphics.RectF(5f,5f,19f,19f),310f,100f,false,p)
-     }
-     "stop"->c.drawRoundRect(5f,5f,19f,19f,2f,2f,p)
-     "play"->{c.drawLine(8f,5f,18f,12f,p);c.drawLine(18f,12f,8f,19f,p);c.drawLine(8f,19f,8f,5f,p)}
-     "pause"->{c.drawLine(8f,5f,8f,19f,p);c.drawLine(16f,5f,16f,19f,p)}
-     "close"->{c.drawLine(5f,5f,19f,19f,p);c.drawLine(19f,5f,5f,19f,p)}
-    }
-    c.restoreToCount(n)
-   }
-   override fun setAlpha(alpha:Int){p.alpha=alpha}
-   override fun setColorFilter(filter:android.graphics.ColorFilter?){p.colorFilter=filter}
-   @Deprecated("Deprecated in Java")
-   override fun getOpacity()=android.graphics.PixelFormat.TRANSLUCENT
-   override fun getIntrinsicWidth()=dp(16)
-   override fun getIntrinsicHeight()=dp(16)
+ // Android renders imported SVG path geometry using real VectorDrawable
+ // resources. Never substitute Unicode glyphs or emoji for operator icons.
+ private fun iconFor(kind:String,dark:Boolean=false):android.graphics.drawable.Drawable {
+  val res=when(kind){
+   "camera"->R.drawable.img_icon_camera
+   "clock"->R.drawable.img_icon_clock
+   "undo"->R.drawable.img_icon_undo
+   "tools"->R.drawable.img_icon_tools
+   "live"->R.drawable.img_icon_live
+   "stop"->R.drawable.img_icon_stop
+   "play"->R.drawable.img_icon_play
+   "pause"->R.drawable.img_icon_pause
+   "close"->R.drawable.img_icon_close
+   "image"->R.drawable.img_icon_image
+   else->R.drawable.img_icon_tools
   }
+  val drawable=androidx.core.content.ContextCompat.getDrawable(this,res)!!.mutate()
+  androidx.core.graphics.drawable.DrawableCompat.setTint(drawable,
+   if(dark)Color.rgb(6,38,24) else Color.rgb(230,245,236))
+  return drawable
+ }
  private fun iconButton(btn:Button,kind:String,dark:Boolean=false):Button{
   btn.setCompoundDrawablesWithIntrinsicBounds(iconFor(kind,dark),null,null,null)
   btn.compoundDrawablePadding=dp(3)
