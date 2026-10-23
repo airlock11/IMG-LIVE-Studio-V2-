@@ -34,7 +34,12 @@ import com.pedro.encoder.input.gl.render.filters.`object`.ImageFilterRender
  * an RTMPS socket callback is not proof of healthy YouTube video ingestion.
  */
 class V2BroadcastService:Service(),ConnectChecker {
- interface Listener { fun onBroadcastStatus(status:String,active:Boolean,connecting:Boolean,ended:Boolean,portrait:Boolean,front:Boolean) }
+ interface Listener {
+  fun onBroadcastStatus(status:String,active:Boolean,connecting:Boolean,ended:Boolean,portrait:Boolean,front:Boolean)
+  // Mirrors the same bitmap submitted to H.264's GL filter. UI receives
+  // one frame only when score, clock or a finite transition actually changes.
+  fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){}
+ }
  inner class LocalBinder:Binder(){ fun service():V2BroadcastService=this@V2BroadcastService }
  private val binder=LocalBinder()
  private val ui=Handler(Looper.getMainLooper())
@@ -42,6 +47,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var stream:GenericStream?=null
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
+ private var latestGraphics:android.graphics.Bitmap?=null
+ private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
+ private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestGraphics){
+  if(image==null)return
+  val pos=lastGraphicsGeometry
+  listeners.toList().forEach{listener->try{
+   listener.onPreviewGraphics(image,pos[0],pos[1],pos[2],pos[3])
+  }catch(_:Exception){}}
+ }
  private var scoreVisible=true
  private var scoreAlpha=1f
  private var lastScoreAlpha:Float?=null
@@ -293,6 +307,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    if(stream?.isOnPreview!=true)stream?.startPreview(surface)
    stream?.getGlInterface()?.setPreviewResolution(surface.width,surface.height)
+   // The GL renderer may start after filters were configured. Reapply its
+   // composed frame and geometry once the SurfaceView is actually attached.
+   placeGraphics()
+   if(scoreFilter!=null && latestGraphics==null)updateScorecard()
+   pushPreviewGraphics()
   }catch(_:Exception){ notifyState("Preview unavailable; camera upload may still work.") }
  }
  fun detachPreview(){
@@ -421,9 +440,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   val py=if(graphicsPosition.startsWith("top"))safe else 100f-ph-safe
   try{
+   val finalX=(px+graphicsX).coerceIn(safe,100f-pw-safe)
+   val finalY=(py+graphicsY).coerceIn(safe,100f-ph-safe)
    filter.setScale(pw,ph)
-   filter.setPosition((px+graphicsX).coerceIn(safe,100f-pw-safe),
-    (py+graphicsY).coerceIn(safe,100f-ph-safe))
+   filter.setPosition(finalX,finalY)
+   lastGraphicsGeometry=floatArrayOf(finalX,finalY,pw,ph)
+   pushPreviewGraphics()
   }catch(_:Exception){notifyState("Broadcast Graphics position could not be changed.")}
  }
  private fun startScoreAward(team:Int,points:Int,prior:Int){
@@ -511,7 +533,6 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    if(scoreFilter==null){
     scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
-    placeGraphics()
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
@@ -529,8 +550,14 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
-   filter.setImage(V2BroadcastGraphicsRenderer.render(
-    scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo))
+   val picture=V2BroadcastGraphicsRenderer.render(
+    scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+   // Upload first, then scale: image sprite dimensions can be reset on
+   // texture replacement in the GPU filter lifecycle.
+   filter.setImage(picture)
+   placeGraphics()
+   latestGraphics=picture
+   pushPreviewGraphics(picture)
    lastScorecardImageState=scoreboard.copy()
    lastRenderedAward=scoreAward
    lastGraphicsStyle=graphicsStyle
@@ -662,6 +689,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{stream?.release()}catch(_:Exception){}
   stream=null
   scoreFilter=null
+  latestGraphics=null
   lastScoreAlpha=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
   wakeLock=null
