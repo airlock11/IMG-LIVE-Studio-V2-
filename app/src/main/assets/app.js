@@ -588,11 +588,27 @@ const SCOREBOARD_STYLES=[
  ["legacy-tv","Legacy TV","compact","Heritage stacked bars"]
 ];
 const SCOREBOARD_IDS=SCOREBOARD_STYLES.map(x=>x[0]);
+const realGraphicsThumbnails={};
+let realGraphicsRequested=false;
+window.addEventListener('img-native-graphics-gallery',event=>{
+ const items=event?.detail?.items;
+ if(!Array.isArray(items))return;
+ for(const item of items){
+  if(!Number.isInteger(item.id)||item.id<0||item.id>=SCOREBOARD_IDS.length)continue;
+  if(typeof item.src!=='string'||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(item.src)||item.src.length>110000)continue;
+  realGraphicsThumbnails[SCOREBOARD_IDS[item.id]]=item.src;
+ }
+ render(true);
+});
 const graphicIsCompact=id=>SCOREBOARD_STYLES.some(x=>x[0]===id&&x[2]==="compact");
 const normalizeGraphic=id=>SCOREBOARD_IDS.includes(id)?id:"prime-tv";
 const SCOREBOARD_PALETTE=["#E66D48","#C33F4B","#225AA9","#21846D","#B88637","#6E5CAC"];
 function scoreStyleName(value){const found=SCOREBOARD_STYLES.find(x=>x[0]===value);return found?found[1]:'Prime TV'}
 function scoreSettings(compact=false){
+ if(!realGraphicsRequested){
+  realGraphicsRequested=true;
+  setTimeout(()=>window.IMGNativeChannel?.postMessage?.('native-graphics-gallery'),0);
+ }
  const o=data.options,isolated=streetballActive(),
  size=Math.min(115,Math.max(15,Number(isolated?o.streetOverlaySize:o.overlaySize)||60)),
  alpha=Math.min(100,Math.max(30,isolated?o.streetOverlayOpacity:o.overlayOpacity)),
@@ -601,7 +617,8 @@ function scoreSettings(compact=false){
  const selected=normalizeGraphic(o.overlay);
  const styleCard=([id,name,type,motion],i)=>
   '<button type="button" class="graphics-pack '+(selected===id?'active':'')+'" data-set="overlay:'+id+'" aria-pressed="'+(selected===id)+'" title="'+esc(name)+'">'+
-  '<span class="graphics-art style-'+id+'"><i class="logo-unit"></i><b class="team-one"></b><strong class="score-one">86</strong><i class="time-unit">Q4<br>8:24</i><strong class="score-two">89</strong><b class="team-two"></b><i class="shine"></i></span>'+
+  '<span class="graphics-art '+(realGraphicsThumbnails[id]?'has-renderer-preview':'')+'">'+
+ (realGraphicsThumbnails[id]?'<img loading="lazy" draggable="false" alt="On-air '+esc(name)+' artwork" src="'+realGraphicsThumbnails[id]+'">':'<small>On-air preview</small>')+'</span>'+
   '<span class="graphics-copy"><strong>'+name+'</strong><small>'+((type==='compact')?'CORNER • ':'WIDE • ')+esc(motion)+'</small></span>'+
   '</button>';
  const row=(label,key,min,max,step=5)=>
