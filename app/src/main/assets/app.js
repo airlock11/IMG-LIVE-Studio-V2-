@@ -577,7 +577,7 @@ function setupWizard(){
  (activeSport()==='pickleball'?card('4','Pickleball match format',`<label class="form-group"><span class="small-label">Scoring</span><select class="input" data-input="pickleballScoring"><option value="sideout" ${o.pickleballScoring==='sideout'?'selected':''}>Standard · side-out</option><option value="rally" ${o.pickleballScoring==='rally'?'selected':''}>Rally</option></select></label><label class="form-group"><span class="small-label">Points per game</span><select class="input" data-input="pickleballTarget">${[11,15,21].map(n=>`<option value="${n}" ${o.pickleballTarget===n?'selected':''}>${n} points</option>`).join('')}</select></label>`):'');
  const sponsorContent=card('1','Sponsor logos and images',`${sponsorSettings()}`)+
  card('2','Sponsor video clips',`<label class="img-wizard-upload-clip">${ic('video',22)}<span>Choose a short MP4 video</span><input type="file" data-upload="sponsor-clip" accept="video/mp4" hidden></label>${data.sponsors.filter(item=>item.video).map(x=>`<p class="helper">${ic('check-circle',16)} ${esc(x.name)} · silent video</p>`).join('')}`)+
- card('3','Playback settings',`<div class="small-label">Slide duration and transitions</div>`);
+ '';
  const ytSelected=Boolean(o.yt),fbSelected=Boolean(o.fb);
  const ytConnected=window.IMGAccounts?.getStatus?.().youtube==="connected";
  const fbConnected=window.IMGFacebookLive?.status?.().phase==='sending';
