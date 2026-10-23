@@ -276,6 +276,10 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('[data-action=setup-record-offline]'))"))
    click(activity,web,"setup-record-offline")
    waitFor(activity,web,"Boolean(document.querySelector('[data-action=start-offline-recording]'))")
+   assertEquals("Offline entry displays the actual score and broadcast controls before recording","true",js(activity,web,
+    "(function(){const root=document.querySelector('.img-offline-ready-game-controls');return !!root&&root.querySelectorAll('.control-section').length>1&&root.querySelectorAll('button').length>2})()"))
+   assertEquals("Start Recording is an explicit button independent of game controls","true",js(activity,web,
+    "(function(){const b=document.querySelector('.img-offline-ready-page [data-action=start-offline-recording]');return !!b&&!b.closest('.img-offline-ready-game-controls')})()"))
    assertEquals("Offline entry must NOT start recording","false",js(activity,web,
     "Boolean(window.IMGMedia?.isRecording?.())"))
 
