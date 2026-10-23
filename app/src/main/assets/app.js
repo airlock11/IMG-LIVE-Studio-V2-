@@ -1279,9 +1279,16 @@ if(name==='youtube-remove'){
 }
 if(name==='youtube-connect'){
  if(youtubeConnectBusy)return;
+ const accounts=window.IMGAccounts;
+ if(!accounts)return toast('Secure YouTube account service is unavailable.');
+ const pending=accounts.getStatus?.().youtube==='authorization-pending';
  youtubeConnectBusy=true;youtubeFeedback='';render(true);
- return window.IMGAccounts?.connect('youtube')
-  .then(()=>{youtubeConnectBusy=false;render(true)})
+ // A second tap during Google sign-in verifies the original pending pairing,
+ // rather than opening duplicate browsers or invalidating that pairing.
+ return (pending?accounts.verifyPairing('youtube'):accounts.connect('youtube'))
+  .then(state=>{youtubeConnectBusy=false;
+   if(pending&&state==='pending')toast('Finish Google sign-in to connect YouTube.');
+   render(true)})
   .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
 }
 if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
