@@ -37,6 +37,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var timeoutActive=false
  private var timeoutSlideshowEnabled=false
  private var gameWasRunningBeforeTimeout=false
+ private var scoreWasVisibleBeforeTimeout=true
  private var timeoutAuto=true
  private var timeoutIntervalSeconds=5
  private var timeoutTransitionMillis=500
@@ -160,6 +161,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
   }catch(_:Exception){null}
  }
+ // Respect source EXIF display orientation, not camera orientation.
+ // A portrait sponsor stays upright and is fitted, never rotated to landscape.
  private fun decodeSponsorFile(token:String,index:Int):android.graphics.Bitmap?{
   if(!token.matches(Regex("^[a-f0-9]{16}$"))||index !in 0..11)return null
   val file=java.io.File(cacheDir,"imgsponsor_${token}_${index}.img")
@@ -169,10 +172,32 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    android.graphics.BitmapFactory.decodeFile(file.absolutePath,bounds)
    if(bounds.outWidth !in 1..4096||bounds.outHeight !in 1..4096)return null
    val options=android.graphics.BitmapFactory.Options()
-   var downsample=1
-   while(maxOf(bounds.outWidth,bounds.outHeight)/downsample>1920)downsample*=2
-   options.inSampleSize=downsample
-   android.graphics.BitmapFactory.decodeFile(file.absolutePath,options)
+   var sample=1
+   while(maxOf(bounds.outWidth,bounds.outHeight)/sample>1920)sample*=2
+   options.inSampleSize=sample
+   val pixels=android.graphics.BitmapFactory.decodeFile(file.absolutePath,options)?:return null
+   val orientation=try{
+    android.media.ExifInterface(file.absolutePath).getAttributeInt(
+     android.media.ExifInterface.TAG_ORIENTATION,android.media.ExifInterface.ORIENTATION_NORMAL)
+   }catch(_:Exception){android.media.ExifInterface.ORIENTATION_NORMAL}
+   val transform=android.graphics.Matrix()
+   when(orientation){
+    android.media.ExifInterface.ORIENTATION_ROTATE_90->transform.postRotate(90f)
+    android.media.ExifInterface.ORIENTATION_ROTATE_180->transform.postRotate(180f)
+    android.media.ExifInterface.ORIENTATION_ROTATE_270->transform.postRotate(270f)
+    android.media.ExifInterface.ORIENTATION_FLIP_HORIZONTAL->transform.postScale(-1f,1f)
+    android.media.ExifInterface.ORIENTATION_FLIP_VERTICAL->transform.postScale(1f,-1f)
+    android.media.ExifInterface.ORIENTATION_TRANSPOSE->{
+     transform.postScale(-1f,1f);transform.postRotate(270f)
+    }
+    android.media.ExifInterface.ORIENTATION_TRANSVERSE->{
+     transform.postScale(-1f,1f);transform.postRotate(90f)
+    }
+   }
+   if(transform.isIdentity)pixels else android.graphics.Bitmap.createBitmap(
+    pixels,0,0,pixels.width,pixels.height,transform,true).also{
+     if(it!==pixels)pixels.recycle()
+    }
   }catch(_:Exception){null}
  }
  private fun decodeSponsorImage(raw:String?):android.graphics.Bitmap?{
@@ -433,13 +458,18 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    // Both game and shot clocks count down only while gameRunning is true.
    // Keep video upload and local MP4 recording continuous through timeout.
    gameWasRunningBeforeTimeout=gameRunning
+   scoreWasVisibleBeforeTimeout=broadcast?.scorecardVisible()?:true
    gameRunning=false;lastTick=0L
    timeoutSlideshowEnabled=false
    broadcast?.setSponsorSlideshow(false)
+   // Fade scoreboard out whenever Timeout begins, even without slideshow.
+   broadcast?.setScorecardVisible(false)
   }else{
    // A timeout does not implicitly start a previously stopped clock.
    timeoutSlideshowEnabled=false
+   timeoutPreview?.dismiss();timeoutPreview=null
    broadcast?.setSponsorSlideshow(false)
+   broadcast?.setScorecardVisible(scoreWasVisibleBeforeTimeout)
    gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0
    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
    gameWasRunningBeforeTimeout=false
@@ -511,9 +541,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)
    nextSponsor.isEnabled=timeoutSlideshowEnabled
   }
-  val popup=android.widget.PopupWindow(content,dp(230),-2,true).apply{
+  val popup=android.widget.PopupWindow(content,dp(230),-2,false).apply{
    setBackgroundDrawable(rounded(Color.rgb(17,30,27),12))
-   isOutsideTouchable=true
+   isOutsideTouchable=false
    elevation=dp(8).toFloat()
   }
   timeoutPreview=popup
@@ -646,6 +676,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     gameRunning=false
     timeoutActive=savedInstanceState.getBoolean("v2_timeout_active",false)
     gameWasRunningBeforeTimeout=savedInstanceState.getBoolean("v2_timeout_clock_before",false)
+    scoreWasVisibleBeforeTimeout=savedInstanceState.getBoolean("v2_timeout_score_before",true)
     timeoutSlideshowEnabled=savedInstanceState.getBoolean("v2_timeout_sponsors",false)
     timeoutAuto=savedInstanceState.getBoolean("v2_timeout_auto",true)
     timeoutIntervalSeconds=savedInstanceState.getInt("v2_timeout_interval",5)
@@ -1080,6 +1111,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    outState.putBoolean("v2_clock_running",gameRunning)
    outState.putBoolean("v2_timeout_active",timeoutActive)
    outState.putBoolean("v2_timeout_clock_before",gameWasRunningBeforeTimeout)
+   outState.putBoolean("v2_timeout_score_before",scoreWasVisibleBeforeTimeout)
    outState.putBoolean("v2_timeout_sponsors",timeoutSlideshowEnabled)
    outState.putBoolean("v2_timeout_auto",timeoutAuto)
    outState.putInt("v2_timeout_interval",timeoutIntervalSeconds)

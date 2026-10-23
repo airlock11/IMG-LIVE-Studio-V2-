@@ -2288,6 +2288,22 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
 .img-my-stream-foot span{display:flex;align-items:center;gap:6px;color:#afc7bc}
 .img-my-stream-foot b{font-size:11px;color:#3de0aa}
 
+/* Saved-recording cards live on Home, not in a separate Recordings page.
+   Keep one-handed Play/Download/Delete controls clear of bottom navigation. */
+.img-offline-home{scroll-margin-top:24px;margin-bottom:28px}
+.img-offline-home .img-my-streams-rail{padding-bottom:16px}
+.img-offline-recording-card{display:flex;flex-direction:column;justify-content:space-between;gap:12px}
+.img-offline-recording-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.img-offline-recording-actions button{border:1px solid #3f7460;background:#176448;color:#f1fff6;
+ border-radius:10px;padding:10px 13px;min-height:38px;font-weight:750;font:inherit;font-size:12px;cursor:pointer}
+.img-offline-recording-actions button:not(:first-child){background:#182b26;border-color:#385549}
+.img-offline-recording-actions .img-recording-delete{color:#fac6c4}
+.recording-platform-logos{display:inline-flex;align-items:center;gap:5px;flex-shrink:0}
+.recording-platform-logos .record-platform-icon{display:block;width:19px;height:19px;flex:none}
+.img-offline-empty{font-size:13px;color:#a8c2b5;background:#1b2b26;padding:16px;border-radius:12px}
+.img-offline-home .section-heading .text-link{display:flex;align-items:center;gap:6px}
+
+
 /* V2 Android compatibility: System WebView versions before dynamic viewport
    unit support ignore 100dvh. Use vh FIRST, then dvh for modern keyboards.
    Without the fallback the four-step editor collapsed to about 198px. */
