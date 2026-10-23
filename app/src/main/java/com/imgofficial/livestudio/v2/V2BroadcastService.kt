@@ -96,7 +96,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var connectedAtLeastOnce=false
  private var recoveryQueued=false
  // Prefer sustainable phone temperature over maximum quality.
- // Hardware H.264, 24 fps and lower GPU resolution reduce encode load.
+ // Hardware H.264, 30 FPS, adaptive bitrate and sensible capture resolution.
  private var videoBitrate=1250000
  private val minBitrate=450000
  private val maxBitrate=1250000
@@ -283,7 +283,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    val engine=GenericStream(this,this)
    // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
    // Streetball portrait uses a future separate mode/profile.
-   if(!engine.prepareVideo(960,540,videoBitrate,24,2,0)||
+   if(!engine.prepareVideo(960,540,videoBitrate,30,2,0)||
       !engine.prepareAudio(44100,true,128000)){
     engine.release()
     notifyState("This phone cannot prepare the video/audio codec.")
@@ -397,11 +397,8 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  fun setGraphicsStyle(style:Int){
   if(style !in 0..11 || graphicsStyle==style)return
-  val oldCompact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
-  val newCompact=V2BroadcastGraphicsRenderer.compact(style)
   graphicsStyle=style
-  if(oldCompact!=newCompact)
-   graphicsPosition=if(newCompact)"bottom-right" else "bottom-center"
+  graphicsPosition=if(V2BroadcastGraphicsRenderer.compact(style))"bottom-right" else "bottom-center"
   lastGraphicsStyle=-1
   placeGraphics()
   updateScorecard()
@@ -410,55 +407,46 @@ class V2BroadcastService:Service(),ConnectChecker {
   width:Int,height:Int,x:Int,y:Int,margin:Int,effects:Boolean,
   homeLogo:android.graphics.Bitmap?,awayLogo:android.graphics.Bitmap?){
   if(style in 0..11)graphicsStyle=style
-  graphicsPosition=if(position in setOf("top-left","top-right","bottom-left","bottom-right","bottom-center"))
-   position else if(V2BroadcastGraphicsRenderer.compact(graphicsStyle))"bottom-right" else "bottom-center"
+  // Legacy X/Y/width/height/position arguments from older installs are
+  // intentionally ignored. A single size value keeps artwork proportions.
+  graphicsPosition=if(V2BroadcastGraphicsRenderer.compact(graphicsStyle))"bottom-right" else "bottom-center"
   graphicsSize=size.coerceIn(15,115)
-  graphicsOpacity=opacity.coerceIn(30,100)/100f
-  graphicsWidth=width.coerceIn(65,150)
-  graphicsHeight=height.coerceIn(65,150)
-  graphicsX=x.coerceIn(-30,30);graphicsY=y.coerceIn(-30,30)
-  graphicsMargin=margin.coerceIn(1,10)
+  graphicsOpacity=1f
+  graphicsWidth=100;graphicsHeight=100
+  graphicsX=0;graphicsY=0;graphicsMargin=3
   scoreEffectsEnabled=effects
   graphicsHomeLogo=homeLogo
   graphicsAwayLogo=awayLogo
   lastGraphicsStyle=-1
   placeGraphics();updateScorecard()
  }
- fun resizeGraphics(amount:Int){
-  graphicsSize=(graphicsSize+amount).coerceIn(15,115)
+ fun setGraphicsSize(size:Int){
+  val proposed=size.coerceIn(15,115)
+  if(proposed==graphicsSize)return
+  graphicsSize=proposed
+  // GPU scale updates without recreating / recompressing the bitmap.
   placeGraphics()
  }
- fun placeGraphicsAt(position:String){
-  if(position in setOf("top-left","top-right","bottom-left","bottom-right","bottom-center")){
-   graphicsPosition=position;placeGraphics()
-  }
- }
+ fun resizeGraphics(amount:Int){setGraphicsSize(graphicsSize+amount)}
  private fun placeGraphics(notifyPreview:Boolean=true){
   val filter=scoreFilter
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
-  // Maintain natural artwork aspect ratio under every resize setting.
-  val overall=(graphicsSize/60f)*minOf(graphicsWidth,graphicsHeight)/100f
-  var pw=(if(compact)31f else 84f)*overall
+  val size=graphicsSize/60f
+  var pw=(if(compact)31f else 84f)*size
   var ph=pw*(960f/540f)*
    V2BroadcastGraphicsRenderer.height(graphicsStyle)/
    V2BroadcastGraphicsRenderer.width(graphicsStyle)
   val factor=minOf(1f,85f/ph,95f/pw)
   pw*=factor;ph*=factor
-  val safe=graphicsMargin.toFloat()
-  val px=when(graphicsPosition){
-   "top-left","bottom-left"->safe
-   "top-right","bottom-right"->100f-pw-safe
-   else->(100f-pw)/2f
-  }
-  val py=if(graphicsPosition.startsWith("top"))safe else 100f-ph-safe
+  val safe=3f
+  val px=if(compact)100f-pw-safe else (100f-pw)/2f
+  val py=100f-ph-safe
   try{
-   val finalX=(px+graphicsX).coerceIn(safe,100f-pw-safe)
-   val finalY=(py+graphicsY).coerceIn(safe,100f-ph-safe)
    filter?.setScale(pw,ph)
-   filter?.setPosition(finalX,finalY)
-   lastGraphicsGeometry=floatArrayOf(finalX,finalY,pw,ph)
+   filter?.setPosition(px,py)
+   lastGraphicsGeometry=floatArrayOf(px,py,pw,ph)
    if(notifyPreview)pushPreviewGraphics()
-  }catch(_:Exception){notifyState("Broadcast Graphics position could not be changed.")}
+  }catch(_:Exception){notifyState("Unable to size native broadcast graphics.")}
  }
  private fun startScoreAward(team:Int,points:Int,prior:Int){
   val epoch=++scoreAwardEpoch
