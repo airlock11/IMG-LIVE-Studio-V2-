@@ -228,42 +228,7 @@ function youtubeTitle(){
  const base=event?.name||[teams[0]?.name||'Home',teams[1]?.name||'Away'].join(' vs ');
  return (sportName()+' • '+base).slice(0,98);
 }
-async function startPrivateYouTubeFromStudio(){
- const accounts=window.IMGAccounts;
- if(!window.IMGNativeChannel?.postMessage||!accounts)
-  return toast('A V2 Android app with secure YouTube access is required.');
- if(youtubeBusy)return;
- youtubeExpanded=true;
- youtubeBusy=true;youtubeFeedback='Checking YouTube…';
- try{
-  const status=accounts.getStatus();
-  if(status.youtube==='verification-unavailable')await accounts.refresh();
-  if(accounts.getStatus().youtube!=='connected')
-   throw Error('YouTube authorization is not verified right now. Retry account status before starting.');
-  const check=await accounts.checkYoutubeLiveReadiness();
-  if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
-  // GO LIVE NOW deliberately creates a new private event configured to
-  // auto-start once Android begins RTMPS. No manually scheduled draft choice.
-  if(!youtubeAudience)throw Error('Choose the YouTube audience classification before going live.');
-  if(!check.canCreatePrivateDraft)
-   throw Error('YouTube private live creation is not enabled on the IMG server.');
-  const title=youtubeTitle();
-  const draftRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),
-   x=>x.toString(16).padStart(2,'0')).join('');
-  youtubeFeedback='Creating private live broadcast…';
-  await accounts.createYoutubePrivateDraft({
-   title,description:String(data.options.broadcast.liveDescription||'').trim().slice(0,1800),madeForKids:youtubeAudience==='yes',draftRequestId,startNow:true
-  });
-  const owned=draftRequestId;
-  if(!/^[a-f0-9]{32}$/.test(owned))throw Error('No valid private YouTube event is available.');
-  youtubeFeedback='';
-  // The WebView camera may already own the same physical lens. Release its
-  // MediaStream tracks before Android Camera2 prepares the native RTMPS feed.
-  // This action NEVER ends an existing native foreground upload.
-  window.IMGMedia?.stopCamera?.();
-  // User-supplied team emblems are reduced to bounded transparent PNGs,
-  // so the NATIVE compositor displays the real badges without downloading
-  // remote resources or passing source files to the RTMPS service.
+async function createNativeOperatorPayload(){
   async function compactBadge(raw){
    if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
    try{
@@ -319,6 +284,61 @@ async function startPrivateYouTubeFromStudio(){
     quality:data.options.quality,fps:data.options.fps,
     recordLocal:Boolean(data.options.recordLocal),shotVisible:data.options.shotVisible!==false
   }));
+
+ return game;
+}
+let offlineNativeOpening=false;
+async function openNativeOfflineControls(){
+ if(offlineNativeOpening||data.live.active)return;
+ if(!window.IMGNativeChannel?.postMessage)
+  return toast('Native Android video controls are required for offline recording.');
+ offlineNativeOpening=true;
+ try{
+  // A WebView camera session must release its lens before Android Camera2.
+  window.IMGMedia?.stopCamera?.();
+  const game=await createNativeOperatorPayload();
+  if(game.length>95000)throw Error('Sponsor images are too large for Android setup.');
+  window.IMGNativeChannel.postMessage('native-offline-video-start:'+game);
+ }catch(error){toast(String(error?.message||'Unable to open offline broadcast controls.'))}
+ finally{setTimeout(()=>{offlineNativeOpening=false},900)}
+}
+async function startPrivateYouTubeFromStudio(){
+ const accounts=window.IMGAccounts;
+ if(!window.IMGNativeChannel?.postMessage||!accounts)
+  return toast('A V2 Android app with secure YouTube access is required.');
+ if(youtubeBusy)return;
+ youtubeExpanded=true;
+ youtubeBusy=true;youtubeFeedback='Checking YouTube…';
+ try{
+  const status=accounts.getStatus();
+  if(status.youtube==='verification-unavailable')await accounts.refresh();
+  if(accounts.getStatus().youtube!=='connected')
+   throw Error('YouTube authorization is not verified right now. Retry account status before starting.');
+  const check=await accounts.checkYoutubeLiveReadiness();
+  if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
+  // GO LIVE NOW deliberately creates a new private event configured to
+  // auto-start once Android begins RTMPS. No manually scheduled draft choice.
+  if(!youtubeAudience)throw Error('Choose the YouTube audience classification before going live.');
+  if(!check.canCreatePrivateDraft)
+   throw Error('YouTube private live creation is not enabled on the IMG server.');
+  const title=youtubeTitle();
+  const draftRequestId=Array.from(crypto.getRandomValues(new Uint8Array(16)),
+   x=>x.toString(16).padStart(2,'0')).join('');
+  youtubeFeedback='Creating private live broadcast…';
+  await accounts.createYoutubePrivateDraft({
+   title,description:String(data.options.broadcast.liveDescription||'').trim().slice(0,1800),madeForKids:youtubeAudience==='yes',draftRequestId,startNow:true
+  });
+  const owned=draftRequestId;
+  if(!/^[a-f0-9]{32}$/.test(owned))throw Error('No valid private YouTube event is available.');
+  youtubeFeedback='';
+  // The WebView camera may already own the same physical lens. Release its
+  // MediaStream tracks before Android Camera2 prepares the native RTMPS feed.
+  // This action NEVER ends an existing native foreground upload.
+  window.IMGMedia?.stopCamera?.();
+  // User-supplied team emblems are reduced to bounded transparent PNGs,
+  // so the NATIVE compositor displays the real badges without downloading
+  // remote resources or passing source files to the RTMPS service.
+  const game=await createNativeOperatorPayload();
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
   youtubeFeedback=String(error?.message||'YouTube could not prepare the private upload.').slice(0,200);
@@ -1245,17 +1265,15 @@ if(name.startsWith('setup-sport-')){
  o.sport=id;selectedEventId=null;data.selectedEventId=null;persist();return render(true)
 }
 if(name==='toggle-record-local'){o.recordLocal=!o.recordLocal;persist();return render(true)}
-if(name==='start-offline-recording')return startOfflineRecording();
+if(name==='start-offline-recording')return openNativeOfflineControls();
 if(name==='offline-ready-back'){window.IMGMedia?.stopCamera?.();screen='setup';setupStep=3;history.pushState({screen},'','#/setup');return render(false)}
 if(name==='setup-record-offline'){
  if(l.active)return;
  o.yt=false;o.fb=false;o.tiktok=false;youtubeExpanded=false;fbExpanded=false;
- persist();screen='offline-ready';history.pushState({screen},'','#/offline-ready');
- render(false);
- // Open camera for framing only. Recording must NOT begin until Start Recording.
- if(window.IMGMedia?.canCamera?.())window.IMGMedia.openCamera({quality:o.quality,fps:o.fps})
-  .catch(e=>toast(window.IMGMedia?.readableError?.(e)||String(e)));
- return;
+ persist();
+ // Open the ORIGINAL landscape native broadcasting controls immediately.
+ // The user starts recording only after pressing native RECORD.
+ return openNativeOfflineControls();
 }
 if(name==='setup-destination-facebook'){
  fbExpanded=!fbExpanded;

@@ -55,13 +55,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var listeners=mutableSetOf<Listener>()
  private var stream:GenericStream?=null
  private var saveLocalCopy=false
+ private var offlineOnly=false
  private var currentRecordFile:File?=null
+ fun isOfflineRecording()=offlineOnly&&stream?.isRecording==true
  fun configureLocalRecording(enabled:Boolean){
   if(running||connecting)return
   saveLocalCopy=enabled
  }
  private fun beginLocalRecording(engine:GenericStream){
-  if(!saveLocalCopy)return
+  if(!saveLocalCopy||currentRecordFile!=null)return
   try{
    val folder=getExternalFilesDir(Environment.DIRECTORY_MOVIES)?:filesDir
    if(!folder.exists()&&!folder.mkdirs())throw IllegalStateException("Recording folder unavailable")
@@ -143,7 +145,7 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("sport",finalScore.sport)
        .put("homeLogo",savedHomeLogo)
        .put("awayLogo",savedAwayLogo)
-       .put("platform","YouTube")
+       .put("platform",if(offlineOnly)"Offline Recording" else "YouTube")
       previous.put(clip)
       prefs.edit().putString("clips",previous.toString()).apply()
      }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
@@ -155,6 +157,73 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
+ private var sponsorFilter:ImageFilterRender?=null
+ private var sponsorVisible=false
+ private var sponsorEpoch=0
+ private var sponsorIndex=0
+ private var sponsorEntries:List<Pair<String,android.graphics.Bitmap?>> = emptyList()
+ fun isSponsorSlidesVisible()=sponsorVisible
+ fun configureSponsorSlides(names:List<String>,images:List<android.graphics.Bitmap?>){
+  if(isActive()&&sponsorEntries.isNotEmpty())return
+  sponsorEntries=names.take(12).mapIndexed { i,name ->
+   name.trim().take(55).ifEmpty{"SPONSOR"} to images.getOrNull(i)
+  }
+ }
+ private fun sponsorFrame(index:Int,visible:Boolean):android.graphics.Bitmap{
+  val w=640;val h=360
+  val bitmap=android.graphics.Bitmap.createBitmap(w,h,android.graphics.Bitmap.Config.ARGB_8888)
+  val canvas=android.graphics.Canvas(bitmap)
+  if(!visible){canvas.drawColor(android.graphics.Color.TRANSPARENT,android.graphics.PorterDuff.Mode.CLEAR);return bitmap}
+  canvas.drawColor(android.graphics.Color.rgb(9,30,27))
+  val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+  paint.color=android.graphics.Color.rgb(25,61,49)
+  canvas.drawRoundRect(22f,20f,618f,340f,23f,23f,paint)
+  paint.color=android.graphics.Color.rgb(43,215,138)
+  canvas.drawRoundRect(27f,25f,613f,30f,3f,3f,paint)
+  val entry=sponsorEntries.getOrNull(index)
+  val image=entry?.second
+  if(image!=null&&!image.isRecycled){
+   val scale=minOf(1f,130f/image.width,128f/image.height)
+   val dw=image.width*scale;val dh=image.height*scale
+   val dest=android.graphics.RectF((w-dw)/2f,62f+(128f-dh)/2f,(w+dw)/2f,62f+(128f+dh)/2f)
+   canvas.drawBitmap(image,null,dest,android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
+  }
+  paint.color=android.graphics.Color.rgb(179,212,195);paint.textAlign=android.graphics.Paint.Align.CENTER
+  paint.typeface=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.BOLD)
+  paint.textSize=16f
+  canvas.drawText("IMG LIVE STUDIO  •  OFFICIAL PARTNER",w/2f,58f,paint)
+  paint.color=android.graphics.Color.WHITE
+  paint.textSize=35f
+  val raw=entry?.first?:"SPONSOR SLIDESHOW"
+  var label=raw
+  while(label.length>3&&paint.measureText(label)>580f)label=label.dropLast(1)
+  canvas.drawText(label,w/2f,262f,paint)
+  paint.textSize=15f;paint.color=android.graphics.Color.rgb(182,212,197)
+  canvas.drawText("TIMEOUT",w/2f,303f,paint)
+  return bitmap
+ }
+ private fun applySponsorFrame(){
+  val f=sponsorFilter?:return
+  try{
+   val frame=sponsorFrame(sponsorIndex,sponsorVisible)
+   f.setImage(frame);f.setScale(100f,100f);f.setPosition(0f,0f)
+  }catch(_:Exception){notifyState("Sponsor overlay unavailable in outgoing video.")}
+ }
+ private fun nextSponsorFrame(expected:Int){
+  if(expected!=sponsorEpoch||!sponsorVisible||ended)return
+  if(sponsorEntries.isNotEmpty())sponsorIndex=(sponsorIndex+1)%sponsorEntries.size
+  applySponsorFrame()
+  ui.postDelayed({nextSponsorFrame(expected)},5000L)
+ }
+ fun showSponsorSlides(show:Boolean){
+  if(sponsorVisible==show)return
+  sponsorVisible=show;sponsorIndex=0
+  val version=++sponsorEpoch
+  applySponsorFrame()
+  if(show)ui.postDelayed({nextSponsorFrame(version)},5000L)
+  notifyState(if(show)"TIMEOUT · sponsors shown on video" else
+   if(offlineOnly)"Local recording active" else "Camera video restored")
+ }
  private var latestGraphics:android.graphics.Bitmap?=null
  private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
  private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestGraphics){
@@ -239,7 +308,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(stream!=null){
     try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
     try{stream?.release()}catch(_:Exception){}
-    stream=null;scoreFilter=null;latestGraphics=null;lastScorecardImageState=null
+    stream=null;scoreFilter=null;sponsorFilter=null;latestGraphics=null;lastScorecardImageState=null
    }
    videoWidth=if(resolution==1080)1920 else 1280
    videoHeight=resolution
@@ -372,7 +441,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }catch(_:Exception){}
   publish()
  }
- fun isActive()=running||connecting
+ fun isActive()=running||connecting||(stream?.isRecording==true)
  fun isEnded()=ended
  fun isPortrait()=portrait
  fun frontCamera()=front
@@ -430,6 +499,33 @@ class V2BroadcastService:Service(),ConnectChecker {
    .setContentIntent(open).setOngoing(true)
    .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause,
     "Stop Upload",stop).build()).build()
+ }
+ fun activateOfflineForeground():Boolean {
+  if(!prepareCamera())return false
+  if(checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED||
+     checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)return false
+  return try{
+   androidx.core.content.ContextCompat.startForegroundService(this,
+    Intent(this,V2BroadcastService::class.java).setAction(actionActivate))
+   if(!foreground){
+    val n=notification()
+    if(Build.VERSION.SDK_INT>=29)startForeground(notificationId,n,
+     ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+    else startForeground(notificationId,n)
+    foreground=true
+   }
+   true
+  }catch(_:Exception){notifyState("Unable to start local camera recording service.");false}
+ }
+ fun startOfflineRecording():Boolean {
+  if(ended||running||connecting||stream?.isRecording==true||!foreground||!prepareCamera())return false
+  offlineOnly=true;saveLocalCopy=true
+  val encoder=stream?:return false
+  beginLocalRecording(encoder)
+  if(currentRecordFile==null){offlineOnly=false;return false}
+  running=true;connecting=false
+  notifyState("Recording locally • no streaming platform")
+  return true
  }
  fun activateForeground():Boolean {
   refreshNetwork()
@@ -775,8 +871,10 @@ class V2BroadcastService:Service(),ConnectChecker {
  private fun applyScorecard(){
   val gl=stream?.getGlInterface()?:return
   try{
-   if(scoreFilter==null){
-    scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
+   if(scoreFilter==null)scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
+   if(sponsorFilter==null){
+    sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
+    applySponsorFrame()
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
@@ -974,12 +1072,13 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreAwardEpoch++
   scoreAward=null
   qualityPolling=false
+  sponsorVisible=false;sponsorEpoch++
   finishLocalRecording(stream)
   try{if(stream?.isStreaming==true)stream?.stopStream()}catch(_:Exception){}
   try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
   try{stream?.release()}catch(_:Exception){}
   stream=null
-  scoreFilter=null
+  scoreFilter=null;sponsorFilter=null
   latestGraphics=null
   lastScoreAlpha=null
   try{if(wakeLock?.isHeld==true)wakeLock?.release()}catch(_:Exception){}
