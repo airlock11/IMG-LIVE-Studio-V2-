@@ -82,6 +82,18 @@ class BroadcastSettingsUiTest {
    assertEquals("Step 1 has no camera preview","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-page .preview-wrap,.img-wizard-page video[data-img-camera]'))"))
    capture(activity,1)
+   val viewport=js(activity,web,"""(function(){
+    const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect(),c=getComputedStyle(el);return {top:r.top,bottom:r.bottom,height:r.height,scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,overflow:c.overflow,display:c.display,position:c.position,background:c.backgroundColor}};
+    return JSON.stringify({height:window.innerHeight,width:window.innerWidth,
+      app:rect(document.querySelector('.app')),
+      content:rect(document.querySelector('.app>.content')),
+      wizard:rect(document.querySelector('.img-wizard-page')),
+      scroll:rect(document.querySelector('.img-wizard-scroll')),
+      card:rect(document.querySelector('.img-wizard-card')),
+      sport:rect(document.querySelector('.img-wizard-sport')),
+      body:rect(document.body)});
+   })()""")
+   File(context.filesDir,"img-v2-wizard-viewport.txt").writeText(viewport)
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art'))")
    SystemClock.sleep(600)
