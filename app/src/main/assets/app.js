@@ -1322,6 +1322,11 @@ if(t.dataset.upload.startsWith('street-')){
  }catch(e){toast('Unable to prepare this photo. Please try another image.');}
  return;
 }
+if(t.dataset.upload==='sponsor-clip'){
+ if(file.type!=='video/mp4'||file.size>18000000){toast('Choose an MP4 file under 18 MB.');return}
+ data.sponsors.push({name:file.name.slice(0,50),img:'',video:URL.createObjectURL(file)});
+ persist();render(true);toast('Silent sponsor video added for this session.');return;
+}
 if(file.size>2_500_000){toast('Choose an image smaller than 2.5 MB.');return}if(!file.type.startsWith('image/')){toast('Upload an image file.');return}const r=new FileReader();r.onload=()=>{const value=String(r.result);if(t.dataset.upload==='quick-home-logo'){data.options.broadcast.homeLogo=value;persist()}else if(t.dataset.upload==='quick-away-logo'){data.options.broadcast.awayLogo=value;persist()}else if(t.dataset.upload==='quick-league-logo'){data.options.broadcast.leagueLogo=value;persist()}else if(t.dataset.upload==='league'&&draft)draft.logo=value;else if(t.dataset.upload.startsWith('team-')&&draft){const i=parseInt(t.dataset.upload.slice(5));if(draft.teams[i])draft.teams[i].logo=value}else if(t.dataset.upload.startsWith('sponsor-')){const i=parseInt(t.dataset.upload.slice(8));if(data.sponsors[i])data.sponsors[i].img=value;persist()}else if(t.dataset.upload.startsWith('saved-team-')){const id=t.dataset.upload.slice(11),tm=thisLeague()?.teams.find(x=>x.id===id);if(tm)tm.logo=value;persist()}render(true)};r.readAsDataURL(file)});
 
 function keepKeyboardFieldVisible(){
