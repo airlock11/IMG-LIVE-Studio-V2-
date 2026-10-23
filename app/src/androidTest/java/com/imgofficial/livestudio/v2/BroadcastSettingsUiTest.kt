@@ -136,9 +136,19 @@ class BroadcastSettingsUiTest {
    assertEquals("Exactly one physical scoreboard preview","true",js(activity,web,
     "document.querySelectorAll('canvas[data-setup-scoreboard]').length===1"))
    assertEquals("Native 16:9 bitmap stays in original Scoreboard card","true",js(activity,web,
-    "(function(){const c=document.querySelector('[data-img-scoreboard-settings] .img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
+    "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
    assertEquals("No duplicate preview container","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-sticky-preview'))"))
+   assertEquals("Original preview is visible and pinned directly beneath the header","true",js(activity,web,
+    """(function(){
+      const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll');
+      if(!a||!p)return false;
+      const r=a.getBoundingClientRect(),b=p.getBoundingClientRect();
+      const node=document.elementFromPoint(r.left+r.width/2,r.top+Math.min(25,r.height/2));
+      return getComputedStyle(a).position==='fixed'&&a.classList.contains('img-score-pinned')
+       &&Math.abs(r.top-b.top)<5&&r.width>150&&r.height>80
+       &&(node===a||a.contains(node));
+     })()"""))
    capture(activity,2,"scoreboard")
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-origin');return !!e&&!e.classList.contains('img-score-pinned')})()")
