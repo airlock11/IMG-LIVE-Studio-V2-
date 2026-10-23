@@ -33,6 +33,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var resumed=false
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
+ private val offlineMode by lazy {intent.getBooleanExtra("img_offline_recording",false)}
+ private var timeoutActive=false
  private var draftReady=true
  private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
@@ -82,7 +84,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
-   draftReady=broadcast?.prepareNextDraft(draftId)==true
+   draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
     autoLaunchAllowed=false
     refresh()
@@ -92,7 +94,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val fps=intent.getIntExtra("img_video_fps",30)
     videoProfileReady=broadcast?.isActive()==true||broadcast?.configureVideoProfile(resolution,fps)==true
     if(!videoProfileReady)autoLaunchAllowed=false
-    broadcast?.configureLocalRecording(intent.getBooleanExtra("img_record_local",false))
+    broadcast?.configureLocalRecording(!offlineMode&&intent.getBooleanExtra("img_record_local",false))
+    val names=intent.getStringExtra("img_sponsor_names").orEmpty().split("\n")
+     .map{it.trim()}.filter{it.isNotEmpty()}.take(12)
+    val images=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
+     catch(_:Exception){org.json.JSONArray()}
+    broadcast?.configureSponsorSlides(names,names.indices.map{i->
+     decodeSponsorImage(images.optString(i))
+    })
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
     intent.getStringExtra("img_home")?:"HOME",
@@ -141,6 +150,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val options=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
    if(options.outWidth !in 1..128 || options.outHeight !in 1..128)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
+ private fun decodeSponsorImage(raw:String?):android.graphics.Bitmap?{
+  if(raw.isNullOrEmpty()||raw.length>5000||!raw.startsWith("data:image/jpeg;base64,"))return null
+  return try{
+   val bytes=android.util.Base64.decode(raw.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..3500)return null
+   val opts=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,opts)
+   if(opts.outWidth !in 1..64||opts.outHeight !in 1..64)return null
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
   }catch(_:Exception){null}
  }
@@ -383,56 +403,74 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
   panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
  }
+ private fun setTimeoutMode(enabled:Boolean){
+  timeoutActive=enabled
+  if(enabled){
+   // Match the operator's expectation: the game AND shot clocks stop, while
+   // H.264/AAC camera upload or local recording remain uninterrupted.
+   gameRunning=false;lastTick=0L
+   broadcast?.setSponsorSlideshow(true)
+  }else{
+   broadcast?.setSponsorSlideshow(false)
+  }
+  updateGameClock()
+ }
  private fun showTimeoutPreview(anchor:View){
+  if(!timeoutActive)setTimeoutMode(true)
   timeoutPreview?.dismiss()
   val content=LinearLayout(this).apply{
    orientation=LinearLayout.VERTICAL
    background=rounded(Color.rgb(17,30,27),13)
    setPadding(dp(12),dp(10),dp(12),dp(10))
   }
-  content.addView(smallLabel("TIMEOUT"),LinearLayout.LayoutParams(-1,dp(24)))
-  content.addView(iconButton(darkButton("Sponsor slideshow preview"){
-   timeoutPreview?.dismiss()
-   val (dialog,panel)=customSheet("SPONSOR SLIDESHOW")
-   val names=intent.getStringExtra("img_sponsor_names").orEmpty()
-    .split("\n").map{it.trim()}.filter{it.isNotEmpty()}.take(12)
-   val title=ink(if(names.isEmpty())"No sponsors were added" else names[0],18f)
-   panel.addView(title,LinearLayout.LayoutParams(-1,dp(44)))
-   val thumbnails=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
-    catch(_:Exception){org.json.JSONArray()}
-   val artwork=android.widget.ImageView(this).apply{
-    scaleType=android.widget.ImageView.ScaleType.FIT_CENTER
-    adjustViewBounds=true
-    setBackgroundColor(Color.rgb(13,26,23))
-   }
-   if(names.isNotEmpty())panel.addView(artwork,LinearLayout.LayoutParams(-1,dp(115)))
-   fun showSponsor(index:Int){
-    title.text=names.getOrNull(index)?:"No sponsor"
-    val raw=if(index<thumbnails.length())thumbnails.optString(index) else ""
-    artwork.setImageBitmap(if(raw.startsWith("data:image/"))decodeLogo(raw) else null)
-   }
-   if(names.isNotEmpty())showSponsor(0)
-   if(names.size>1){
-    var position=0
-    val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
-    nav.addView(iconButton(darkButton("Previous"){
-     position=(position-1+names.size)%names.size;showSponsor(position)
-    },"undo"),LinearLayout.LayoutParams(0,dp(43),1f))
-    nav.addView(iconButton(darkButton("Next"){
-     position=(position+1)%names.size;showSponsor(position)
-    },"play"),LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(8)})
-    panel.addView(nav)
-   }
-   panel.addView(darkButton("CLOSE"){dialog.dismiss()},
-    LinearLayout.LayoutParams(-1,dp(42)).apply{topMargin=dp(9)})
-  },"play"),LinearLayout.LayoutParams(-1,dp(45)))
-  val pop=android.widget.PopupWindow(content,dp(285),dp(92),true).apply{
+  content.addView(smallLabel("TIMEOUT  •  CLOCK PAUSED"),LinearLayout.LayoutParams(-1,dp(26)))
+  content.addView(iconButton(darkButton("NEXT SPONSOR"){
+   broadcast?.nextSponsorSlide()
+  },"play"),LinearLayout.LayoutParams(-1,dp(40)))
+  content.addView(iconButton(greenButton("RESUME GAME"){
+   timeoutPreview?.dismiss();timeoutPreview=null
+   setTimeoutMode(false)
+   // Resuming the GAME clock is deliberate after Timeout.
+   gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()
+   updateGameClock()
+  },"play"),LinearLayout.LayoutParams(-1,dp(40)).apply{topMargin=dp(6)})
+  if(broadcast?.hasSponsorSlides()!=true){
+   content.addView(smallLabel("No sponsor slides added in Step 3."),
+    LinearLayout.LayoutParams(-1,dp(24)))
+  }
+  val popup=android.widget.PopupWindow(content,dp(285),-2,true).apply{
    setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
    isOutsideTouchable=true
    elevation=dp(12).toFloat()
   }
-  timeoutPreview=pop
-  pop.showAsDropDown(anchor,0,-dp(92)-anchor.height-dp(9),Gravity.CENTER_HORIZONTAL)
+  timeoutPreview=popup
+  popup.showAsDropDown(anchor,0,-anchor.height-dp(120),Gravity.CENTER_HORIZONTAL)
+ }
+ private fun confirmStopOfflineRecording(){
+  if(broadcast?.isOfflineRecording()!=true)return
+  broadcast?.pauseOfflineRecording()
+  refresh()
+  val (dialog,panel)=customSheet("STOP RECORDING?")
+  panel.addView(smallLabel("Recording paused. Resume or finish and save to your phone."),
+   LinearLayout.LayoutParams(-1,dp(48)))
+  val buttons=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+  buttons.addView(greenButton("RESUME"){
+   if(broadcast?.resumeOfflineRecording()==true)dialog.dismiss()
+   refresh()
+  },LinearLayout.LayoutParams(0,dp(49),1f))
+  buttons.addView(dangerButton("END"){
+   dialog.dismiss()
+   setTimeoutMode(false)
+   broadcast?.stopBroadcast()
+   setResult(Activity.RESULT_OK,Intent().putExtra("img_native_stream_ended",true)
+    .putExtra("img_local_recording_requested",true))
+   finish()
+  },LinearLayout.LayoutParams(0,dp(49),1f).apply{leftMargin=dp(10)})
+  panel.addView(buttons)
+  dialog.setOnCancelListener{
+   broadcast?.resumeOfflineRecording()
+   refresh()
+  }
  }
  private fun confirmStopUpload(){
   val (dialog,panel)=customSheet("END STREAM?")
@@ -761,8 +799,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   footer.addView(status,LinearLayout.LayoutParams(-1,dp(16)))
   val actions=horizontal()
-  start=greenButton("GO LIVE"){
+  start=greenButton(if(offlineMode)"RECORD" else "GO LIVE"){
    val service=broadcast
+   if(offlineMode){
+    if(service?.isOfflineRecording()==true){confirmStopOfflineRecording();return@greenButton}
+    if(!checkPermissions())return@greenButton
+    if(!videoProfileReady){refresh();return@greenButton}
+    if(service?.startOfflineRecording()!=true)status.text=service?.getStatus()?:"Camera service is not ready."
+    refresh()
+    return@greenButton
+   }
    if(service?.isActive()==true){confirmStopUpload();return@greenButton}
    if(!checkPermissions())return@greenButton
    if(!draftReady||!videoProfileReady){refresh();return@greenButton}
@@ -771,7 +817,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  iconButton(start,"live",true)
+  if(!offlineMode)iconButton(start,"live",true)
   val timeout=iconButton(darkButton("TIMEOUT"){},"clock")
   timeout.setOnClickListener{showTimeoutPreview(timeout)}
   val keys=listOf(start,timeout,
@@ -803,7 +849,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
   timer.post(tick)
 
-  if(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank()){
+  if(!offlineMode&&(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank())){
    status.text="Choose a verified private V2 draft from Connected Accounts."
    start.isEnabled=false
    return
@@ -831,7 +877,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private fun maybeStartPrivateUpload(){
-  if(!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
+  if(offlineMode||!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
   val service=broadcast?:return
   if(service.isActive()||service.isEnded()){autoLaunchAllowed=false;return}
   autoLaunchAllowed=false
@@ -865,28 +911,36 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val service=broadcast
   if(!::start.isInitialized)return
   val usable=service!=null&&checkPermissions()
+  val offlineNow=service?.isOfflineRecording()==true
   val liveNow=service?.isActive()==true
   val starting=service?.isStarting()==true
-  start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true&&!starting
-  val label=when{liveNow->"STOP STREAMING";starting->"STARTING STREAM…";else->"GO LIVE"}
+  start.isEnabled=usable&&draftReady&&videoProfileReady&&service?.isEnded()!=true&&
+   (offlineMode||!starting)
+  val label=when{
+   offlineMode&&offlineNow->"STOP"
+   offlineMode->"RECORD"
+   liveNow->"STOP STREAMING"
+   starting->"STARTING STREAM…"
+   else->"GO LIVE"
+  }
   if(start.text.toString()!=label){
    start.text=label
-   if(liveNow){
+   if(offlineMode&&offlineNow||!offlineMode&&liveNow){
     start.background=touchSurface(Color.rgb(181,34,44),11)
     start.setTextColor(Color.WHITE)
     start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
-    start.compoundDrawablePadding=0
    }else{
     start.background=touchSurface(Color.rgb(30,220,130),11)
     start.setTextColor(Color.rgb(7,36,27))
-    if(starting)start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
+    if(offlineMode||starting)start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)
     else iconButton(start,"live",true)
    }
   }
-  if(service!=null) {
+  if(service!=null){
    status.text=when{
     !draftReady->"This YouTube event has ended. Create a new broadcast from IMG setup."
-    !videoProfileReady->"Selected video quality is unavailable. Return to setup and choose a supported profile."
+    !videoProfileReady->"Selected video quality is unavailable. Return to setup."
+    offlineMode->service.getStatus()
     else->service.getStatus()+" • "+service.connectionSummary()
    }
    refreshScoreboard()
