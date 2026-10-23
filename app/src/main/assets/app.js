@@ -598,9 +598,11 @@ function updateWizardStickyScoreboard(){
  const source=root?.querySelector('.img-wizard-score-origin');
  const section=root?.querySelector('[data-img-scoreboard-settings]');
  if(!pane||!holder||!source||!section)return;
- const frame=pane.getBoundingClientRect(),origin=source.getBoundingClientRect(),
-  card=section.getBoundingClientRect();
- const pin=origin.bottom<=frame.top+8&&card.bottom>frame.top+80;
+ const frame=pane.getBoundingClientRect(),origin=source.getBoundingClientRect();
+ // Once the original preview scrolls above the Step 2 viewport, keep the
+ // exact live-preview canvas docked at TOP until scrolling back reveals it.
+ // Do not unpin merely because the remaining scoreboard card scrolls away.
+ const pin=origin.bottom<=frame.top+8;
  holder.hidden=!pin;
  if(pin)window.IMGMedia?.paintSetupScoreboard?.();
 }
