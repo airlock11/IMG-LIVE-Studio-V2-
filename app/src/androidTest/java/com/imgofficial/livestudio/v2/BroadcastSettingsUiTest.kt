@@ -130,6 +130,12 @@ class BroadcastSettingsUiTest {
    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-scroll');return !!e&&e.scrollTop<5&&window.scrollY<5})()")
    SystemClock.sleep(650)
    capture(activity,4)
+   assertEquals("Offline Recording must be a button, never a switch","true",js(activity,web,
+    "(function(){const b=document.querySelector('[data-action=setup-record-offline]');return !!b&&b.tagName==='BUTTON'&&b.getAttribute('role')!=='switch'})()"))
+   assertEquals("Video Quality summary block must be removed","false",js(activity,web,
+    "Boolean(document.querySelector('.img-wizard-output'))"))
+   assertEquals("Go Live must not advertise PRIVATE in button label","false",js(activity,web,
+    "(document.querySelector('[data-action=start-broadcast]')?.textContent||'').includes('PRIVATE')"))
    val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=destination-yt]'))")
    assertEquals("YouTube destination missing","true",localToggle)
    click(activity,web,"destination-yt")
