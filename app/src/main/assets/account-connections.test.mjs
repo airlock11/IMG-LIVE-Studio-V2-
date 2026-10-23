@@ -289,11 +289,11 @@ test('main private YouTube flow requires operator audience choice and stays priv
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
  const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
- assert.ok(wizard.includes('data-youtube-audience'),'Step 4 Stream Details should contain audience choices');
- assert.ok(wizard.includes('Not made for kids'));
- assert.ok(wizard.includes('Made for kids'));
+ assert.ok(!wizard.includes('data-youtube-audience'),'Audience classification must not be required in Step 4');
+ assert.ok(studio.includes("if(o.yt&&!youtubeAudience){dialog={type:'youtube-classification'};return render(true)}"),'Go Live must ask for audience classification');
  assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Audience is required before YouTube draft creation');
- assert.ok(!studio.includes("dialog={type:'youtube-classification'};render(true);return;"),'No GO LIVE classification pop-up');
+ assert.ok(studio.includes("if(d.type==='youtube-classification')"),'Audience confirmation dialog must exist');
+ assert.ok(studio.includes('return startPrivateYouTubeFromStudio()'),'Audience confirmation must start a private broadcast');
  assert.ok(studio.includes('youtube-classification-yes'));
  assert.ok(studio.includes('youtube-classification-no'));
  assert.ok(studio.includes('Made for kids?'));
