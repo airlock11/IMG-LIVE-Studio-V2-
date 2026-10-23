@@ -973,45 +973,19 @@ function render(keep=false){if(needsRender)return;
 function resetForNewBroadcast(){
  if(data.live.active)return false;
  window.IMGFacebookLive?.stop?.();
- clearTimeout(fbAttemptTimer);fbAttemptTimer=null;fbGeneration++;fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''};fbExpanded=false;fbMessage='';fbConnecting=false;fbFeedbackState='idle';
- const d=defaults();
- const previous=data.options;
- const fresh=d.options;
- // Preserve operator preferences and the selected verified destination
- // across games; never make the operator reconfigure all controls to start.
- fresh.sport=previous.sport;
- fresh.appearance=previous.appearance;
- fresh.appOrientation=previous.appOrientation;
- fresh.orientation=previous.orientation;
- fresh.regularOrientation=previous.regularOrientation;
- fresh.quality=previous.quality;
- fresh.fps=previous.fps;
- fresh.recordLocal=Boolean(previous.recordLocal);
- fresh.yt=Boolean(previous.yt);
- fresh.overlay=previous.overlay;
- fresh.overlaySize=previous.overlaySize;
- fresh.overlayOpacity=previous.overlayOpacity;
- fresh.overlayColor=previous.overlayColor;
- fresh.overlayAnimated=previous.overlayAnimated;fresh.overlayPosition=graphicIsCompact(fresh.overlay)?'bottom-right':'bottom-center';
- fresh.shotVisible=previous.shotVisible;
- fresh.mic=previous.mic;
- youtubeExpanded=Boolean(previous.yt);
- fresh.streetPlayers=fresh.streetPlayers.map(side=>side.map(player=>({...player,name:'',photo:''})));
- data.options=fresh;
- data.live={...d.live,remoteSetupId:uid()};
- scoreFlashTeam=-1;scoreFlashAt=0;focusTab='score';sponsorOpen=false;
+ clearTimeout(fbAttemptTimer);fbAttemptTimer=null;fbGeneration++;
+ fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''};
+ fbExpanded=false;fbMessage='';fbConnecting=false;fbFeedbackState='idle';
+ youtubeExpanded=false;youtubeAudience='';youtubeFeedback='';
+ const initial=defaults(),appearance=data.options.appearance;
+ data.options=initial.options;data.options.appearance=appearance;
+ data.sponsors=initial.sponsors;
+ data.live={...initial.live,remoteSetupId:uid()};
+ selectedEventId=null;data.selectedEventId=null;
+ selectedLeagueId=null;data.selectedLeagueId=null;
+ setupStep=0;scoreFlashTeam=-1;scoreFlashAt=0;focusTab='score';sponsorOpen=false;
  clearTimeout(remotePublishTimer);remoteLastPublished='';
- const ev=selectedEvent();
- if(ev){
-  const league=data.leagues.find(l=>l.id===ev.leagueId);
-  const home=league?.teams?.find(t=>t.id===ev.home),away=league?.teams?.find(t=>t.id===ev.away);
-  Object.assign(data.options.broadcast,{
-   homeName:home?.name||'',awayName:away?.name||'',
-   homeLogo:home?.logo||'',awayLogo:away?.logo||'',
-   leagueName:league?.name||'',leagueLogo:league?.logo||'',
-   showLeagueName:!!league?.name
-  });
- }
+ // Account authorization, saved leagues/teams, and local video files remain.
  persist();
  return true;
 }
@@ -1036,15 +1010,17 @@ function pushUndo(){
 async function finishBroadcast(){const offline=recordingMode(),wasFacebook=!!data.options.fb,media=window.IMGMedia;let recording=null;
  if(wasFacebook)window.IMGFacebookLive?.stop?.();fbFields.streamKey='';
  if(offline){dialog={type:'recording-saving'};render(true);
-  try{recording=await media?.stopRecording?.();}catch(e){recording={saved:false,error:media?.readableError(e)||String(e)};}
+  const snapshot={home:data.options.broadcast.homeName,away:data.options.broadcast.awayName,league:data.options.broadcast.leagueName,sport:activeSport(),scores:[...data.live.scores],platform:'offline'};
+  try{recording=await media?.stopRecording?.(snapshot);}catch(e){recording={saved:false,error:media?.readableError(e)||String(e)};}
  }
  const ev=selectedEvent();if(ev){ev.status='final';ev.finalScore=[...data.live.scores]}
  data.live.active=false;data.live.recordOnly=false;if(wasFacebook)data.options.fb=false;data.live.remoteEndedAt=Date.now();data.live.remoteLiveId=null;data.live.lockedOrientation=null;data.live.clockRunning=false;data.live.slides=false;data.live.timeout=false;
  selectedEventId=null;data.selectedEventId=null;dialog=null;media?.stopCamera?.();
  try{window.screen?.orientation?.unlock?.()}catch(e){}
  window.IMGNativeChannel?.postMessage?.('img-orientation:auto');
- persist();navigate(ev?'league-detail':'home');
- if(offline){await refreshOfflineClips();dialog={type:'recording-finished',clip:recording?{name:recording.name,bytes:recording.size,saved:recording.saved,error:recording.error}:null};render(true);}
+ resetForNewBroadcast();
+ persist();navigate('home');
+ if(offline){await refreshOfflineClips();if(!recording?.saved)toast(recording?.error||'Recording could not be saved to phone.');}
  else toast(wasFacebook?'Facebook upload stopped; end the live video in Facebook Producer.':'Game session ended'+(ev?' · result saved':''));
 }
 
