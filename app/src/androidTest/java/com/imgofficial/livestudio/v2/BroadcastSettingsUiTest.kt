@@ -96,13 +96,13 @@ class BroadcastSettingsUiTest {
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-quality'))")
    capture(activity,4)
-   val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=\\\"setup-destination-youtube\\\"]'))")
+   val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=setup-destination-youtube]'))")
    assertEquals("YouTube destination missing","true",localToggle)
    click(activity,web,"setup-destination-youtube")
-   waitFor(activity,web,"Boolean(document.querySelector('[data-action=\\\"toggle-record-local\\\"]'))")
+   waitFor(activity,web,"Boolean(document.querySelector('[data-action=toggle-record-local]'))")
    click(activity,web,"toggle-record-local")
    assertEquals("Native recording switch must work","true",
-    js(activity,web,"Boolean(document.querySelector('[data-action=\\\"toggle-record-local\\\"][aria-checked=\\\"true\\\"]'))"))
+    js(activity,web,"Boolean(document.querySelector('[data-action=toggle-record-local][aria-checked=true]'))"))
    val metric=js(activity,web,"""(function(){
     const root=document.querySelector('.img-wizard-page');
     const controls=root?.querySelector('.img-wizard-quality');
