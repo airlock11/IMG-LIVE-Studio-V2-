@@ -2127,3 +2127,9 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
 @media(min-width:570px) and (orientation:landscape){
  .app.headerless-setup-app .img-wizard-page .img-wizard-footer{width:100%!important;max-width:none!important}
 }
+
+/* Silent sponsor clips use the video area, never the phone's microphone. */
+.sponsor-scene video{
+ position:relative;z-index:1;max-width:76%;width:auto;max-height:43%;
+ object-fit:contain;border-radius:11px;margin:7px 0 12px;
+}
