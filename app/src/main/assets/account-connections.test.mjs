@@ -289,14 +289,12 @@ test('main private YouTube flow requires operator audience choice and stays priv
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
  const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
- assert.ok(!wizard.includes('data-youtube-audience'),'Audience classification must not be required in Step 4');
- assert.ok(studio.includes("if(o.yt&&!youtubeAudience){dialog={type:'youtube-classification'};return render(true)}"),'Go Live must ask for audience classification');
- assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Audience is required before YouTube draft creation');
- assert.ok(studio.includes("if(d.type==='youtube-classification')"),'Audience confirmation dialog must exist');
- assert.ok(studio.includes('return startPrivateYouTubeFromStudio()'),'Audience confirmation must start a private broadcast');
- assert.ok(studio.includes('youtube-classification-yes'));
- assert.ok(studio.includes('youtube-classification-no'));
- assert.ok(studio.includes('Made for kids?'));
+ assert.ok(wizard.includes('data-youtube-audience'),'Step 4 Stream Details must contain audience choices');
+ assert.ok(wizard.includes('Not made for kids')&&wizard.includes('Made for kids'));
+ assert.ok(studio.includes("if(o.yt&&!youtubeAudience)return toast("),'Audience must be required before Go Live');
+ assert.ok(studio.includes("if(!youtubeAudience)throw Error("),'Server draft creation must reject missing audience');
+ assert.ok(!studio.includes("dialog={type:'youtube-classification'}"),'No audience popup may interrupt Go Live');
+ assert.ok(!studio.includes("if(d.type==='youtube-classification')"),'Remove the obsolete audience modal');
  assert.ok(studio.includes('img-wizard-sticky-preview'));
  assert.ok(studio.includes('updateWizardStickyScoreboard'));
  assert.ok(studio.includes('accounts.createYoutubePrivateDraft'));
@@ -307,4 +305,33 @@ test('main private YouTube flow requires operator audience choice and stays priv
  assert.ok(native.includes('img_autostart'));
  assert.ok(!studio.includes('startPublicBroadcast'));
  assert.doesNotThrow(()=>new Script(studio));
+});
+
+test('IMG V2 Issues 1–3: scoreboard selection and size do not re-render or jump scroll',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const setOption=studio.slice(studio.indexOf('function setOption(input)'),studio.indexOf('let orientationRequestId=',studio.indexOf('function setOption(input)')));
+ assert.ok(setOption.includes("if(k==='overlay'&&screen==='setup'&&setupStep===1)"),'Artwork selection needs a stable in-place branch');
+ assert.ok(setOption.includes("button.classList.toggle('active',active)")&&setOption.includes("paintSetupScoreboard?.()"));
+ assert.ok(setOption.indexOf("if(k==='overlay'&&screen==='setup'")<setOption.indexOf("render(true)"),'Artwork selection must not force full-page render');
+ const change=studio.slice(studio.indexOf("if(t.dataset.graphicsRange){persist();return}"),studio.indexOf("if(t.dataset.quick){data.options.broadcast[t.dataset.quick]=t.value;persist();return}"));
+ assert.ok(change.includes("if(t.dataset.scoreRange||t.dataset.scoreColor){persist();window.IMGMedia?.paintSetupScoreboard?.();return}"));
+ assert.ok(!change.includes("render(true)"),'Releasing size slider must not rebuild the page');
+ assert.ok(css.includes('.img-wizard-page .img-wizard-scroll{overflow-anchor:none!important;scroll-behavior:auto!important}'));
+ assert.ok(css.includes('.img-wizard-page .img-wizard-score-origin{background:transparent!important}'));
+ assert.ok(studio.includes("img-wizard-sticky-preview"),'Keep the top docking preview');
+});
+test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confirmation',async()=>{
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const confirm=native.slice(native.indexOf('private fun confirmStopUpload()'),native.indexOf('private var operatorSheet'));
+ assert.ok(native.includes('val label=if(liveNow)"STOP STREAMING" else "GO LIVE"'));
+ assert.ok(native.includes('undoButton=iconButton(darkButton(""){undoScore()},"undo")'));
+ assert.ok(native.includes('clockHeader.addView(undoButton'));
+ assert.ok(native.includes('val timeout=iconButton(darkButton("TIMEOUT")'));
+ assert.ok(native.includes('showTimeoutPreview(timeout)'));
+ assert.ok(native.includes('Sponsor slideshow preview'));
+ assert.ok(confirm.includes('customSheet("END STREAM?")'));
+ assert.ok(confirm.includes('dangerButton("END STREAM")'));
+ assert.ok(confirm.includes('greenButton("KEEP STREAMING")'));
+ assert.ok(!confirm.includes('iconButton(')&&!confirm.includes('END UPLOAD')&&!confirm.includes('PRIVATE'));
 });
