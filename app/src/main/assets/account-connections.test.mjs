@@ -278,7 +278,7 @@ test('collapsing YouTube settings does not unselect the active destination',asyn
  const end=studio.indexOf("if(name==='youtube-connect')",start);
  assert.ok(start>0&&end>start,'Destination controller missing');
  const handler=studio.slice(start,end);
- assert.ok(handler.includes('if(!o.yt){o.yt=true;youtubeExpanded=true}'));
+ assert.ok(handler.includes('if(!o.yt){o.yt=true;o.fb=false;o.tiktok=false;youtubeExpanded=true'));
  assert.ok(handler.includes('else youtubeExpanded=!youtubeExpanded'));
  assert.ok(!handler.includes('o.yt=youtubeExpanded'));
  assert.ok(handler.includes("if(name==='youtube-remove')"));
@@ -288,8 +288,13 @@ test('collapsing YouTube settings does not unselect the active destination',asyn
 test('main private YouTube flow requires operator audience choice and stays private',async()=>{
  const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
- assert.ok(studio.includes('data-youtube-audience'));
- assert.ok(studio.includes('Select the YouTube audience classification first.'));
+ assert.ok(!studio.includes('data-youtube-audience'));
+ assert.ok(studio.includes("dialog={type:'youtube-classification'}"));
+ assert.ok(studio.includes('youtube-classification-yes'));
+ assert.ok(studio.includes('youtube-classification-no'));
+ assert.ok(studio.includes('Made for kids?'));
+ assert.ok(studio.includes('img-wizard-sticky-preview'));
+ assert.ok(studio.includes('updateWizardStickyScoreboard'));
  assert.ok(studio.includes('accounts.createYoutubePrivateDraft'));
  assert.ok(studio.includes("madeForKids:youtubeAudience==='yes'"));
  assert.ok(studio.includes("check.canCreatePrivateDraft"));
