@@ -1947,3 +1947,24 @@ html.img-native-app .camera.broadcast-canvas-camera .camera-chip{z-index:13!impo
 @media(max-width:370px){
  .graphics-positions{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
+
+/* SIMPLIFIED IMG BROADCAST SETTINGS — one natural-ratio size control. */
+.broadcast-graphics-designer .scoreboard-adjust-grid{
+ display:grid;grid-template-columns:minmax(0,1fr);gap:11px
+}
+.broadcast-graphics-designer .scoreboard-adjust{
+ font-size:13px;gap:12px
+}
+.broadcast-graphics-designer .scoreboard-adjust input[type="range"]{
+ width:100%;min-height:42px;touch-action:pan-x;accent-color:#4fcb9d
+}
+/* Leave the top-right navigation button unobstructed. A pre-permission
+   camera action sits above the center of the preview, not on its edge. */
+html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .camera-activate{
+ position:absolute!important;top:44%!important;bottom:auto!important;
+ left:50%!important;right:auto!important;
+ transform:translate(-50%,-50%)!important;
+ max-width:90%!important;min-height:42px!important;
+ white-space:nowrap;justify-content:center;
+ padding:10px 15px!important;font-size:12px!important
+}
