@@ -410,6 +410,54 @@ function recordings(){
  (offlineClips.length?offlineClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.name)+'</strong><small>'+new Date(c.createdAt).toLocaleString()+' · '+Math.max(1,Math.round(c.size/1048576*10)/10)+' MB · '+(c.duration||0)+'s</small></div><div class="offline-clip-actions"><button data-action="download-recording-'+c.id+'">Download</button><button data-action="delete-recording-'+c.id+'" aria-label="Delete recording">Delete</button></div></div>').join(''):
  (nativeClips.length?'':'<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>'))+'</main>';
 }
+// Native Offline Recording shares the EXACT camera, clock, scoring, fouls,
+// Timeout and Tools controls used by native YouTube. Opening this screen does
+// not start recording or request an online streaming account.
+let offlineNativeOpening=false;
+async function openNativeOfflineControls(){
+ if(offlineNativeOpening)return;
+ if(typeof window.IMGNativeChannel?.postMessage!=='function')
+  return toast('Offline native controls require IMG LIVE Studio V2 Android.');
+ offlineNativeOpening=true;
+ try{
+  if(data.live.active)return toast('End the current session before recording offline.');
+  const o=data.options;
+  o.yt=false;o.fb=false;o.tiktok=false;
+  youtubeExpanded=false;fbExpanded=false;
+  window.IMGMedia?.stopCamera?.();
+  const compactImage=async(raw,maxEdge=64,format='png')=>{
+   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   try{
+    const img=new Image();
+    await new Promise((ok,fail)=>{img.onload=ok;img.onerror=fail;img.src=raw});
+    if(!img.naturalWidth||!img.naturalHeight)return '';
+    const c=document.createElement('canvas');c.width=maxEdge;c.height=maxEdge;
+    const ctx=c.getContext('2d');if(!ctx)return '';
+    if(format==='jpeg'){ctx.fillStyle='#0d1a17';ctx.fillRect(0,0,maxEdge,maxEdge);}
+    const f=Math.min((maxEdge-4)/img.naturalWidth,(maxEdge-4)/img.naturalHeight);
+    ctx.drawImage(img,(maxEdge-img.naturalWidth*f)/2,(maxEdge-img.naturalHeight*f)/2,img.naturalWidth*f,img.naturalHeight*f);
+    const out=c.toDataURL('image/'+format,format==='jpeg'?.5:undefined);
+    return out.length<=(format==='jpeg'?3500:35000)?out:'';
+   }catch(_){return ''}
+  };
+  const sponsors=data.sponsors.filter(v=>String(v.name||'').trim()).slice(0,12);
+  const sponsorImages=[];
+  for(const item of sponsors)sponsorImages.push(await compactImage(item.img||'',36,'jpeg'));
+  const game={
+   sport:activeSport(),home:String(o.broadcast.homeName||'HOME').slice(0,24),
+   away:String(o.broadcast.awayName||'AWAY').slice(0,24),
+   logoHome:await compactImage(o.broadcast.homeLogo||''),
+   logoAway:await compactImage(o.broadcast.awayLogo||''),
+   sponsorNames:sponsors.map(v=>String(v.name).trim().slice(0,55)),
+   sponsorImages,graphics:normalizeGraphic(o.overlay),
+   size:Math.round(o.overlaySize),quality:o.quality,fps:o.fps,
+   shotVisible:o.shotVisible!==false
+  };
+  persist();
+  window.IMGNativeChannel.postMessage('native-offline-controls:'+encodeURIComponent(JSON.stringify(game)));
+ }catch(error){toast('Offline controls could not open: '+String(error?.message||error))}
+ finally{offlineNativeOpening=false}
+}
 async function startOfflineRecording(){
  if(offlineStartBusy||offlineStopBusy||data.live.active||screen!=='offline-ready')return;
  offlineStartBusy=true;
@@ -1244,16 +1292,7 @@ if(name.startsWith('setup-sport-')){
 if(name==='toggle-record-local'){o.recordLocal=!o.recordLocal;persist();return render(true)}
 if(name==='start-offline-recording')return startOfflineRecording();
 if(name==='offline-ready-back'){window.IMGMedia?.stopCamera?.();screen='setup';setupStep=3;history.pushState({screen},'','#/setup');return render(false)}
-if(name==='setup-record-offline'){
- if(l.active)return;
- o.yt=false;o.fb=false;o.tiktok=false;youtubeExpanded=false;fbExpanded=false;
- persist();screen='offline-ready';history.pushState({screen},'','#/offline-ready');
- render(false);
- // Open camera for framing only. Recording must NOT begin until Start Recording.
- if(window.IMGMedia?.canCamera?.())window.IMGMedia.openCamera({quality:o.quality,fps:o.fps})
-  .catch(e=>toast(window.IMGMedia?.readableError?.(e)||String(e)));
- return;
-}
+if(name==='setup-record-offline')return openNativeOfflineControls();
 if(name==='setup-destination-facebook'){
  fbExpanded=!fbExpanded;
  if(fbExpanded&&window.IMGFacebookLive?.status?.().phase==='sending'){
