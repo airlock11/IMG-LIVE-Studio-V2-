@@ -331,7 +331,8 @@ test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confir
  assert.ok(native.includes('clockHeader.addView(resetClockButton'));
  assert.ok(native.includes('val timeout=iconButton(darkButton("TIMEOUT")'));
  assert.ok(native.includes('showTimeoutPreview(timeout)'));
- assert.ok(native.includes('Sponsor slideshow preview'));
+ assert.ok(native.includes('CLOCK PAUSED')&&native.includes('RESUME GAME'),'Timeout pauses clock and has resume controls');
+ assert.ok(native.includes('broadcast?.setSponsorSlideshow(true)'),'Timeout pushes sponsor art into encoded video');
  assert.ok(confirm.includes('customSheet("END STREAM?")'));
  assert.ok(confirm.includes('dangerButton("END STREAM")'));
  assert.ok(confirm.includes('greenButton("KEEP STREAMING")'));
@@ -437,4 +438,33 @@ test('Edit Sponsor Name dialog only edits name; Step 3 retains separate image up
  assert.ok(studio.includes("data.sponsors[dialog.i].name=n"),'Only name should be saved by edit');
  assert.ok(studio.includes("data-upload='sponsor-"),'Sponsor images remain in separate Step 3 rows');
  assert.ok(css.includes('.img-sponsor-name-editor-actions'));
+});
+
+test('native offline mode reuses real operator, pauses for Resume or End and never requires OAuth',async()=>{
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const service=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const main=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ assert.ok(main.includes('native-offline-controls:')&&main.includes('.putExtra("img_offline_recording",true)'));
+ assert.ok(app.includes("if(name==='setup-record-offline')return openNativeOfflineControls()"));
+ assert.ok(activity.includes('start=greenButton(if(offlineMode)"RECORD" else "GO LIVE")'));
+ assert.ok(activity.includes('offlineMode&&offlineNow->"STOP"'));
+ assert.ok(activity.includes('confirmStopOfflineRecording()')&&activity.includes('greenButton("RESUME")')&&activity.includes('dangerButton("END")'));
+ assert.ok(activity.includes('if(!offlineMode&&(!Regex('),'Offline entry cannot demand YouTube draft');
+ assert.ok(service.includes('fun startOfflineRecording():Boolean')&&service.includes('fun pauseOfflineRecording():Boolean')&&service.includes('fun resumeOfflineRecording():Boolean'));
+ assert.ok(service.includes('stream?.pauseRecord()')&&service.includes('stream?.resumeRecord()'));
+ assert.ok(app.includes("window.IMGNativeChannel.postMessage('native-offline-controls:'"));
+});
+test('Timeout suspends game clock and native GL sponsor slides reach real recording/stream video',async()=>{
+ const a=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const svc=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastService.kt',import.meta.url),'utf8');
+ const timeout=a.slice(a.indexOf('private fun setTimeoutMode('),a.indexOf('private fun confirmStopUpload()'));
+ assert.ok(timeout.includes('gameRunning=false;lastTick=0L'));
+ assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(true)'));
+ assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(false)'));
+ assert.ok(timeout.includes('gameRunning=true;lastTick=android.os.SystemClock.elapsedRealtime()'));
+ assert.ok(svc.includes('ImageFilterRender().also{gl.addFilter(it)}'));
+ assert.ok(svc.includes('sponsorFilter?.setImage(picture)'));
+ assert.ok(svc.includes('ui.postDelayed(sponsorAdvance,5000)'));
+ assert.ok(svc.includes('ui.removeCallbacks(sponsorAdvance)'));
 });
