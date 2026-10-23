@@ -510,6 +510,13 @@ class V2BroadcastService:Service(),ConnectChecker {
   scoreboard=scoreboard.copy(clock=value.take(5))
   updateScorecard()
  }
+ fun setShotClock(seconds:Int){
+  val safe=seconds.coerceIn(0,99)
+  if(scoreboard.shotClock==safe)return
+  scoreboard=scoreboard.copy(shotClock=safe)
+  updateScorecard()
+ }
+
  fun setScorecardVisible(visible:Boolean){
   if(scoreVisible==visible)return
   scoreVisible=visible
