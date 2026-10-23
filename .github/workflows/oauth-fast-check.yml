@@ -37,8 +37,28 @@ jobs:
           node --check backend/oauth-worker/src/index.js
           node --check app/src/main/assets/account-connections.js
           node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/media.js
+          node --check app/src/main/assets/facebook-live.js
+          node --check app/src/main/assets/remote-scoring.js
+          node --check app/src/main/assets/pickleball-rules.js
       - name: Run OAuth Worker and native bridge tests
         run: node --test backend/oauth-worker/oauth.test.mjs app/src/main/assets/account-connections.test.mjs
+      - name: Verify selectable live capture frame rates
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs');
+          const media=fs.readFileSync('app/src/main/assets/media.js','utf8');
+          const start=media.indexOf('async function startLiveCapture(');
+          if(start<0)throw Error('Facebook/relay capture function missing');
+          const capture=media.slice(start);
+          if(!capture.includes('stream=canvas.captureStream(rate)'))
+            throw Error('Stream capture no longer uses selected frame rate');
+          if(capture.includes('captureStream(clamp(fps,15,30))'))
+            throw Error('60 FPS silently capped to 30 in relay');
+          if(!capture.includes('Number(fps)===60?60:30'))
+            throw Error('Relay 60 FPS selector not connected');
+          console.log('Requested 30 / 60 FPS relay capture is wired');
+          NODE
       - name: Verify trusted client integration
         run: |
           node - <<'NODE'
