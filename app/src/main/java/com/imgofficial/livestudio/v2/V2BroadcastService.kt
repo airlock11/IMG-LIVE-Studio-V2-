@@ -71,7 +71,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var sponsorFrame:android.graphics.Bitmap?=null
  private var sponsorEpoch=0
  private val sponsorAdvance=object:Runnable{
-  override fun run(){if(sponsorShowing&&!ended&&sponsorAuto)advanceSponsor()}
+  override fun run(){if(sponsorShowing&&!ended&&sponsorAuto)advanceSponsor(false)}
  }
  fun isOfflineRecording()=offlineRecording
  fun isOfflinePaused()=offlinePaused
@@ -162,12 +162,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   sponsorTransitionMs=transitionMillis.coerceIn(0,1500).toLong()
   scheduleSponsorAdvance()
  }
- private fun advanceSponsor(){
+ private fun advanceSponsor(immediate:Boolean){
   if(!sponsorShowing||sponsorSlides.isEmpty())return
   val from=sponsorSlideIndex
   sponsorSlideIndex=(sponsorSlideIndex+1)%sponsorSlides.size
-  // Manual Next begins the new image transition NOW, without waiting.
-  displaySponsor(sponsorSlideIndex,from,true)
+  // Automatic rotation uses crossfade; manual NEXT switches immediately.
+  displaySponsor(sponsorSlideIndex,from,!immediate)
   scheduleSponsorAdvance()
  }
  fun setSponsorSlideshow(enabled:Boolean){
@@ -189,7 +189,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(previous!=null)setScorecardVisibleInstant(previous)
   }
  }
- fun nextSponsorSlide(){advanceSponsor()}
+ fun nextSponsorSlide(){advanceSponsor(true)}
 
  fun configureLocalRecording(enabled:Boolean){
   if(running||connecting)return
