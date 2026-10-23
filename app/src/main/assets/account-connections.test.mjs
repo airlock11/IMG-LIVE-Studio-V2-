@@ -417,3 +417,24 @@ test('Step 3 sponsor row has per-sponsor image upload, thumbnail, replace and re
  assert.ok(studio.includes("if(jpeg.length<=3500)return jpeg;"),'Native image transport must stay bounded');
  assert.ok(!studio.includes('namedSponsors.slice(0,3)'),'Later sponsor images must not be omitted');
 });
+
+test('Edit Sponsor Name dialog only edits name; Step 3 retains separate image uploads',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const css=await readFile(new URL('./app.css',import.meta.url),'utf8');
+ const start=studio.indexOf("if(d.type==='sponsor-edit')body=");
+ const end=studio.indexOf("if(d.type==='team-edit')body=",start);
+ assert.ok(start>=0&&end>start,'Sponsor name edit dialog found');
+ const modal=studio.slice(start,end);
+ assert.ok(modal.includes('Edit Sponsor Name'));
+ assert.ok(modal.includes('Sponsor name'));
+ assert.ok(modal.includes('id="sponsor-title"'));
+ assert.ok(modal.includes('maxlength="50"'));
+ assert.ok(modal.includes('data-action="save-sponsor"'));
+ assert.ok(modal.includes('Save Name'));
+ assert.ok(modal.includes('data-action="close-modal"'));
+ for(const excluded of ['Add sponsor image','optional local logo','data-upload','accept="image/*"','Add sponsor name'])
+  assert.ok(!modal.includes(excluded),'Remove extraneous popup content: '+excluded);
+ assert.ok(studio.includes("data.sponsors[dialog.i].name=n"),'Only name should be saved by edit');
+ assert.ok(studio.includes("data-upload='sponsor-"),'Sponsor images remain in separate Step 3 rows');
+ assert.ok(css.includes('.img-sponsor-name-editor-actions'));
+});
