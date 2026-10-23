@@ -83,6 +83,23 @@ class V2BroadcastService:Service(),ConnectChecker {
   // The Android encoder may flush the MP4 trailer after stopRecord returns.
   // Finalize and publish on a worker, not on the UI/binder thread.
   val finalScore=scoreboard.copy()
+  // Preserve bounded team emblems in each successfully saved recording's
+  // local metadata. No full-resolution logos or OAuth credentials are stored.
+  fun thumbnail(bitmap:android.graphics.Bitmap?):String{
+   if(bitmap==null||bitmap.isRecycled)return ""
+   return try{
+    val edge=52
+    val small=android.graphics.Bitmap.createScaledBitmap(bitmap,edge,edge,true)
+    val buffer=java.io.ByteArrayOutputStream()
+    val ok=small.compress(android.graphics.Bitmap.CompressFormat.JPEG,65,buffer)
+    if(small!==bitmap)small.recycle()
+    val bytes=buffer.toByteArray()
+    if(ok&&bytes.size in 1..7000) "data:image/jpeg;base64,"+
+     android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP) else ""
+   }catch(_:Exception){""}
+  }
+  val savedHomeLogo=thumbnail(graphicsHomeLogo)
+  val savedAwayLogo=thumbnail(graphicsAwayLogo)
   if(Build.VERSION.SDK_INT>=29){
    Thread {
     try{
@@ -124,6 +141,8 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("away",finalScore.away)
        .put("scores",org.json.JSONArray().put(finalScore.homeScore).put(finalScore.awayScore))
        .put("sport",finalScore.sport)
+       .put("homeLogo",savedHomeLogo)
+       .put("awayLogo",savedAwayLogo)
        .put("platform","YouTube")
       previous.put(clip)
       prefs.edit().putString("clips",previous.toString()).apply()
