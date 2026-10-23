@@ -105,7 +105,7 @@ function applyAppearance(){
 applyAppearance();
 let offlineClips=[],scoreFlashTeam=-1,scoreFlashAt=0;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
-let youtubeExpanded=false,youtubeBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
+let youtubeExpanded=false,youtubeBusy=false,youtubeConnectBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
 let fbFields={serverUrl:'rtmps://live-api-s.facebook.com:443/rtmp/',streamKey:''},fbConnecting=false,fbExpanded=false,fbMessage='',fbGeneration=0,fbAttemptTimer=null,fbFeedbackState='idle';
 window.IMGFacebookLive?.setListener?.(({phase,detail})=>{
  if(screen!=='live'||!data.options.fb)return;
@@ -204,21 +204,14 @@ function facebookFields(){
 function youtubeDestination(){
  const state=window.IMGAccounts?.getStatus?.().youtube||"disconnected";
  const connected=state==="connected";
- const status=state==="authorization-pending"?"Finish sign-in":
-  state==="verification-unavailable"?"Verification unavailable":
-  state==="verifying"||state==="connecting"?"Connecting…":"";
+ const loading=youtubeConnectBusy;
  const logo='<svg class="img-wizard-platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="5" fill="#FF0033"/><path d="M10 8.6L16 12l-6 3.4Z" fill="#fff"/></svg>';
  return '<div class="img-wizard-platform" id="youtube-destination">'+
-  '<button type="button" class="img-wizard-platform-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'">'+
-  logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span></button>'+
-  '<div class="img-wizard-platform-body" '+(youtubeExpanded?'':'hidden')+'>'+
-  (connected?'<button type="button" class="outline-btn" data-action="youtube-disconnect">Disconnect</button>':
-   state==="authorization-pending"||state==="verification-unavailable"?
-   '<button type="button" class="solid-btn" data-action="youtube-verify">Connect</button>':
-   '<button type="button" class="solid-btn" data-action="youtube-connect" '+(youtubeBusy?'disabled':'')+'>Connect</button>')+
-  (youtubeFeedback?'<p role="status" class="img-wizard-platform-error">'+esc(youtubeFeedback)+'</p>':
-   status?'<span class="img-wizard-platform-error" role="status">'+esc(status)+'</span>':'')+
-  '</div></div>';
+ '<button type="button" class="img-wizard-platform-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'">'+
+ logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span></button>'+
+ '<div class="img-wizard-platform-body" '+(youtubeExpanded?'':'hidden')+'>'+
+ '<button type="button" class="'+(connected?'outline-btn':'solid-btn')+'" data-action="'+(connected?'youtube-disconnect':'youtube-connect')+'" '+(loading?'disabled':'')+'>'+
+ (connected?'Disconnect':loading?'Connecting…':'Connect')+'</button></div></div>';
 }
 function youtubeTitle(){
  const requested=String(data.options.broadcast.liveTitle||'').trim();
@@ -1270,8 +1263,11 @@ if(name==='youtube-remove'){
  persist();return render(true)
 }
 if(name==='youtube-connect'){
- youtubeFeedback='Connecting securely…';
- return window.IMGAccounts?.connect('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
+ if(youtubeConnectBusy)return;
+ youtubeConnectBusy=true;youtubeFeedback='';render(true);
+ return window.IMGAccounts?.connect('youtube')
+  .then(()=>{youtubeConnectBusy=false;render(true)})
+  .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
 }
 if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
 if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;render(true);return startPrivateYouTubeFromStudio()}
