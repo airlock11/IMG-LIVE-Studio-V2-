@@ -369,11 +369,11 @@ async function refreshOfflineClips(){
  offlineClips=await window.IMGMedia.listClips();if(screen==='recordings'||screen==='home')render(true);
 }
 function recordings(){
- return '<main class="page recordings-page" data-scroll="main"><button class="recordings-back" data-go="home">← Home</button><div class="row between"><div><div class="eyebrow">LOCAL DEVICE STORAGE</div><h1>Recordings</h1><p class="lead">Saved on this device, in this browser. Download videos to keep them in your phone files.</p></div><button class="icon-btn" data-action="refresh-recordings" aria-label="Refresh recordings">'+ic('repeat',18)+'</button></div>'+
+ return '<main class="page recordings-page" data-scroll="main"><button class="recordings-back" data-go="home">'+ic('back',17)+' Home</button><div class="row between"><div><div class="eyebrow">LOCAL DEVICE STORAGE</div><h1>Recordings</h1><p class="lead">Saved on this device, in this browser. Download videos to keep them in your phone files.</p></div><button class="icon-btn" data-action="refresh-recordings" aria-label="Refresh recordings">'+ic('repeat',18)+'</button></div>'+
  '<div class="recordings-guide">Offline MP4 recordings include your real camera and the video scoreboard. They are not uploaded to IMG. Clearing browser data can erase copies stored in this page.</div>'+
  (nativeClips.length?nativeClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.home||'Home')+' vs '+esc(c.away||'Away')+'</strong><small>YouTube · Saved to phone · '+new Date(c.createdAt).toLocaleString()+'</small></div><div class="offline-clip-actions"><button data-action="open-native-recording-'+c.id+'">Play</button></div></div>').join(''):'')+
  (offlineClips.length?offlineClips.map(c=>'<div class="offline-clip"><div class="offline-clip-info"><strong>'+esc(c.name)+'</strong><small>'+new Date(c.createdAt).toLocaleString()+' · '+Math.max(1,Math.round(c.size/1048576*10)/10)+' MB · '+(c.duration||0)+'s</small></div><div class="offline-clip-actions"><button data-action="download-recording-'+c.id+'">Download</button><button data-action="delete-recording-'+c.id+'" aria-label="Delete recording">Delete</button></div></div>').join(''):
- '<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>')+'</main>';
+ (nativeClips.length?'':'<div class="recordings-empty">'+ic('video',30)+'<h3>No offline recordings yet</h3><p>Turn all broadcast destinations off, enable the camera, and tap RECORD.</p><button class="solid-btn" data-action="instant-live">Open Broadcast Settings</button></div>'))+'</main>';
 }
 async function startOfflineRecording(){
  const media=window.IMGMedia;
@@ -430,7 +430,7 @@ function remoteScreen(){
  const r=remoteApi()?.status()||{},isHost=r.role==='host',isScorer=r.role==='scorer';
  if(isScorer&&r.approved&&window.IMGRemoteConsole)return window.IMGRemoteConsole.render(r);
  const st=r.state||{},scores=Array.isArray(st.scores)?st.scores:[0,0],fouls=Array.isArray(st.fouls)?st.fouls:[0,0],names=Array.isArray(st.names)?st.names:['Home','Away'],sport=st.sport||'basketball',pickle=sport==='pickleball';
- return '<main class="remote-page" data-scroll="main"><header class="remote-page-header"><button class="remote-back" data-action="remote-back">←</button><div><span class="eyebrow">IMG LIVE STUDIO</span><h1>Remote Scoring</h1></div></header>'+
+ return '<main class="remote-page" data-scroll="main"><header class="remote-page-header"><button class="remote-back" data-action="remote-back">'+ic('back',20)+'</button><div><span class="eyebrow">IMG LIVE STUDIO</span><h1>Remote Scoring</h1></div></header>'+
  (isHost?remoteHostPanel()+
  '<p class="remote-help">Your phone is the broadcaster. Keep the camera running; the second phone only controls scores.</p>':
  !isScorer?
@@ -815,7 +815,7 @@ function streetballLiveControls(){
  '<div class="street-score-controls">'+[0,1].map(i=>'<div class="street-live-team"><span>'+(count?esc(o.streetPlayers[i][0].name||'Player'):esc(streetTeamName(i)||(i?'RIGHT':'LEFT')))+'</span><strong class="street-live-score">'+(l.scores[i]||0)+'</strong><div class="street-point-buttons"><button data-score="'+i+':-1" aria-label="Subtract 1 point">−1</button><button data-score="'+i+':1">+1</button><button data-score="'+i+':2">+2</button></div></div>').join('')+'</div>'+
  '<div class="street-live-actions"><button data-action="undo" '+(!l.undo.length?'disabled':'')+'>Undo</button><button data-action="timeout" '+(l.timeout?'disabled':'')+'>TIMEOUT</button>'+
  (l.timeout?'<button data-action="show-sponsors" '+(l.slides?'disabled':'')+'>Sponsors</button><button data-action="resume-game">Resume</button>':'')+
- (l.slides?'<button data-action="slide-prev">◀</button><button data-action="slide-next">▶</button><button data-action="slide-play">'+(l.playing?'Pause':'Play')+'</button>':'')+'</div>'+
+ (l.slides?'<button data-action="slide-prev">'+ic('back',16)+'</button><button data-action="slide-next">'+ic('arrow',16)+'</button><button data-action="slide-play">'+(l.playing?'Pause':'Play')+'</button>':'')+'</div>'+
  '<p class="street-control-helper">Score changes appear immediately on both sides of the portrait camera preview.</p></div>';
 }
 
@@ -861,7 +861,7 @@ function pickleballControlPanel(){
  (o.pickleballType==='doubles'&&o.pickleballScoring!=='rally'?'<div class="pickle-control-row"><span class="small-label">SERVER (manual correction)</span><div class="pickle-pair"><button class="'+(l.pickleballServeNumber===1?'selected':'')+'" data-action="pickle-serve-number-1">1</button><button class="'+(l.pickleballServeNumber===2?'selected':'')+'" data-action="pickle-serve-number-2">2</button></div></div>':'')+
  '<div class="pickle-rally-message '+(finished?'pickle-rally-finished':'')+'">'+
  (finished?(matchFinished?'MATCH WINNER':'GAME WINNER')+' · '+esc(t[l.pickleballWinner]?.name|| (l.pickleballWinner?'Right':'Left')):esc(l.pickleballRallyMessage||'Tap the team that won the rally.'))+'</div>'+
- (finished&&!matchFinished?'<button class="pickle-next-game" data-action="pickle-game-next">Start game '+((l.pickleballGame||1)+1)+' →</button>':'')+
+ (finished&&!matchFinished?'<button class="pickle-next-game" data-action="pickle-game-next">Start game '+((l.pickleballGame||1)+1)+' '+ic('arrow',16)+'</button>':'')+
  pickleballBreakControls()+'</section>';
 }
 function pickleballTeamCard(team,i){
@@ -973,7 +973,21 @@ function render(keep=false){if(needsRender)return;
  const oldScroll=keep?Object.fromEntries([...document.querySelectorAll('[data-scroll]')].map(x=>[x.dataset.scroll,x.scrollTop])):{};const isStudio=['setup','live','offline-ready'].includes(screen);const showNav=['home','leagues','schedule','settings','recordings'].includes(screen);
  const remoteConsole=screen==='remote'&&remoteApi()?.status().role==='scorer'&&remoteApi()?.status().approved;
  document.documentElement.classList.toggle('img-remote-console-active',!!remoteConsole);const immersiveStreet=screen==='live'&&streetballActive();const immersiveLive=screen==='live'&&(data.options.orientation==='landscape'||immersiveStreet);const immersiveSetup=screen==='setup'&&useLandscapeSetup();const headerlessSetup=screen==='setup';const isAppLandscape=isPhysicalLandscape()&&window.innerWidth>=570&&!immersiveLive&&!immersiveSetup;let body='';switch(screen){case'home':body=home();break;case'leagues':body=leagues();break;case'schedule':body=schedule();break;case'settings':body=settings();break;case'remote':body=remoteScreen();break;case'recordings':body=recordings();break;case'create':body=createPage();break;case'league-detail':body=leagueDetail();break;case'league-teams':body=leagueTeams();break;case'league-games':body=leagueGames();break;case'add-game':body=addGame();break;case'standings':body=standings();break;case'setup':case'live':case'offline-ready':body=studio();break;default:body=home()}
- $('#app').innerHTML=`<div class="app ${keep?'stable-update':'' } ${immersiveLive?'immersive-live-app':''} ${immersiveStreet?'immersive-streetball-app':''} ${immersiveSetup?'immersive-setup-app':''} ${headerlessSetup?'headerless-setup-app':''} ${isAppLandscape?'app-wide-landscape':''} ${screen==='remote'?'remote-screen-app':''} ${remoteConsole?'remote-console-app':''}">${immersiveLive||headerlessSetup||screen==='remote'?'':header()}${isStudio?`<div class="content" style="overflow:hidden;display:flex;flex-direction:column">${body}</div>`:`<div class="content" data-scroll="root">${body}</div>`}${showNav?bottom():(immersiveLive||immersiveSetup||headerlessSetup?'':`<div class="no-nav"></div>`)}${toastText?`<div class="toast" role="status">${esc(toastText)}</div>`:''}${dialog?modal():''}</div>`;const freshVideo=document.querySelector('video[data-img-camera]');if(holder&&freshVideo){freshVideo.replaceWith(priorVideo);}window.IMGMedia?.attach?.(recordingState);if(document.getElementById('img-remote-qr'))remoteApi()?.renderQr(document.getElementById('img-remote-qr'),remoteApi()?.pairingUrl());if(keep){document.querySelectorAll('[data-scroll]').forEach(el=>{if(oldScroll[el.dataset.scroll]!=null)el.scrollTop=oldScroll[el.dataset.scroll]});restoreEditor(editor)}}
+ $('#app').innerHTML=`<div class="app ${keep?'stable-update':'' } ${immersiveLive?'immersive-live-app':''} ${immersiveStreet?'immersive-streetball-app':''} ${immersiveSetup?'immersive-setup-app':''} ${headerlessSetup?'headerless-setup-app':''} ${isAppLandscape?'app-wide-landscape':''} ${screen==='remote'?'remote-screen-app':''} ${remoteConsole?'remote-console-app':''}">${immersiveLive||headerlessSetup||screen==='remote'?'':header()}${isStudio?`<div class="content" style="overflow:hidden;display:flex;flex-direction:column">${body}</div>`:`<div class="content" data-scroll="root">${body}</div>`}${showNav?bottom():(immersiveLive||immersiveSetup||headerlessSetup?'':`<div class="no-nav"></div>`)}${toastText?`<div class="toast" role="status">${esc(toastText)}</div>`:''}${dialog?modal():''}</div>`;const freshVideo=document.querySelector('video[data-img-camera]');if(holder&&freshVideo){freshVideo.replaceWith(priorVideo);}window.IMGMedia?.attach?.(recordingState);if(document.getElementById('img-remote-qr'))remoteApi()?.renderQr(document.getElementById('img-remote-qr'),remoteApi()?.pairingUrl());if(keep){
+  document.querySelectorAll('[data-scroll]').forEach(el=>{
+   if(oldScroll[el.dataset.scroll]!=null)el.scrollTop=oldScroll[el.dataset.scroll];
+  });
+  restoreEditor(editor);
+  const currentScreen=screen;
+  requestAnimationFrame(()=>{
+   if(screen!==currentScreen)return;
+   document.querySelectorAll('[data-scroll]').forEach(el=>{
+    const wanted=oldScroll[el.dataset.scroll];
+    if(wanted!=null&&Math.abs(el.scrollTop-wanted)>2)el.scrollTop=wanted;
+   });
+   if(screen==='setup')updateWizardStickyScoreboard();
+  });
+ }}
 
 /* A new broadcast is an independent game. Keep global preferences and saved
    leagues/events, but never inherit the previous game's names, logos, rules,
