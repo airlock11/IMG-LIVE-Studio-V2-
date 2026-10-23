@@ -48,9 +48,9 @@ class BroadcastSettingsUiTest {
   assertEquals("Missing or unclickable: "+action,"true",js(activity,web,
    "(function(){const b=document.querySelector('[data-action=\"'+\"$action\"+'\"]');if(!b)return false;b.click();return true})()"))
  }
- private fun capture(activity:android.app.Activity,step:Int){
+ private fun capture(activity:android.app.Activity,step:Int,part:String=""){
   val latch=CountDownLatch(1)
-  val target=File(activity.filesDir,"img-v2-wizard-step"+step+".png")
+  val target=File(activity.filesDir,"img-v2-wizard-step"+step+(if(part.isBlank())"" else "-"+part)+".png")
   activity.runOnUiThread {
    try{
     val root=activity.window.decorView
@@ -90,11 +90,16 @@ class BroadcastSettingsUiTest {
     "Boolean(document.querySelector('.img-wizard-page .graphics-library'))"))
    assertEquals("No separate X/Y sliders","false",js(activity,web,
     "Boolean(document.querySelector('[data-graphics-range^=\"overlayOffset\"]'))"))
+   js(activity,web,"document.querySelector('.img-wizard-score-art')?.scrollIntoView({block:'center'});true")
+   SystemClock.sleep(650)
+   capture(activity,2,"scoreboard")
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
+   SystemClock.sleep(650)
    capture(activity,3)
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-quality'))")
+   SystemClock.sleep(650)
    capture(activity,4)
    val localToggle=js(activity,web,"Boolean(document.querySelector('[data-action=setup-destination-youtube]'))")
    assertEquals("YouTube destination missing","true",localToggle)
