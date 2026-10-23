@@ -2261,3 +2261,7 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
 .img-create-sports .img-wizard-sport.selected{border-color:#2fe0b0;background:#153f31}
 .img-offline-ready-page .img-offline-ready-note{padding:14px 20px;color:#94b1a6;font-size:13px;text-align:center}
 .img-offline-ready-page .fixed-cta .solid-btn{width:100%;background:#2fe0b0;color:#092a20}
+
+.img-v2-stop-recording{position:fixed;right:12px;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:99;border:1px solid #ea6b6b;border-radius:10px;background:#a72636;color:#fff;padding:9px 15px;font-size:12px;font-weight:850;box-shadow:0 4px 14px #0006}
+.img-v2-stop-recording:active{transform:scale(.98)}
+@media(orientation:landscape) and (max-height:450px){.img-v2-stop-recording{top:4px;right:7px;padding:7px 10px;font-size:10px}}
