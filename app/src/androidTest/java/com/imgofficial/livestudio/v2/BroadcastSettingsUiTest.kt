@@ -246,6 +246,12 @@ class BroadcastSettingsUiTest {
   })
   try{
    val web=seek(activity.window.decorView)!!
+   // Previous instrumentation may leave the WebView hash on an offline page.
+   // Navigate to Home deterministically before checking Create League.
+   waitFor(activity,web,"Boolean(document.querySelector('.app'))")
+   activity.runOnUiThread {
+    web.evaluateJavascript("history.replaceState({screen:'home'},'', '#/home');window.dispatchEvent(new PopStateEvent('popstate',{state:{screen:'home'}}))",null)
+   }
    waitFor(activity,web,"Boolean(document.querySelector('[data-go=create]'))")
    // A navigation click replaces WebView DOM; do not await an evaluateJavascript
    // return callback that Android is allowed to discard during navigation.
