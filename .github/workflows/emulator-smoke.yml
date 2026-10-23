@@ -56,6 +56,8 @@ jobs:
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-native-graphics.png > img-v2-native-graphics.png
             test -s img-v2-native-graphics.png
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-three-digit.png > img-v2-three-digit.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-setup-metrics.txt > img-v2-setup-metrics.txt
+            test -s img-v2-setup-metrics.txt
             test -s img-v2-three-digit.png
             adb shell am start -n com.imgofficial.livestudio.v2/.MainActivity
             sleep 18
@@ -92,6 +94,7 @@ jobs:
             img-v2-broadcast-settings.png
             img-v2-settings-scrolled.png
             img-v2-graphics-tests.txt
+            img-v2-setup-metrics.txt
             img-v2-native-graphics.png
             img-v2-three-digit.png
             img-v2-ui.xml
