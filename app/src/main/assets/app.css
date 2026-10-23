@@ -2239,3 +2239,25 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
  overflow-y:auto!important;overflow-x:hidden!important;
  -webkit-overflow-scrolling:touch;
 }
+
+/* Approved IMG V2 mobile wizard corrections (same approved palette). */
+.img-wizard-page .img-wizard-sticky-preview{order:0;flex:none!important;border-top:0!important;border-bottom:1px solid #2b443d;padding:7px 18px 9px!important;background:#10191f;z-index:70}
+.img-wizard-page .img-wizard-sticky-preview .img-wizard-score-art{width:min(100%,330px)!important;margin:0 auto;aspect-ratio:16/9}
+.img-wizard-page .img-wizard-score-art .img-wizard-score-fallback{
+ position:absolute;z-index:1;bottom:5%;left:8%;width:84%;height:auto;
+ max-width:none;max-height:30%;object-fit:contain;pointer-events:none
+}
+.img-wizard-page .img-wizard-score-art.img-wizard-score-ready .img-wizard-score-fallback{visibility:hidden!important}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{z-index:2;background:transparent!important}
+.img-wizard-page .sponsor-number{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0!important;min-width:13px!important;width:auto!important;height:auto!important;color:#9fbbb0}
+.img-wizard-page .img-wizard-quality{gap:10px!important}
+.img-wizard-page .img-wizard-quality .chip{min-height:32px!important;padding:6px 11px!important;font-size:12px!important;border-radius:9px!important}
+.img-wizard-page .img-wizard-quality-warning{margin:5px 0;color:#ffbf9e;font-size:12px}
+.img-wizard-page .img-wizard-offline-btn{min-height:44px;width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:9px 13px;border-radius:11px;border:1px solid #428571;background:#173f34;color:#abf9d9;font-weight:800;font-size:14px}
+.img-wizard-page .img-wizard-offline-btn svg:last-child{margin-left:auto}
+.img-create-sports{display:grid;gap:14px;margin:19px 0}
+.img-create-sports .img-wizard-sports{gap:11px}
+.img-create-sports .img-wizard-sport{color:#e9f6ef!important;background:#112123;border-radius:14px;min-height:78px}
+.img-create-sports .img-wizard-sport.selected{border-color:#2fe0b0;background:#153f31}
+.img-offline-ready-page .img-offline-ready-note{padding:14px 20px;color:#94b1a6;font-size:13px;text-align:center}
+.img-offline-ready-page .fixed-cta .solid-btn{width:100%;background:#2fe0b0;color:#092a20}
