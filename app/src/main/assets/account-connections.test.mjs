@@ -324,9 +324,11 @@ test('IMG V2 Issues 1–3: scoreboard selection and size do not re-render or jum
 test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confirmation',async()=>{
  const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
  const confirm=native.slice(native.indexOf('private fun confirmStopUpload()'),native.indexOf('private var operatorSheet'));
- assert.ok(native.includes('val label=if(liveNow)"STOP STREAMING" else "GO LIVE"'));
- assert.ok(native.includes('undoButton=iconButton(darkButton(""){undoScore()},"undo")'));
- assert.ok(native.includes('clockHeader.addView(undoButton'));
+ assert.ok(native.includes('liveNow->"STOP STREAMING"'));
+ assert.ok(native.includes('Color.rgb(181,34,44)'),'Live button should be red');
+ assert.ok(native.includes('start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)'),'No stop square');
+ assert.ok(native.includes('resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset")'));
+ assert.ok(native.includes('clockHeader.addView(resetClockButton'));
  assert.ok(native.includes('val timeout=iconButton(darkButton("TIMEOUT")'));
  assert.ok(native.includes('showTimeoutPreview(timeout)'));
  assert.ok(native.includes('Sponsor slideshow preview'));
@@ -334,4 +336,26 @@ test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confir
  assert.ok(confirm.includes('dangerButton("END STREAM")'));
  assert.ok(confirm.includes('greenButton("KEEP STREAMING")'));
  assert.ok(!confirm.includes('iconButton(')&&!confirm.includes('END UPLOAD')&&!confirm.includes('PRIVATE'));
+});
+
+test('phone issues: one scoreboard canvas, no lineup, no animation switch, compact tools and main shot switch',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ const renderer=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2BroadcastGraphicsRenderer.kt',import.meta.url),'utf8');
+ const wizard=studio.slice(studio.indexOf('function setupWizard(){'),studio.indexOf('function updateWizardStickyScoreboard(){'));
+ const settings=native.slice(native.indexOf('private fun openOperatorSettings()'),native.indexOf('private fun unavailableFeature('));
+ assert.ok(!wizard.includes('Lineup setup (optional)'));
+ assert.ok(!wizard.includes('graphics-switch-row'));
+ assert.ok(!wizard.includes('Score animation'));
+ assert.ok(wizard.includes('img-wizard-sticky-preview'));
+ assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
+ assert.ok(studio.includes("dock.appendChild(preview)")&&studio.includes("spacer.after(preview)"));
+ assert.ok(native.includes('android.widget.Switch(this).apply')&&native.includes('setShotClockVisible(checked)'));
+ assert.ok(native.includes('shotClockDisplay=ink('));
+ assert.ok(native.includes('intent.getBooleanExtra("img_autostart",false)'));
+ assert.ok(native.includes('maybeStartPrivateUpload()'));
+ assert.ok(settings.includes('SCOREBOARD SIZE'));
+ for(const old of ['heading("Graphics")','styleButtons','Score animation','Undo score','Game clock','Shot clock','heading("Fouls")'])
+  assert.ok(!settings.includes(old),'Old tools panel content still present: '+old);
+ assert.ok(renderer.includes('shotVisible'),'The actual native artwork should respect visibility');
 });
