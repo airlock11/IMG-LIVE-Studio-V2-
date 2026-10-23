@@ -464,16 +464,18 @@ class V2BroadcastService:Service(),ConnectChecker {
   val epoch=++scoreAwardEpoch
   scoreAward=V2Scorecard.Award(team,points,0f,prior)
   updateScorecard()
-  // A limited 15-frame sequence over 1.68 seconds follows the broadcast
-  // reference, with an identity wipe and held points-award takeover.
-  // No continuous animation loop: this minimizes mobile GPU heat.
-  for(frame in 1..15){
+  // H.264 is 24 FPS; update the overlay slightly faster (~30 FPS)
+  // for a short, fluid transition, rather than 15 frames across 1.68s.
+  // Rendering remains finite to limit encoder and GPU load.
+  val animationFrames=18
+  val frameStepMs=33L
+  for(frame in 1..animationFrames){
    ui.postDelayed({
-    if(epoch!=scoreAwardEpoch)return@postDelayed
-    scoreAward=if(frame==15)null else
-     V2Scorecard.Award(team,points,frame/15f,prior)
+    if(epoch!=scoreAwardEpoch || ended)return@postDelayed
+    scoreAward=if(frame==animationFrames)null else
+     V2Scorecard.Award(team,points,frame.toFloat()/animationFrames,prior)
     updateScorecard()
-   },frame*112L)
+   },frame*frameStepMs)
   }
  }
  fun adjustScore(team:Int,delta:Int){
