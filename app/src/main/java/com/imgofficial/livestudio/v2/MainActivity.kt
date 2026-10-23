@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.content.Intent
 import android.net.Uri
 import org.json.JSONObject
+import org.json.JSONArray
 import android.webkit.ValueCallback
 import android.webkit.WebSettings
 import androidx.webkit.WebViewCompat
@@ -28,6 +29,45 @@ import androidx.webkit.WebViewAssetLoader
 
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
+ private var graphicsGalleryPayload:String?=null
+ @Volatile private var graphicsGalleryBusy=false
+ // The picker shows snapshots produced by THE ACTUAL native H.264 overlay
+ // renderer. No fabricated CSS thumbnails: the operator sees true artwork.
+ private fun generateGraphicsGallery(){
+  val existing=graphicsGalleryPayload
+  if(existing!=null){
+   browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-graphics-gallery',{detail:"+existing+"}));",null)
+   return
+  }
+  if(graphicsGalleryBusy)return
+  graphicsGalleryBusy=true
+  Thread{
+   val items=JSONArray()
+   val example=V2Scorecard.State(home="HOME",away="AWAY",homeScore=82,awayScore=89,
+    homeFouls=3,awayFouls=4,period=3,clock="3:01")
+   try{
+    for(i in V2BroadcastGraphicsRenderer.names.indices){
+     val full=V2BroadcastGraphicsRenderer.render(example,1f,null,i,null,null)
+     val compact=V2BroadcastGraphicsRenderer.compact(i)
+     val thumb=android.graphics.Bitmap.createScaledBitmap(full,
+      if(compact)126 else 360,if(compact)126 else 54,true)
+     val bytes=java.io.ByteArrayOutputStream()
+     thumb.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+     val encoded=android.util.Base64.encodeToString(bytes.toByteArray(),android.util.Base64.NO_WRAP)
+     if(encoded.length<100000)items.put(JSONObject().put("id",i)
+      .put("src","data:image/png;base64,"+encoded))
+     if(thumb!==full)thumb.recycle()
+     full.recycle()
+    }
+    val result=JSONObject().put("items",items).toString()
+    graphicsGalleryPayload=result
+    runOnUiThread{
+     if(!isFinishing && ::browser.isInitialized)
+      browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('img-native-graphics-gallery',{detail:"+result+"}));",null)
+    }
+   }catch(_:Exception){}finally{graphicsGalleryBusy=false}
+  }.start()
+ }
  private lateinit var browser: WebView
  private var oauthClient: NativeOAuthClient? = null
  private lateinit var root: FrameLayout
@@ -74,6 +114,7 @@ class MainActivity : Activity() {
      val localPage=url?.substringBefore('#')?.substringBefore('?')
      if(localPage == "$origin/assets/index.html" || localPage == "$origin/assets/connections.html") {
       view.evaluateJavascript("document.documentElement.classList.add('img-native-app');", null)
+      if(localPage == "$origin/assets/index.html") generateGraphicsGallery()
       if(BuildConfig.OAUTH_BACKEND_URL.isNotBlank()){
        // Verified YouTube account state is available directly in Broadcast
        // Settings, without navigating to a separate diagnostics page.
