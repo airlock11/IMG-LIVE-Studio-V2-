@@ -28,13 +28,19 @@ class BroadcastSettingsUiTest {
   return null
  }
  private fun js(activity:android.app.Activity,web:WebView,code:String):String {
-  val result=AtomicReference("")
-  val latch=CountDownLatch(1)
-  activity.runOnUiThread{
-   web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+  // Android WebView can discard the callback for a frame that navigates while
+  // evaluateJavascript is in flight. Retry the same read-only query after the
+  // next frame; a continuously unresponsive WebView still fails the test.
+  for(attempt in 1..3){
+   val result=AtomicReference("")
+   val latch=CountDownLatch(1)
+   activity.runOnUiThread{
+    web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+   }
+   if(latch.await(5,TimeUnit.SECONDS))return result.get()
+   SystemClock.sleep(350)
   }
-  assertTrue("WebView JavaScript did not respond",latch.await(8,TimeUnit.SECONDS))
-  return result.get()
+  throw AssertionError("WebView JavaScript did not respond after 3 attempts")
  }
  private fun waitFor(activity:android.app.Activity,web:WebView,test:String){
   repeat(25){
