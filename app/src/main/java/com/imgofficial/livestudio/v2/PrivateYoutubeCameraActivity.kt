@@ -265,7 +265,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   return dialog to panel
  }
  private fun editClock(){
-  val (dialog,panel)=customSheet("EDIT GAME CLOCK")
+  val (dialog,panel)=customSheet("Set time")
   val display=ink("",35f).apply{setTypeface(typeface,android.graphics.Typeface.BOLD)}
   fun show(){display.text="%02d:%02d".format(gameSeconds/60,gameSeconds%60)}
   show();panel.addView(display,LinearLayout.LayoutParams(-1,dp(58)))
@@ -341,11 +341,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   gripRow.addView(grip,FrameLayout.LayoutParams(dp(42),dp(4),Gravity.TOP or Gravity.CENTER_HORIZONTAL))
   outer.addView(gripRow,LinearLayout.LayoutParams(-1,dp(10)))
   val header=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL}
-  header.addView(ink("BROADCAST TOOLS",16f).apply{
+  header.addView(ink("Broadcast tools",16f).apply{
    gravity=Gravity.CENTER_VERTICAL
    setTypeface(typeface,android.graphics.Typeface.BOLD)
   },LinearLayout.LayoutParams(0,dp(35),1f))
-  header.addView(darkButton("✕ CLOSE"){dialog.dismiss()},LinearLayout.LayoutParams(dp(66),dp(33)))
+  header.addView(darkButton("Close"){dialog.dismiss()},LinearLayout.LayoutParams(dp(66),dp(33)))
   outer.addView(header)
   val scrolling=android.widget.ScrollView(this).apply{
    isFillViewport=false
@@ -363,30 +363,40 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    line.addView(right,LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(7)})
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  heading("BROADCAST GRAPHICS • LIVE STYLES")
+  heading("Graphics")
   val names=V2BroadcastGraphicsRenderer.names
+  val styleButtons=mutableListOf<Button>()
   for(i in names.indices step 3){
    val line=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
    for(j in i until minOf(i+3,names.size)){
     val btn=tool(names[j]){
      broadcast?.setGraphicsStyle(j)
+     styleButtons.forEachIndexed{n,b->
+      b.background=touchSurface(
+       if(n==j)Color.rgb(27,123,86) else Color.rgb(39,67,57),10)
+     }
      refresh()
-    }.apply{textSize=if(names[j].length>11)10f else 11f}
+    }.apply{
+     textSize=if(names[j].length>11)10f else 11f
+     background=touchSurface(
+      if(broadcast?.graphicsStyle()==j)Color.rgb(27,123,86) else Color.rgb(39,67,57),10)
+    }
+    styleButtons.add(btn)
     val params=LinearLayout.LayoutParams(0,dp(39),1f)
     if(j>i)params.leftMargin=dp(4)
     line.addView(btn,params)
    }
    tools.addView(line,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(4)})
   }
-  heading("SIZE & PLACEMENT")
-  pair(tool("SMALLER −"){broadcast?.resizeGraphics(-5)},
-   tool("LARGER +"){broadcast?.resizeGraphics(5)})
-  pair(tool("BOTTOM CENTER"){broadcast?.placeGraphicsAt("bottom-center")},
-   tool("BOTTOM RIGHT"){broadcast?.placeGraphicsAt("bottom-right")})
-  pair(tool("BOTTOM LEFT"){broadcast?.placeGraphicsAt("bottom-left")},
-   tool("TOP RIGHT"){broadcast?.placeGraphicsAt("top-right")})
-  pair(tool("TOP LEFT"){broadcast?.placeGraphicsAt("top-left")},
-   tool("RESET POSITION"){broadcast?.placeGraphicsAt(
+  heading("Size & position")
+  pair(tool("Smaller"){broadcast?.resizeGraphics(-5)},
+   tool("Larger"){broadcast?.resizeGraphics(5)})
+  pair(tool("Bottom"){broadcast?.placeGraphicsAt("bottom-center")},
+   tool("Lower right"){broadcast?.placeGraphicsAt("bottom-right")})
+  pair(tool("Lower left"){broadcast?.placeGraphicsAt("bottom-left")},
+   tool("Upper right"){broadcast?.placeGraphicsAt("top-right")})
+  pair(tool("Upper left"){broadcast?.placeGraphicsAt("top-left")},
+   tool("Reset"){broadcast?.placeGraphicsAt(
     if(V2BroadcastGraphicsRenderer.compact(broadcast?.graphicsStyle()?:0))
      "bottom-right" else "bottom-center")})
   fun settingsToggle(name:String,value:Boolean,onToggle:(Boolean)->Unit):android.widget.Switch{
@@ -404,37 +414,31 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     setOnCheckedChangeListener{_,checked->onToggle(checked)}
    }
   }
-  tools.addView(settingsToggle("Animate score awards (+1 / +2 / +3)",
+  tools.addView(settingsToggle("Score animation",
    broadcast?.scoreEffectsEnabled()==true){broadcast?.setScoreEffectsEnabled(it)
   },LinearLayout.LayoutParams(-1,dp(42)))
-  heading("CAMERA & VISIBILITY")
-  tools.addView(settingsToggle("Show Broadcast Graphics",broadcast?.scorecardVisible()==true){
+  heading("Camera")
+  tools.addView(settingsToggle("Show graphics",broadcast?.scorecardVisible()==true){
    broadcast?.setScorecardVisible(it)
   },LinearLayout.LayoutParams(-1,dp(42)))
-  tools.addView(settingsToggle("Touch feedback",touchFeedback){
+  tools.addView(settingsToggle("Vibration",touchFeedback){
    touchFeedback=it
   },LinearLayout.LayoutParams(-1,dp(42)))
-  pair(tool("SWITCH CAMERA"){broadcast?.flipCamera();refresh()},
-   tool("UNDO LAST SCORE"){undoScore()})
-  heading("CLOCK & GAME")
-  pair(tool("EDIT GAME CLOCK"){dialog.dismiss();editClock()},
-   tool("RESET TO 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
-  heading("SHOT CLOCK")
-  pair(tool("RESET 24 SEC"){shotSeconds=24;updateGameClock()},
-   tool("RESET 14 SEC"){shotSeconds=14;updateGameClock()})
-  pair(tool("SHOT −1 SEC"){shotSeconds=(shotSeconds-1).coerceAtLeast(0);updateGameClock()},
-   tool("SHOT +1 SEC"){shotSeconds=(shotSeconds+1).coerceAtMost(99);updateGameClock()})
+  pair(tool("Flip camera"){broadcast?.flipCamera();refresh()},
+   tool("Undo score"){undoScore()})
+  heading("Game clock")
+  pair(tool("Set time"){dialog.dismiss();editClock()},
+   tool("Reset 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
+  heading("Shot clock")
+  pair(tool("24s reset"){shotSeconds=24;updateGameClock()},
+   tool("14s reset"){shotSeconds=14;updateGameClock()})
+  pair(tool("−1s"){shotSeconds=(shotSeconds-1).coerceAtLeast(0);updateGameClock()},
+   tool("+1s"){shotSeconds=(shotSeconds+1).coerceAtMost(99);updateGameClock()})
   if(intent.getStringExtra("img_sport")!="pickleball"){
-   heading("FOUL CORRECTIONS")
-   pair(tool("HOME FOUL −1"){broadcast?.adjustFoul(0,-1);refreshScoreboard()},
-    tool("AWAY FOUL −1"){broadcast?.adjustFoul(1,-1);refreshScoreboard()})
+   heading("Fouls")
+   pair(tool("Home −1"){broadcast?.adjustFoul(0,-1);refreshScoreboard()},
+    tool("Away −1"){broadcast?.adjustFoul(1,-1);refreshScoreboard()})
   }
-  heading("ADVANCED BROADCAST · COMING SOON")
-  val replay=tool("INSTANT REPLAY"){}
-  val sponsors=tool("SPONSOR OVERLAY"){}
-  replay.isEnabled=false;replay.alpha=.48f
-  sponsors.isEnabled=false;sponsors.alpha=.48f
-  pair(replay,sponsors)
   scrolling.addView(tools)
   outer.addView(scrolling,LinearLayout.LayoutParams(-1,0,1f))
   dialog.setContentView(outer)
