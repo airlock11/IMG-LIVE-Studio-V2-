@@ -277,10 +277,31 @@ async function startPrivateYouTubeFromStudio(){
   const logoAway=await compactBadge(data.options.broadcast.awayLogo);
   const homeTeam=gameTeams()[0]?.name||'HOME',awayTeam=gameTeams()[1]?.name||'AWAY';
   const namedSponsors=data.sponsors.filter(x=>String(x.name||'').trim()).slice(0,12);
+  // Send a small thumbnail for EACH named sponsor (not only the first 3).
+  // The native bridge caps this JSON extra at 60 KB. Each image is bounded,
+  // and name/image arrays retain their matching position.
+  async function compactSponsorPreview(raw){
+   if(typeof raw!=='string'||!/^data:image\/(png|jpeg|webp);base64,/i.test(raw))return '';
+   try{
+    const image=new Image();
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=raw;});
+    if(!image.naturalWidth||!image.naturalHeight)return '';
+    for(const [dimension,quality] of [[48,.68],[36,.55],[28,.42]]){
+     const canvas=document.createElement('canvas');canvas.width=dimension;canvas.height=dimension;
+     const ctx=canvas.getContext('2d');if(!ctx)break;
+     ctx.fillStyle='#0d1a17';ctx.fillRect(0,0,dimension,dimension);
+     const factor=Math.min((dimension-2)/image.naturalWidth,(dimension-2)/image.naturalHeight);
+     ctx.drawImage(image,(dimension-image.naturalWidth*factor)/2,
+       (dimension-image.naturalHeight*factor)/2,image.naturalWidth*factor,image.naturalHeight*factor);
+     const jpeg=canvas.toDataURL('image/jpeg',quality);
+     if(jpeg.length<=3500)return jpeg;
+    }
+   }catch(_){}
+   return '';
+  }
   const sponsorImages=[];
-  for(const item of namedSponsors.slice(0,3)){
-   const image=await compactBadge(item.img||'');
-   sponsorImages.push(image.length<=18000?image:'');
+  for(const item of namedSponsors){
+   sponsorImages.push(await compactSponsorPreview(item.img||''));
   }
   // Only bounded, non-secret game labels cross the local origin-checked
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
