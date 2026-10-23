@@ -20,6 +20,8 @@ function useLandscapeSetup(){
 }
 
 const svgPaths={
+ wifi:'<path d="M2 9a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8 15a6 6 0 0 1 8 0"/><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>',
+ scan:'<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4M4 12h16"/>',
  'layout-broadcast':'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 15h20M7 18h10M12 6v8"/>',
  'corner-bottom-left':'<path d="M4 5v15h15M9 15l-5 5m0-5 5 5"/>',
  'corner-bottom-right':'<path d="M20 5v15H5m10-5 5 5m0-5-5 5"/>',
@@ -348,7 +350,7 @@ async function startFacebookBroadcast(){
   const available=fb.available?.();
   if(!available?.ready)throw Error('IMG streaming server is not online yet. Facebook cannot connect until we deploy it.');
   updateFacebookFeedback('loading','Connecting video to Facebook…');
-  await media.openCamera({quality:o.quality});
+  await media.openCamera({quality:o.quality,fps:o.fps});
   if(currentAttempt!==fbGeneration)return;
   await fb.start(cfg,recordingState,{quality:o.quality,orientation:o.orientation,fps:o.fps,
    microphone:o.micInputs?.some(x=>x.type==='device'&&x.enabled)});
@@ -392,7 +394,7 @@ async function startOfflineRecording(){
  if(!media?.canCamera())return toast('Camera is unavailable. Use HTTPS Chrome on a device with a camera.');
  const o=data.options,l=data.live;
  try{
-  await media.openCamera({quality:o.quality});
+  await media.openCamera({quality:o.quality,fps:o.fps});
   if(!recordOnly())return toast('Recording mode requires every broadcast destination to be off.');
   const opts={quality:o.quality,orientation:o.orientation,fps:o.fps,microphone:o.micInputs?.some(x=>x.type==='device'&&x.enabled)};
   const result=await media.startRecording(recordingState,opts);
@@ -1088,7 +1090,7 @@ if(name==='street-position-reset-all'||name.startsWith('street-position-reset-')
 if(name==='edit-scoreboard'){dialog={type:'overlay-customize'};return render(true)}
 if(name==='notifications')return toast('No notifications.');
 if(name==='exit-setup'){window.IMGNativeChannel?.postMessage?.('img-orientation:auto');clearTimeout(fbAttemptTimer);fbAttemptTimer=null;if(fbConnecting){fbGeneration++;window.IMGFacebookLive?.stop?.();fbConnecting=false}fbFields.streamKey='';window.IMGMedia?.stopCamera?.();return navigate('home')}
-if(name==='enable-camera'){const media=window.IMGMedia;if(!media?.canCamera())return toast('Use HTTPS Chrome on your phone to enable the real camera.');return media.openCamera({quality:o.quality}).then(()=>{render(true);toast('Real camera preview enabled')}).catch(e=>toast(media.readableError(e)))}
+if(name==='enable-camera'){const media=window.IMGMedia;if(!media?.canCamera())return toast('Use HTTPS Chrome on your phone to enable the real camera.');return media.openCamera({quality:o.quality,fps:o.fps}).then(()=>{render(true);toast('Real camera preview enabled')}).catch(e=>toast(media.readableError(e)))}
 if(name==='refresh-recordings')return refreshOfflineClips();
 if(name==='download-last-recording'){try{window.IMGMedia?.downloadClip(window.IMGMedia.latestClip());}catch(e){toast(e.message)}return}
 if(name.startsWith('download-recording-')){const id=name.slice('download-recording-'.length);return window.IMGMedia?.getClip(id).then(c=>{if(c)window.IMGMedia.downloadClip(c);else toast('Recording not found on this device.')}).catch(e=>toast(e.message))}
