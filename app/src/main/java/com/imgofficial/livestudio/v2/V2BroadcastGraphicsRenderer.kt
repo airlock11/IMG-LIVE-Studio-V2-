@@ -318,24 +318,53 @@ internal object V2BroadcastGraphicsRenderer {
    label(c,p,code,x+w*.5f,y+17f,17f,SILVER)
   }
   when(id){
-   0->{ // Long broadcast plate: two colored team sections, white score, right match clock.
-    bevel(c,p,12f,5f,936f,136f,0xFF353839.toInt(),0xFF05080D.toInt(),5f,SILVER)
+   0->{ // Pixel-position mapped to the supplied rectangular league graphic.
+    // Material, dividers, score-cell order, right-side clock and bottom record
+    // rail match the reference. Only sample content is replaced.
+    p.setShadowLayer(14f,0f,5f,0xB9000000.toInt())
+    shape(c,p,6f,10f,948f,131f,0xFF050609.toInt(),10f)
+    p.clearShadowLayer()
+    bevel(c,p,9f,11f,942f,131f,0xFF37393D.toInt(),0xFF0A0B0E.toInt(),3f,0xFF98999C.toInt())
+    // Two paired team plates; bevels and fine lighting remain untouched
+    // when a team has no custom logo.
     for(i in 0..1){
-     val x=18f+i*343f
-     bevel(c,p,x,13f,343f,81f,col[i],mix(col[i],INK,.66f),1f,col[i])
-     badge(i,x+51f,52f,36f)
-     label(c,p,names[i],x+146f,66f,42f,WHITE,Paint.Align.CENTER,170f)
-     num(i,x+264f,14f,77f,80f)
-     awardName(i,x+89f,13f,173f,81f)
+     val left=if(i==0)11f else 337f
+     val w=325f
+     val upper=if(i==0)0xFF1F436A.toInt() else 0xFF91213B.toInt()
+     val lower=if(i==0)0xFF162B45.toInt() else 0xFF59182B.toInt()
+     bevel(c,p,left,15f,w,87f,upper,lower,1f,0xFF53616D.toInt())
+     shape(c,p,left+2f,16f,w-4f,5f,0x1BFFFFFF)
+     shape(c,p,left+2f,55f,w-4f,2f,0x171C2025)
+     shape(c,p,left+1f,98f,w-2f,3f,0x7C000000)
+     val logo=logos[i]
+     val code=names[i].trim().split(' ').lastOrNull().orEmpty().uppercase().take(8)
+     if(logo!=null&&!logo.isRecycled)badge(i,left+47f,57f,34f)
+     val nameX=if(logo!=null)left+135f else left+122f
+     label(c,p,code,nameX,75f,41f,WHITE,Paint.Align.CENTER,if(logo!=null)142f else 192f)
+     // Precisely separated score window, not a floating button.
+     shape(c,p,left+241f,17f,81f,81f,
+      if(i==0)0xFF102238.toInt() else 0xFF581524.toInt())
+     shape(c,p,left+242f,18f,79f,3f,0x27FFFFFF)
+     label(c,p,points[i].toString(),left+282f,80f,64f)
+     pointsFlash(c,p,a,i,left+242f,17f,80f,81f,accent,id)
+     awardName(i,left+6f,19f,230f,78f)
     }
-    bevel(c,p,707f,13f,235f,81f,0xFF424447.toInt(),0xFF14191E.toInt(),2f,SILVER)
-    label(c,p,if(s.period<=4)"${s.period}RD" else "OT",751f,65f,27f,SILVER)
-    bevel(c,p,802f,22f,93f,62f,WHITE,0xFFBBC5C8.toInt(),10f,INK)
-    label(c,p,s.clock.ifEmpty{"10:00"},850f,67f,37f,INK)
-    label(c,p,"24",918f,70f,49f,0xFFFFBA30.toInt())
-    banner(18f,98f,323f,"IMG • LIVE SPORTS")
-    banner(362f,98f,337f,"BASKETBALL • Q${s.period}")
-    banner(704f,98f,238f,"BROADCAST GRAPHICS")
+    // Broadcast clock housing with the reference's white inset clock
+    // and contrasting amber shot-clock cell.
+    bevel(c,p,664f,15f,284f,87f,0xFF454549.toInt(),0xFF17191B.toInt(),2f,0xFF7B7D80.toInt())
+    label(c,p,if(s.period in 1..4)"${s.period}RD" else "OT${s.period-4}",
+     719f,72f,32f,0xFFC7C9C9.toInt())
+    bevel(c,p,769f,25f,91f,66f,0xFFF7F9F6.toInt(),0xFFCDD4D6.toInt(),8f,0xFFCFD4D6.toInt())
+    label(c,p,s.clock.ifBlank{"10:00"},814f,72f,41f,0xFF101318.toInt())
+    shape(c,p,872f,23f,64f,72f,0xFF302B26.toInt(),1f)
+    label(c,p,"24",903f,78f,60f,0xFFF6B72D.toInt())
+    // Original reference contains three independent secondary-info zones.
+    bevel(c,p,11f,105f,938f,33f,0xFF3B3D3E.toInt(),0xFF141517.toInt(),2f,0xFF49494D.toInt())
+    label(c,p,"FOULS  ${s.homeFouls}   ${if(s.homeFouls>=5)"BONUS" else ""}",
+     170f,130f,21f,0xFFBFC1C2.toInt())
+    label(c,p,"Q${s.period}  •  IMG LIVE",486f,130f,21f,0xFFBFC1C2.toInt())
+    label(c,p,"FOULS  ${s.awayFouls}   ${if(s.awayFouls>=5)"BONUS" else ""}",
+     787f,130f,21f,0xFFBFC1C2.toInt())
    }
    1->{ // Chrome capsule with team LEDs, center emblem and hanging clock extension.
     bevel(c,p,11f,2f,938f,109f,SILVER,0xFF182029.toInt(),53f,SILVER)
@@ -370,20 +399,69 @@ internal object V2BroadcastGraphicsRenderer {
     label(c,p,s.clock.ifBlank{"10:00"},485f,133f,26f)
     label(c,p,"SHOT 24",685f,133f,24f,accent)
    }
-   3->{ // NBA-like circular mid-clock strip with opposing logos at the extreme edges.
-    bevel(c,p,4f,20f,952f,98f,0xFF232B31.toInt(),0xFF080B0E.toInt(),5f,SILVER)
-    bevel(c,p,8f,26f,473f,83f,c1,mix(c1,INK,.7f),3f,SILVER)
-    bevel(c,p,480f,26f,473f,83f,c2,mix(c2,INK,.7f),3f,SILVER)
-    badge(0,62f,68f,38f);badge(1,906f,68f,38f)
-    label(c,p,names[0],195f,83f,39f)
-    label(c,p,names[1],757f,83f,39f)
-    num(0,323f,32f,113f,75f);num(1,520f,32f,113f,75f)
-    awardName(0,108f,27f,212f,80f);awardName(1,637f,27f,213f,80f)
-    mark(c,p,480f,66f,62f,accent,"IMG",null)
-    shape(c,p,422f,58f,116f,48f,0xED111C25.toInt(),7f)
-    label(c,p,s.clock.ifBlank{"10:00"},480f,78f,32f)
-    label(c,p,"Q${s.period}   24",480f,99f,21f,accent)
-    banner(12f,122f,936f,"FOULS ${s.homeFouls}                  IMG LIVE                  FOULS ${s.awayFouls}")
+   3->{ // Exact spatial mapping of the supplied NBA center-clock graphic:
+    // opposing team rails, separate score windows, circular clock overlapping
+    // the graphic above, two foul lanes, and the bottom record/possession strip.
+    p.setShadowLayer(17f,0f,7f,0xA0000000.toInt())
+    shape(c,p,8f,31f,944f,110f,0xFF050608.toInt(),3f)
+    p.clearShadowLayer()
+    bevel(c,p,11f,32f,938f,110f,0xFF45474B.toInt(),0xFF121316.toInt(),4f,0xFF8C9196.toInt())
+    bevel(c,p,13f,34f,466f,78f,
+     if(id==3)0xFF2E679C.toInt() else c1,0xFF173658.toInt(),2f,0xFF5C8BB6.toInt())
+    bevel(c,p,480f,34f,468f,78f,
+     if(id==3)0xFF99602D.toInt() else c2,0xFF4D2B18.toInt(),2f,0xFFA17855.toInt())
+    // Fine horizontal vinyl ribs in the reference material.
+    for(i in 0..1){
+     val left=if(i==0)16f else 483f
+     val ink=if(i==0)0xFFB4D2E6.toInt() else 0xFFEBD1AA.toInt()
+     shape(c,p,left+1f,36f,460f,2f,0x28FFFFFF)
+     shape(c,p,left+1f,103f,460f,4f,0x55000000)
+     for(t in 0..5){
+      shape(c,p,left+12f+t*33f,108f,29f,2f,ink)
+     }
+     val logo=logos[i]
+     // Real team art only. Missing logos never generate circles or initials.
+     val xLogo=if(i==0)63f else 901f
+     if(logo!=null&&!logo.isRecycled)badge(i,xLogo,74f,39f)
+     val code=names[i].split(' ').lastOrNull().orEmpty().uppercase().take(7)
+     val nx=if(i==0)(if(logo==null)159f else 205f)
+       else (if(logo==null)794f else 757f)
+     label(c,p,code,nx,91f,50f,WHITE,Paint.Align.CENTER,159f)
+     val scoreX=if(i==0)335f else 578f
+     shape(c,p,scoreX,37f,102f,68f,
+      if(i==0)0xFF214A70.toInt() else 0xFF795029.toInt())
+     label(c,p,points[i].toString(),scoreX+51f,93f,68f,WHITE)
+     pointsFlash(c,p,a,i,scoreX,38f,102f,67f,accent,id)
+     if(a?.team==i){
+      val wipeX=if(i==0)110f else 690f
+      identityTransition(c,p,a,i,wipeX,39f,165f,63f,id,accent,col[i],names[i],logo)
+     }
+    }
+    // Reference dark-grey foul and records strip underneath the team bars.
+    shape(c,p,12f,113f,936f,28f,0xFF171719.toInt(),1f)
+    shape(c,p,12f,114f,936f,2f,0xFF53565A.toInt())
+    label(c,p,"FOULS: ${s.homeFouls}${if(s.homeFouls>=5)"  BONUS" else ""}",
+     320f,134f,19f,0xFFD1D2D3.toInt())
+    label(c,p,"FOULS: ${s.awayFouls}${if(s.awayFouls>=5)"  BONUS" else ""}",
+     639f,134f,19f,0xFFD1D2D3.toInt())
+    // A separate raised circular time module is the distinctive reference.
+    // It remains visible across the team rails and partially below them.
+    p.setShadowLayer(7f,0f,3f,0xDC000000.toInt())
+    p.color=0xFF080D13.toInt();c.drawCircle(480f,77f,76f,p)
+    p.clearShadowLayer()
+    p.shader=LinearGradient(415f,15f,548f,139f,
+     0xFFBEC9D0.toInt(),0xFF232C36.toInt(),Shader.TileMode.CLAMP)
+    c.drawCircle(480f,74f,71f,p);p.shader=null
+    p.color=0xFF161E28.toInt();c.drawCircle(480f,73f,65f,p)
+    p.shader=LinearGradient(440f,17f,511f,122f,
+      0xFF414C58.toInt(),0xFF101620.toInt(),Shader.TileMode.CLAMP)
+    c.drawCircle(480f,73f,61f,p);p.shader=null
+    shape(c,p,428f,62f,104f,3f,0x55FFFFFF)
+    label(c,p,s.clock.ifBlank{"10:00"},480f,80f,44f,WHITE)
+    label(c,p,if(s.period<=4)"${s.period}RD" else "OT${s.period-4}",
+     462f,117f,28f,WHITE)
+    shape(c,p,496f,93f,38f,29f,0xFF853A44.toInt(),2f)
+    label(c,p,"24",515f,116f,24f,WHITE)
    }
    4->{ // Vertical stacked scoreboard with separate game-clock/bonus column.
     bevel(c,p,3f,4f,954f,134f,0xFF20272C.toInt(),0xFF05080C.toInt(),7f,SILVER)
