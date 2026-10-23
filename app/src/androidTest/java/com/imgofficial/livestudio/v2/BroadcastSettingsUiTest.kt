@@ -101,7 +101,19 @@ class BroadcastSettingsUiTest {
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
     "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
    SystemClock.sleep(700)
-   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
+   try {
+    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
+   }catch(ex:AssertionError){
+    val debug=js(activity,web,"""(function(){
+     const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin'),
+      c=document.querySelector('[data-img-scoreboard-settings]'),h=document.querySelector('.img-wizard-sticky-preview');
+     return JSON.stringify({scroll:p?.scrollTop,maxScroll:p?(p.scrollHeight-p.clientHeight):0,
+      paneTop:p?.getBoundingClientRect().top,artBottom:a?.getBoundingClientRect().bottom,
+      sectionBottom:c?.getBoundingClientRect().bottom,hasHolder:!!h,holderHidden:h?.hidden,
+      sectionCount:document.querySelectorAll('[data-img-scoreboard-settings]').length});
+    })()""")
+    throw AssertionError("Sticky preview diagnostic: "+debug,ex)
+   }
    assertEquals("Sticky preview must preserve native 16:9 space","true",js(activity,web,
     "(function(){const c=document.querySelector('.img-wizard-sticky-preview canvas');return !!c&&c.width===1280&&c.height===720})()"))
    capture(activity,2,"scoreboard")
