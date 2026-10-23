@@ -208,7 +208,7 @@ function youtubeDestination(){
  const logo='<svg class="img-wizard-platform-logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="5" fill="#FF0033"/><path d="M10 8.6L16 12l-6 3.4Z" fill="#fff"/></svg>';
  return '<div class="img-wizard-platform" id="youtube-destination">'+
  '<button type="button" class="img-wizard-platform-trigger" data-action="destination-yt" aria-expanded="'+youtubeExpanded+'">'+
- logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(connected&&data.options.yt?'active':'')+'" aria-hidden="true"></span></button>'+
+ logo+'<strong>YouTube</strong><span class="img-wizard-mini-switch '+(data.options.yt?'active':'')+'" aria-hidden="true"></span></button>'+
  '<div class="img-wizard-platform-body" '+(youtubeExpanded?'':'hidden')+'>'+
  '<button type="button" class="'+(connected?'outline-btn':'solid-btn')+'" data-action="'+(connected?'youtube-disconnect':'youtube-connect')+'" '+(loading?'disabled':'')+'>'+
  (connected?'Disconnect':loading?'Connecting…':'Connect')+'</button></div></div>';
@@ -236,7 +236,7 @@ async function startPrivateYouTubeFromStudio(){
   if(!check.liveApiAccessible)throw Error('YouTube Live is unavailable for this account right now.');
   // GO LIVE NOW deliberately creates a new private event configured to
   // auto-start once Android begins RTMPS. No manually scheduled draft choice.
-  if(!youtubeAudience){dialog={type:'youtube-classification'};render(true);return;}
+  if(!youtubeAudience)throw Error('Choose Made for kids or Not made for kids in Step 4, Stream Details before going live.');
   if(!check.canCreatePrivateDraft)
    throw Error('YouTube private live creation is not enabled on the IMG server.');
   const title=youtubeTitle();
@@ -278,6 +278,7 @@ async function startPrivateYouTubeFromStudio(){
   // bridge; OAuth cookies, stream URLs and keys never enter WebView JS.
   const game=encodeURIComponent(JSON.stringify({
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
+   sponsorNames:data.sponsors.map(x=>String(x.name||'').trim().slice(0,55)).filter(Boolean).slice(0,12),
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
    animated:data.options.overlayAnimated!==false,logoHome,logoAway,
     quality:data.options.quality,fps:data.options.fps,
@@ -299,7 +300,7 @@ function facebookDestination(){
  const logo='<svg class="img-wizard-platform-logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#1877F2"/><path d="M13.6 22.9v-9.3h3.1l.5-3.6h-3.6V7.7c0-1 .3-1.7 1.8-1.7h1.9V2.8a24 24 0 0 0-2.8-.2c-2.8 0-4.7 1.7-4.7 4.8V10H6.7v3.6h3.1v9.1Z" fill="#fff"/></svg>';
  return '<div class="img-wizard-platform facebook-destination">'+
  '<button type="button" class="img-wizard-platform-trigger" data-action="setup-destination-facebook" aria-expanded="'+fbExpanded+'">'+
- logo+'<strong>Facebook</strong><span class="img-wizard-mini-switch '+(connected&&data.options.fb?'active':'')+'" aria-hidden="true"></span></button>'+
+ logo+'<strong>Facebook</strong><span class="img-wizard-mini-switch '+(data.options.fb?'active':'')+'" aria-hidden="true"></span></button>'+
  '<div class="img-wizard-platform-body" '+(fbExpanded?'':'hidden')+'>'+
  '<label class="form-group"><span class="small-label">Stream key</span>'+
  '<input class="input" type="password" autocomplete="off" data-facebook-field="streamKey" placeholder="Facebook stream key" value="'+esc(fbFields.streamKey)+'"></label>'+
@@ -582,7 +583,7 @@ function setupWizard(){
    card('2','Stream Details',`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
     <label class="form-group"><span class="small-label">Description</span><textarea class="input" rows="3" data-quick="liveDescription" placeholder="Description">${esc(b.liveDescription||'')}</textarea></label>
     ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
-      <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
+      <fieldset class="img-wizard-audience"><legend>Audience · Is this video made for kids?</legend><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="no" ${youtubeAudience==='no'?'checked':''}> Not made for kids</label><label><input type="radio" name="img-youtube-audience" data-youtube-audience="true" value="yes" ${youtubeAudience==='yes'?'checked':''}> Made for kids</label></fieldset>\n      <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
   card('3','Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
    <div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${fps===v?'active':''}" data-set="fps:${v}" ${ytSelected&&!profileSupported('720p',v)&&!profileSupported('1080p',v)?'disabled':''}>${v} FPS</button>`).join('')}</div></div>
    ${ytSelected&&!profileSupported(quality,fps)?'<p class="img-wizard-quality-warning">Selected quality is unsupported by this phone.</p>':''}</div>`)+
@@ -1143,6 +1144,12 @@ if(name==='setup-record-offline'){
   .catch(e=>toast(window.IMGMedia?.readableError?.(e)||String(e)));
  return;
 }
+if(name==='setup-destination-facebook'){
+ o.fb=!o.fb;
+ if(o.fb){o.yt=false;o.tiktok=false;fbExpanded=true;youtubeExpanded=false}
+ else fbExpanded=false;
+ persist();return render(true);
+}
 if(name==='setup-facebook-connect'){if(window.IMGFacebookLive?.status?.().phase==='sending'){window.IMGFacebookLive?.stop?.();fbFeedbackState='idle';fbMessage='';return render(true)}if(!fbFields.streamKey||fbFields.streamKey.length<10)return toast('Enter your Facebook stream key');return startFacebookBroadcast()}
 if(name.startsWith('create-sport-')){const id=name.slice('create-sport-'.length);if(!SPORTS.some(s=>s.id===id)||!draft)return;draft.sport=id;return render(true)}
 if(name.startsWith('save-team-')){
@@ -1270,8 +1277,9 @@ if(name==='toggle-facebook-panel'){
  fbExpanded=!fbExpanded;fbMessage='';fbFeedbackState='idle';return render(true)
 }
 if(name==='destination-yt'){
- if(!o.yt){o.yt=true;o.fb=false;o.tiktok=false;youtubeExpanded=true;fbExpanded=false}
- else youtubeExpanded=!youtubeExpanded;
+ o.yt=!o.yt;
+ if(o.yt){o.fb=false;o.tiktok=false;youtubeExpanded=true;fbExpanded=false}
+ else {youtubeExpanded=false;youtubeFeedback=''}
  persist();return render(true);
 }
 
@@ -1294,7 +1302,7 @@ if(name==='youtube-connect'){
   .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
 }
 if(name==='youtube-verify')return window.IMGAccounts?.verifyPairing('youtube').then(()=>render(true)).catch(e=>{youtubeFeedback=e.message;toast(e.message);render(true)})
-if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;render(true);return startPrivateYouTubeFromStudio()}
+if(name==='youtube-classification-yes'||name==='youtube-classification-no'){youtubeAudience=name.endsWith('yes')?'yes':'no';dialog=null;return render(true)}
 if(name==='youtube-disconnect'){
  if(!confirm('Disconnect YouTube from IMG LIVE Studio?'))return;
  return window.IMGAccounts?.disconnect('youtube').then(()=>{o.yt=false;persist();render(true)}).catch(e=>toast(e.message))
@@ -1574,7 +1582,7 @@ window.addEventListener('img-native-resume',()=>{
 });
 document.addEventListener('click',e=>{if(e.target?.closest?.('#img-production-advanced > summary'))advancedOpen=!advancedOpen;});
 document.addEventListener('change',e=>{
- if(e.target?.matches?.('[data-youtube-audience]'))youtubeAudience=e.target.value;
+ if(e.target?.matches?.('[data-youtube-audience]')){youtubeAudience=e.target.value;persist();}
 });
 window.addEventListener('popstate',event=>{remoteApi()?.stopScan?.();const dest=event.state?.screen||'home';if(screen==='live'&&data.live.active&&dest!=='live'){history.pushState({screen:'live'},'', '#/live');dialog={type:'exit-live'};render(true);return}screen=dest;if(screen==='create'&&!draft){draft=newDraft();createStep=0}if(screen==='add-game'&&!gameDraft){startNewGame();return}render(false)});
 // Pairing links from Phone 1 open Phone 2 directly in the remote controller.
