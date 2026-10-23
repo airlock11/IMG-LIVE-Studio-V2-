@@ -57,6 +57,13 @@ jobs:
             throw Error('60 FPS silently capped to 30 in relay');
           if(!capture.includes('Number(fps)===60?60:30'))
             throw Error('Relay 60 FPS selector not connected');
+          if(!media.includes("if(microphone&&!nativeMp4)"))
+            throw Error('Offline MP4 may silently drop requested microphone audio');
+          if(!media.includes("if(microphone)throw new Error('MP4 encoder with microphone could not start"))
+            throw Error('Silent MP4 fallback still allowed after audio encoder failure');
+          if(capture.includes('if(active&&e.data?.size)onChunk(e.data)'))
+            throw Error('Last relay video chunk discarded during stop');
+
           console.log('Requested 30 / 60 FPS relay capture is wired');
           NODE
       - name: Verify trusted client integration
