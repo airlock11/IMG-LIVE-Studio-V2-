@@ -51,6 +51,7 @@ jobs:
             adb shell am instrument -w com.imgofficial.livestudio.v2.test/androidx.test.runner.AndroidJUnitRunner > img-v2-graphics-tests.txt
             cat img-v2-graphics-tests.txt
             grep -q '^OK (' img-v2-graphics-tests.txt
+            adb pull /sdcard/Android/data/com.imgofficial.livestudio.v2/files/img-v2-native-graphics.png img-v2-native-graphics.png
             adb shell am start -n com.imgofficial.livestudio.v2/.MainActivity
             sleep 18
             adb shell pidof com.imgofficial.livestudio.v2
@@ -74,5 +75,6 @@ jobs:
           path: |
             img-v2-emulator.png
             img-v2-graphics-tests.txt
+            img-v2-native-graphics.png
             img-v2-ui.xml
             img-v2-logcat.txt
