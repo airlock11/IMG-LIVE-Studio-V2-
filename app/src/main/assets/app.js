@@ -64,7 +64,7 @@ const SPORTS=[{id:'basketball',name:'Basketball',icon:'basketball',description:'
 const sportName=()=>SPORTS.find(x=>x.id===data.options.sport)?.name||'Basketball';
 const activeSport=()=>data.options.sport==='pickleball'?'pickleball':'basketball';
 const sportLeagues=()=>data.leagues.filter(l=>(l.sport||'basketball')===activeSport());
-const defaults=()=>({version:8,leagues:[],events:[],sponsors:[{name:'',img:''}],options:{sport:'basketball',basketballMode:'standard',streetFormat:'1v1',streetShowTeams:false,streetOverlaySize:45,streetOverlayOpacity:100,streetOverlayColor:'#E66D48',streetWinTarget:21,streetPositions:[{x:.14,y:.52},{x:.86,y:.52}],regularOrientation:'landscape',streetPlayers:[[{name:'',photo:''},{name:'',photo:''}],[{name:'',photo:''},{name:'',photo:''}]],pickleballTarget:11,pickleballType:'doubles',pickleballScoring:'sideout',pickleballMatch:'best3',orientation:'landscape',appOrientation:'landscape',appearance:'dark',overlay:'prime-tv',overlaySize:60,overlayOpacity:100,overlayColor:'#2FE0B0',overlayPosition:'bottom-center',overlayOffsetX:0,overlayOffsetY:0,overlayWidth:100,overlayHeight:100,overlaySafe:3,overlayAnimated:true,quality:'720p',fps:30,recordLocal:false,shotVisible:true,mic:true,micInputs:[{id:'device',name:'Device microphone',enabled:true,type:'device'}],broadcast:{homeName:'',homeLogo:'',awayName:'',awayLogo:'',leagueName:'',leagueLogo:'',showLeagueName:false},yt:false,fb:false,tiktok:false,penalty:5,quarterMins:10,slideSecs:5,slideTransition:'fade'},live:{active:false,lockedOrientation:null,timeout:false,slides:false,playing:true,slideIndex:0,recordOnly:false,seconds:600,shot:24,clockRunning:false,quarter:1,scores:[0,0],fouls:[0,0],possession:0,pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'',undo:[]},selectedEventId:null,selectedLeagueId:null})
+const defaults=()=>({version:8,leagues:[],events:[],savedTeams:[],sponsors:[{name:'',img:''}],options:{sport:'basketball',basketballMode:'standard',streetFormat:'1v1',streetShowTeams:false,streetOverlaySize:45,streetOverlayOpacity:100,streetOverlayColor:'#E66D48',streetWinTarget:21,streetPositions:[{x:.14,y:.52},{x:.86,y:.52}],regularOrientation:'landscape',streetPlayers:[[{name:'',photo:''},{name:'',photo:''}],[{name:'',photo:''},{name:'',photo:''}]],pickleballTarget:11,pickleballType:'doubles',pickleballScoring:'sideout',pickleballMatch:'best3',orientation:'landscape',appOrientation:'landscape',appearance:'dark',overlay:'prime-tv',overlaySize:60,overlayOpacity:100,overlayColor:'#2FE0B0',overlayPosition:'bottom-center',overlayOffsetX:0,overlayOffsetY:0,overlayWidth:100,overlayHeight:100,overlaySafe:3,overlayAnimated:true,quality:'720p',fps:30,recordLocal:false,shotVisible:true,mic:true,micInputs:[{id:'device',name:'Device microphone',enabled:true,type:'device'}],broadcast:{homeName:'',homeLogo:'',homeLineup:'',awayName:'',awayLogo:'',awayLineup:'',leagueName:'',leagueLogo:'',showLeagueName:false},yt:false,fb:false,tiktok:false,penalty:5,quarterMins:10,slideSecs:5,slideTransition:'fade'},live:{active:false,lockedOrientation:null,timeout:false,slides:false,playing:true,slideIndex:0,recordOnly:false,seconds:600,shot:24,clockRunning:false,quarter:1,scores:[0,0],fouls:[0,0],possession:0,pickleballGames:[0,0],pickleballGame:1,pickleballServer:0,pickleballServeNumber:2,pickleballWinner:-1,pickleballMatchWinner:-1,pickleballRallies:0,pickleballRallyMessage:'',undo:[]},selectedEventId:null,selectedLeagueId:null})
 function load(){const d=defaults();try{const fromKey=localStorage.getItem(KEY),raw=fromKey||localStorage.getItem(LEGACY_KEY),saved=JSON.parse(raw||'null');if(saved&&([6,7,8].includes(saved.version))){const o={...d.options,...saved.options};o.fb=false;o.broadcast={...d.options.broadcast,...saved.options?.broadcast};
 // Convert original prefilled examples to placeholders without erasing custom names.
 if(o.broadcast.homeName==='Home Team')o.broadcast.homeName='';
@@ -570,7 +570,8 @@ function setupWizard(){
  const stages=['Choose Sport','Teams & Scoreboard','Stream Branding','Streaming Setup'];
  const card=(n,title,content)=>`<section class="img-wizard-card"><div class="img-wizard-card-head"><span class="img-wizard-number">${n}</span><h2>${title}</h2></div>${content}</section>`;
  const upload=(key,title)=>`<label class="img-wizard-logo-upload">${b[key+'Logo']?`<img src="${esc(b[key+'Logo'])}" alt="${title} logo">`:ic('upload',21)}<span>${b[key+'Logo']?'Change logo':'Add logo'}</span><input type="file" accept="image/*" data-upload="quick-${key}-logo" hidden></label>`;
- const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div></div>`;
+ const saved=Array.isArray(data.savedTeams)?data.savedTeams.filter(t=>t.sport===activeSport()).slice(0,8):[];
+ const team=(key,title)=>`<div class="img-wizard-team"><label class="small-label">${title}</label><div class="img-wizard-team-row"><label class="grow"><span class="sr-only">${title} name</span><input class="input" maxlength="40" data-quick="${key}Name" value="${esc(b[key+'Name']||'')}" placeholder="Enter ${title.toLowerCase()} name"></label>${upload(key,title)}</div><details class="img-wizard-lineup"><summary>${ic('users',15)} Lineup setup (optional)</summary><p class="helper">Enter player names, one per line. The lineup is saved with this team.</p><textarea class="input" rows="3" maxlength="900" data-quick="${key}Lineup" placeholder="Player names (one per line)">${esc(b[key+'Lineup']||'')}</textarea></details><button type="button" class="img-wizard-save-team" data-action="save-team-${key}">${ic('check-circle',16)} Save or update team for next matches</button>${saved.length?`<div class="img-wizard-recent-teams"><span class="small-label">Saved teams</span><div class="chips">${saved.map(t=>`<button class="chip" type="button" data-action="reuse-team-${key}-${t.id}">${esc(t.name)}</button>`).join('')}</div></div>`:''}</div>`;
  const sportContent=card('1','Choose your sport',`<p class="helper">Select the sport you are broadcasting.</p><div class="img-wizard-sports">${SPORTS.map(s=>`<button class="img-wizard-sport ${activeSport()===s.id?'selected':''}" data-action="setup-sport-${s.id}" aria-pressed="${activeSport()===s.id}"><span class="img-wizard-sport-icon">${ic(s.icon,30)}</span><span><strong>${s.name}</strong><small>${s.description}</small></span>${activeSport()===s.id?ic('check-circle',20):ic('chevron',18)}</button>`).join('')}</div>`) +
  (activeSport()==='basketball'?card('2','Game format',`<div class="chips"><button class="chip ${!streetballActive()?'active':''}" data-action="basketball-mode-standard">Regular game</button><button class="chip ${streetballActive()?'active':''}" data-action="basketball-mode-streetball">Streetball</button></div>`):'');
  const selected=normalizeGraphic(o.overlay);
@@ -1104,6 +1105,31 @@ if(name.startsWith('setup-sport-')){
  o.sport=id;selectedEventId=null;data.selectedEventId=null;persist();return render(true)
 }
 if(name==='toggle-record-local'){o.recordLocal=!o.recordLocal;persist();return render(true)}
+if(name.startsWith('save-team-')){
+ const side=name.slice('save-team-'.length);
+ if(!['home','away'].includes(side))return;
+ const b=o.broadcast,n=String(b[side+'Name']||'').trim().slice(0,40);
+ if(!n)return toast('Enter a team name before saving.');
+ const list=Array.isArray(data.savedTeams)?data.savedTeams:[];
+ const existing=list.find(t=>t.sport===activeSport()&&t.name.toLowerCase()===n.toLowerCase());
+ const value={id:existing?.id||uid(),sport:activeSport(),name:n,
+  logo:b[side+'Logo']||'',lineup:String(b[side+'Lineup']||'').slice(0,900)};
+ if(existing)Object.assign(existing,value);else list.unshift(value);
+ data.savedTeams=list.slice(0,30);
+ persist();render(true);
+ return toast('Saved '+n+' for future matches.');
+}
+if(name.startsWith('reuse-team-')){
+ const m=/^reuse-team-(home|away)-(.+)$/.exec(name);
+ if(!m)return;
+ const team=(Array.isArray(data.savedTeams)?data.savedTeams:[])
+  .find(t=>t.id===m[2]&&t.sport===activeSport());
+ if(!team)return toast('Saved team is not available.');
+ o.broadcast[m[1]+'Name']=team.name;
+ o.broadcast[m[1]+'Logo']=team.logo||'';
+ o.broadcast[m[1]+'Lineup']=team.lineup||'';
+ persist();render(true);return toast('Loaded '+team.name);
+}
 if(name==='setup-destination-offline'){o.yt=false;o.fb=false;o.tiktok=false;fbExpanded=false;youtubeExpanded=false;persist();return render(true)}
 if(name==='setup-destination-youtube'){o.yt=true;o.fb=false;o.tiktok=false;youtubeExpanded=true;fbExpanded=false;persist();return render(true)}
 if(name==='setup-destination-facebook'){o.yt=false;o.fb=true;o.tiktok=false;youtubeExpanded=false;fbExpanded=true;persist();return render(true)}
