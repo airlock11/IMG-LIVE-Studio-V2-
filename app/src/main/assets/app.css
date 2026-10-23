@@ -2147,3 +2147,15 @@ html.img-native-app .app.headerless-setup-app .camera.broadcast-canvas-camera .c
 body.img-wizard-active{height:100dvh!important;overflow:hidden!important;overscroll-behavior:none}
 body.img-wizard-active .app.headerless-setup-app{height:100dvh!important;overflow:hidden!important}
 body.img-wizard-active .img-wizard-page .img-wizard-scroll{overscroll-behavior:contain;scroll-behavior:auto}
+
+/* Optional team reuse and lineup entry inside the existing Step 2 cards. */
+.img-wizard-team+.img-wizard-team{border-top:1px solid #334e47;padding-top:13px}
+.img-wizard-lineup{margin:13px 0 9px;border:1px solid #38544b;border-radius:11px;background:#102222;padding:11px}
+.img-wizard-lineup>summary{display:flex;align-items:center;gap:8px;color:#e6f9f0;font-size:12px;font-weight:750;cursor:pointer;list-style:none}
+.img-wizard-lineup>summary::-webkit-details-marker{display:none}
+.img-wizard-lineup>summary svg{color:#30dda7}
+.img-wizard-lineup[open]>summary{margin-bottom:10px}
+.img-wizard-lineup>.input{width:100%;min-height:88px;margin:0}
+.img-wizard-save-team{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border-radius:11px;border:1px solid #427d67;background:#143d31;color:#76eeb5;min-height:43px;font-size:12px;font-weight:780;padding:10px}
+.img-wizard-recent-teams{margin:13px 0 0}
+.img-wizard-recent-teams .chip{font-size:11px;min-height:33px;padding:8px 11px}
