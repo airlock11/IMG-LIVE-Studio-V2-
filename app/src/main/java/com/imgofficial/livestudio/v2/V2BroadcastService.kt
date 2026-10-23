@@ -60,7 +60,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var offlinePaused=false
  // Only actual uploaded images are sent on air: never sponsor names,
  // decorative sponsor frames, opaque cards, headings or text.
- private var sponsorSlides:List<Pair<String,android.graphics.Bitmap?>>=emptyList()
+ private var sponsorSlides:List<Pair<String,android.graphics.Bitmap?>> = emptyList()
  private var sponsorFilter:ImageFilterRender?=null
  private var sponsorShowing=false
  private var scoreVisibleBeforeSponsor:Boolean?=null
