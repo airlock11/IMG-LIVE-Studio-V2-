@@ -56,16 +56,56 @@ internal object V2BroadcastGraphicsRenderer {
  }
  private fun bevel(c:Canvas,p:Paint,x:Float,y:Float,w:Float,h:Float,primary:Int,
   bottom:Int,r:Float=6f,outline:Int=SILVER){
-  p.color=WHITE;p.style=Paint.Style.FILL
-  p.shader=LinearGradient(x,y,x+12f,y+h,
-   intArrayOf(mix(primary,WHITE,.30f),primary,mix(primary,bottom,.68f),bottom),
-   floatArrayOf(0f,.23f,.60f,1f),Shader.TileMode.CLAMP)
-  c.drawRoundRect(RectF(x,y,x+w,y+h),r,r,p);p.shader=null
-  p.color=Color.argb(110,255,255,255);p.style=Paint.Style.STROKE;p.strokeWidth=1.8f
-  c.drawRoundRect(RectF(x+1,y+1,x+w-1,y+h-1),r,r,p)
-  p.color=outline;p.strokeWidth=1.5f
-  c.drawRoundRect(RectF(x,y,x+w,y+h),r,r,p);p.style=Paint.Style.FILL
-  shape(c,p,x+5,y+5,w-10f,max(2f,h*.045f),Color.argb(48,255,255,255),2f)
+  if(w<=0f||h<=0f)return
+  val bounds=RectF(x,y,x+w,y+h)
+  p.shader=null;p.style=Paint.Style.FILL
+  // Dark extrusion beneath a chrome boundary. The plate's top glass
+  // reflection and beveled lower edge reproduce TV-broadcast depth,
+  // instead of solid-color rectangular graphics.
+  p.color=0xB6000000.toInt()
+  c.drawRoundRect(RectF(x+1.7f,y+max(2f,h*.035f),
+   x+w+1.7f,y+h+max(2f,h*.035f)),r,r,p)
+  p.color=outline
+  c.drawRoundRect(bounds,r,r,p)
+  val inset=max(2f,minOf(w,h)*.018f)
+  p.shader=LinearGradient(x,y,x+max(14f,w*.14f),y+h,
+   intArrayOf(
+    mix(primary,WHITE,.60f),
+    mix(primary,WHITE,.23f),
+    primary,
+    mix(primary,bottom,.52f),
+    bottom,
+    mix(bottom,Color.BLACK,.25f)
+   ),
+   floatArrayOf(0f,.055f,.28f,.54f,.83f,1f),
+   Shader.TileMode.CLAMP)
+  c.drawRoundRect(RectF(x+inset,y+inset,x+w-inset,y+h-inset),
+   max(1f,r-inset),max(1f,r-inset),p)
+  p.shader=null
+  val save=c.save()
+  c.clipPath(Path().apply{
+   addRoundRect(RectF(x+inset,y+inset,x+w-inset,y+h-inset),
+    max(1f,r-inset),max(1f,r-inset),Path.Direction.CW)
+  })
+  // Semi-transparent oblique glass glint and a fine metallic top rail.
+  val glass=Path().apply{
+   moveTo(x+w*.09f,y+inset);lineTo(x+w*.84f,y+inset)
+   lineTo(x+w*.47f,y+h*.42f);lineTo(x-w*.11f,y+h*.42f)
+   close()
+  }
+  p.shader=LinearGradient(x,y,x,y+h*.50f,
+   0x66FFFFFF,0x04FFFFFF,Shader.TileMode.CLAMP)
+  c.drawPath(glass,p);p.shader=null
+  shape(c,p,x+w*.08f,y+h*.07f,w*.84f,max(1f,h*.022f),0x55FFFFFF,1f)
+  shape(c,p,x+w*.06f,y+h*.92f,w*.88f,max(1.3f,h*.020f),0x77000000,1f)
+  c.restoreToCount(save)
+  p.color=Color.argb(160,243,250,245);p.style=Paint.Style.STROKE
+  p.strokeWidth=max(1f,minOf(w,h)*.013f)
+  c.drawRoundRect(RectF(x+.7f,y+.7f,x+w-.7f,y+h-.7f),r,r,p)
+  p.color=Color.argb(90,0,0,0);p.strokeWidth=max(1.1f,minOf(w,h)*.012f)
+  c.drawRoundRect(RectF(x+inset,y+inset,x+w-inset,y+h-inset),
+   max(1f,r-inset),max(1f,r-inset),p)
+  p.style=Paint.Style.FILL;p.shader=null
  }
  private fun label(c:Canvas,p:Paint,value:String,x:Float,y:Float,size:Float,color:Int=WHITE,
   align:Paint.Align=Paint.Align.CENTER,maxW:Float=Float.MAX_VALUE){
