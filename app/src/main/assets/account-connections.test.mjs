@@ -516,7 +516,7 @@ test('V2 home offline recording cards, truthful platform marks and single-tap ti
  assert.ok(app.includes('id="home-offline-recordings"'),'Offline records live on Home');
  assert.ok(app.includes('const streams=clips.filter(x=>recordedPlatforms(x).length>0)'),'My Streams excludes offline MP4');
  assert.ok(app.includes('const offlineRecordings=clips.filter(x=>!recordedPlatforms(x).length)'));
- assert.ok(app.includes("const action=(clip.native?'open-native-recording-':'play-recording-')"),'Saved clips remain playable');
+ assert.ok(app.includes("action=(clip.native?'open-native-recording-':'play-recording-')"),'Saved clips remain playable');
  assert.ok(app.includes('function platformMarks(values)')&&app.includes('recording-platform-logos'));
  assert.ok(app.includes('youtube:')&&app.includes('facebook:'),'Both real destination logos supported');
  assert.ok(app.includes('clip.native?[]:'),'Legacy forced YouTube metadata is not trusted');
