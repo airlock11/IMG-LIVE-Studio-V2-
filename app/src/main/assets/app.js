@@ -294,7 +294,8 @@ async function startPrivateYouTubeFromStudio(){
   const game=encodeURIComponent(JSON.stringify({
    sport:activeSport(),home:homeTeam.slice(0,24),away:awayTeam.slice(0,24),
    graphics:normalizeGraphic(data.options.overlay),size:Math.round(data.options.overlaySize),opacity:100,
-   animated:data.options.overlayAnimated!==false,logoHome,logoAway
+   animated:data.options.overlayAnimated!==false,logoHome,logoAway,
+    quality:data.options.quality,fps:data.options.fps
   }));
   window.IMGNativeChannel.postMessage('native-private-video-start:'+owned+':'+game);
  }catch(error){
