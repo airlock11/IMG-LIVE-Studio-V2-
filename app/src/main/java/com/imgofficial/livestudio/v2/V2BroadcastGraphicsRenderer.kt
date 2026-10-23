@@ -250,7 +250,7 @@ internal object V2BroadcastGraphicsRenderer {
    shape(c,p,x+w*.09f,y+h*.25f,w*.82f,h*.53f,0xE70C1923.toInt(),h*.12f)
   }else bevel(c,p,x,y,w,h,0xFF313C45.toInt(),0xFF080D13.toInt(),8f,0xFF8899A1.toInt())
   val period=if(score.sport=="pickleball")"GAME ${score.period}"
-   else if(score.period<=4)"${score.period}TH" else "OT${score.period-4}"
+   else periodTag(score.period)
   label(c,p,score.clock.ifBlank{"10:00"},x+w*.50f,y+h*.50f,min(42f,h*.34f),WHITE)
   label(c,p,period,x+w*.5f,y+h*.74f,min(25f,h*.19f),accent)
   if(score.sport!="pickleball")label(c,p,score.shotClock.toString(),x+w*.87f,y+h*.91f,min(20f,h*.15f),0xFFF4B638.toInt())
@@ -472,7 +472,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,15f,13f,234f,57f,0xFF3B3D42.toInt(),0xFF14171B.toInt(),4f,SILVER)
     label(c,p,s.clock.ifBlank{"10:00"},131f,55f,57f)
     bevel(c,p,15f,75f,234f,51f,WHITE,0xFFB5C1C6.toInt(),4f,SILVER)
-    label(c,p,"Q${s.period}   24",131f,112f,38f,INK)
+    label(c,p,"Q${s.period}   ${s.shotClock}",131f,112f,38f,INK)
     for(i in 0..1){
      val y=13f+i*59f
      bevel(c,p,252f,y,695f,57f,col[i],mix(col[i],INK,.66f),1f,SILVER)
@@ -495,7 +495,7 @@ internal object V2BroadcastGraphicsRenderer {
     mark(c,p,479f,69f,66f,accent,"IMG",null)
     shape(c,p,432f,55f,94f,65f,0xEC121922.toInt(),18f)
     label(c,p,s.clock.ifBlank{"10:00"},479f,81f,31f)
-    label(c,p,"Q${s.period} 24",479f,107f,24f,accent)
+    label(c,p,"Q${s.period} ${s.shotClock}",479f,107f,24f,accent)
     banner(159f,119f,644f,"IMG • LIVE GAME GRAPHICS")
    }
    6->{ // Legacy network white plates, independent fouls and possession modules.
@@ -523,7 +523,7 @@ internal object V2BroadcastGraphicsRenderer {
     mark(c,p,480f,71f,61f,accent,"IMG",null)
     shape(c,p,424f,53f,112f,62f,0xDB131A22.toInt(),15f)
     label(c,p,s.clock.ifEmpty{"10:00"},480f,81f,32f)
-    label(c,p,"Q${s.period}  24",480f,105f,22f,accent)
+    label(c,p,"Q${s.period}  ${s.shotClock}",480f,105f,22f,accent)
    }
   }
  }
