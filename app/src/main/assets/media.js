@@ -49,6 +49,7 @@
    if(nativeScorePending!==detail.key)return;
    nativeScoreImage=picture;nativeScoreKey=detail.key;
    paintBroadcastPreview();
+   paintSetupScoreboard();
   };
   picture.src=detail.src;
  });
@@ -83,6 +84,26 @@
   try{window.IMGNativeChannel.postMessage('native-graphics-frame:'+encodeURIComponent(JSON.stringify(game)));}
   catch(_){nativeScorePending='';}
   return true;
+ }
+ function paintSetupScoreboard(){
+  const canvases=document.querySelectorAll('canvas[data-setup-scoreboard]');
+  if(!canvases.length)return;
+  let state;try{state=overlayReader?.()}catch(_){return}
+  if(!state)return;
+  // Use the exact Android on-air scoreboard bitmap, not a placeholder.
+  syncNativeGraphic(state);
+  for(const canvas of canvases){
+   if(canvas.width!==1200)canvas.width=1200;
+   if(canvas.height!==290)canvas.height=290;
+   const ctx=canvas.getContext('2d');
+   if(!ctx)continue;
+   ctx.clearRect(0,0,canvas.width,canvas.height);
+   if(!nativeScoreImage||!nativeScoreImage.naturalWidth)continue;
+   const w=nativeScoreImage.naturalWidth,h=nativeScoreImage.naturalHeight;
+   const scale=Math.min(canvas.width*.96/w,canvas.height*.82/h);
+   ctx.drawImage(nativeScoreImage,(canvas.width-w*scale)/2,
+    (canvas.height-h*scale)/2,w*scale,h*scale);
+  }
  }
  function drawNativeGraphic(ctx,s,w,h){
   if(!syncNativeGraphic(s))return false;
@@ -150,6 +171,7 @@
   document.querySelectorAll('.camera').forEach(el=>el.classList.toggle('camera-real',active));
   paintStreetballPreview();
   paintBroadcastPreview();
+  paintSetupScoreboard();
   if(active){startStreetballPreviewLoop();startBroadcastPreviewLoop();}
  }
  function stopCamera(){
@@ -739,5 +761,5 @@
  }
  function stopLiveCapture(){liveCapture?.stop();}
 
- window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintStreetballPreview,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
+ window.IMGMedia={canCamera,isCameraOn,isRecording,openCamera,attach,paintSetupScoreboard,paintStreetballPreview,stopCamera,startLiveCapture,stopLiveCapture,startRecording,stopRecording,downloadClip,listClips,getClip,deleteClip,readableError,latestClip:()=>latestClip};
 })();
