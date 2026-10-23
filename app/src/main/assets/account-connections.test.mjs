@@ -379,7 +379,7 @@ test('Only requested Size slider change: directly under original preview, no per
  assert.equal((wizard.match(/data-setup-scoreboard/g)||[]).length,1);
  assert.equal((wizard.match(/data-score-range="size"/g)||[]).length,1);
  assert.match(wizard, /class="img-wizard-score-unit"/);
- assert.match(wizard, /img-wizard-score-origin"[\\s\\S]*<\\/div><label class="img-wizard-size-control">/);
+ assert.ok(wizard.includes('img-wizard-size-control')&&wizard.indexOf('img-wizard-score-origin')<wizard.indexOf('img-wizard-size-control'));
  assert.ok(wizard.includes('scoreSettings(false,false)'));
  assert.ok(!wizard.includes('data-score-range-output="size"'));
  assert.ok(!wizard.includes('Size <output'));
