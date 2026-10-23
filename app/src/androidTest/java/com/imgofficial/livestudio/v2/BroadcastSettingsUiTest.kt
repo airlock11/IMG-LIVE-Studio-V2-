@@ -45,8 +45,14 @@ class BroadcastSettingsUiTest {
   assertEquals("Expected setup state not reached","true",js(activity,web,test))
  }
  private fun click(activity:android.app.Activity,web:WebView,action:String){
-  assertEquals("Missing or unclickable: "+action,"true",js(activity,web,
-   "(function(){const b=document.querySelector('[data-action=\"'+\"$action\"+'\"]');if(!b)return false;b.click();return true})()"))
+  val selector="[data-action=\\\""+action+"\\\"]"
+  assertEquals("Missing or unclickable: "+action,"true",
+   js(activity,web,"Boolean(document.querySelector('"+selector+"'))"))
+  // Do not require an evaluateJavascript result from a click that synchronously
+  // replaces the DOM: Android WebView may discard that callback on navigation.
+  activity.runOnUiThread {
+   web.evaluateJavascript("document.querySelector('"+selector+"')?.click()",null)
+  }
  }
  private fun capture(activity:android.app.Activity,step:Int,part:String=""){
   val latch=CountDownLatch(1)
