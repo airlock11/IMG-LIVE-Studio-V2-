@@ -75,7 +75,6 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private lateinit var start:Button
- private lateinit var stop:Button
  private val draftId by lazy {intent.getStringExtra("draftRequestId").orEmpty()}
  private val conn=object:ServiceConnection {
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
@@ -159,6 +158,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var clockToggleButton:Button
  private var displayedClockPlaying:Boolean?=null
  private lateinit var undoButton:Button
+ private var timeoutPreview:android.widget.PopupWindow?=null
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
  private var touchFeedback=true
@@ -400,18 +400,58 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   },LinearLayout.LayoutParams(0,dp(48),1.25f).apply{leftMargin=dp(8)})
   panel.addView(actions,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(12)})
  }
+ private fun showTimeoutPreview(anchor:View){
+  timeoutPreview?.dismiss()
+  val content=LinearLayout(this).apply{
+   orientation=LinearLayout.VERTICAL
+   background=rounded(Color.rgb(17,30,27),13)
+   setPadding(dp(12),dp(10),dp(12),dp(10))
+  }
+  content.addView(smallLabel("TIMEOUT"),LinearLayout.LayoutParams(-1,dp(24)))
+  content.addView(iconButton(darkButton("Sponsor slideshow preview"){
+   timeoutPreview?.dismiss()
+   val (dialog,panel)=customSheet("SPONSOR SLIDESHOW")
+   val names=intent.getStringExtra("img_sponsor_names").orEmpty()
+    .split("\n").map{it.trim()}.filter{it.isNotEmpty()}.take(12)
+   val title=ink(if(names.isEmpty())"No sponsors were added" else names[0],18f)
+   panel.addView(title,LinearLayout.LayoutParams(-1,dp(65)))
+   if(names.size>1){
+    var position=0
+    val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
+    nav.addView(iconButton(darkButton("Previous"){
+     position=(position-1+names.size)%names.size;title.text=names[position]
+    },"undo"),LinearLayout.LayoutParams(0,dp(43),1f))
+    nav.addView(iconButton(darkButton("Next"){
+     position=(position+1)%names.size;title.text=names[position]
+    },"play"),LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(8)})
+    panel.addView(nav)
+   }
+   panel.addView(darkButton("CLOSE"){dialog.dismiss()},
+    LinearLayout.LayoutParams(-1,dp(42)).apply{topMargin=dp(9)})
+  },"play"),LinearLayout.LayoutParams(-1,dp(45)))
+  val pop=android.widget.PopupWindow(content,dp(285),dp(92),true).apply{
+   setBackgroundDrawable(rounded(Color.rgb(17,30,27),13))
+   isOutsideTouchable=true
+   elevation=dp(12).toFloat()
+  }
+  timeoutPreview=pop
+  pop.showAsDropDown(anchor,0,-dp(92)-anchor.height-dp(9),Gravity.CENTER_HORIZONTAL)
+ }
  private fun confirmStopUpload(){
-  val (dialog,panel)=customSheet("END PRIVATE BROADCAST?")
-  panel.addView(ink("The YouTube connection stays saved. Ending stops this video upload only.",13f).apply{
-   gravity=Gravity.CENTER_VERTICAL
-   setSingleLine(false)
-  },LinearLayout.LayoutParams(-1,dp(63)))
+  val (dialog,panel)=customSheet("END STREAM?")
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   actions.addView(greenButton("KEEP STREAMING"){dialog.dismiss()},
    LinearLayout.LayoutParams(0,dp(50),1f))
-  actions.addView(iconButton(dangerButton("END UPLOAD"){
-   dialog.dismiss();broadcast?.stopBroadcast();refresh()
-  },"stop"),LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
+  actions.addView(dangerButton("END STREAM"){
+   dialog.dismiss()
+   val wasActive=broadcast?.isActive()==true
+   broadcast?.stopBroadcast()
+   if(wasActive){
+    setResult(Activity.RESULT_OK,Intent().putExtra("img_native_stream_ended",true)
+     .putExtra("img_local_recording_requested",intent.getBooleanExtra("img_record_local",false)))
+    finish()
+   }else refresh()
+  },LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
   panel.addView(actions)
  }
  private var operatorSheet:android.app.Dialog?=null
@@ -634,7 +674,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val top=horizontal()
   top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
   val clockCard=card()
-  clockCard.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(-1,dp(18)))
+  val clockHeader=horizontal()
+  clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
+  undoButton=iconButton(darkButton(""){undoScore()},"undo").apply{
+   contentDescription="Undo last score"
+   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
+   compoundDrawablePadding=0
+   setPadding(0,0,0,0)
+  }
+  clockHeader.addView(undoButton,LinearLayout.LayoutParams(dp(31),dp(26)))
+  clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(28)))
   val clockMain=horizontal()
   clockDisplay=ink("10:00",26f).apply{
    gravity=Gravity.CENTER_VERTICAL
@@ -762,21 +811,19 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   footer.addView(status,LinearLayout.LayoutParams(-1,dp(16)))
   val actions=horizontal()
   start=greenButton("GO LIVE"){
-   if(!checkPermissions())return@greenButton
    val service=broadcast
+   if(service?.isActive()==true){confirmStopUpload();return@greenButton}
+   if(!checkPermissions())return@greenButton
    if(service==null)status.text="Camera service is not ready."
    else if(!service.activateForeground())status.text="Android could not start the foreground service."
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  stop=dangerButton("STOP"){confirmStopUpload()}
-  undoButton=iconButton(darkButton("UNDO"){undoScore()},"undo")
   iconButton(start,"live",true)
-  iconButton(stop,"stop")
-  val keys=listOf(start,stop,undoButton,
-   iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"),
-   darkButton("EXIT"){finish()})
-  val widths=listOf(1.55f,.96f,.98f,1.15f,.72f)
+  val timeout=iconButton(darkButton("TIMEOUT"){showTimeoutPreview(it)},"clock")
+  val keys=listOf(start,timeout,
+   iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
+  val widths=listOf(1.9f,1.15f,1.15f)
   for((index,button) in keys.withIndex())
    actions.addView(button,LinearLayout.LayoutParams(0,dp(43),widths[index]).apply{
     if(index>0)leftMargin=gap
@@ -865,8 +912,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val service=broadcast
   if(!::start.isInitialized)return
   val usable=service!=null&&checkPermissions()
-  start.isEnabled=usable&&service?.isActive()!=true&&service?.isEnded()!=true
-  stop.isEnabled=service?.isActive()==true
+  val liveNow=service?.isActive()==true
+  start.isEnabled=usable&&service?.isEnded()!=true
+  val label=if(liveNow)"STOP STREAMING" else "GO LIVE"
+  if(start.text.toString()!=label){
+   start.text=label
+   iconButton(start,if(liveNow)"stop" else "live",true)
+  }
   if(service!=null) {
    status.text=service.getStatus()+" • "+service.connectionSummary()
    refreshScoreboard()
@@ -908,6 +960,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   timer.removeCallbacks(tick)
   operatorSheet?.dismiss()
   operatorSheet=null
+  timeoutPreview?.dismiss()
+  timeoutPreview=null
   if(bound){
    broadcast?.unregister(this)
    broadcast?.detachPreview()
