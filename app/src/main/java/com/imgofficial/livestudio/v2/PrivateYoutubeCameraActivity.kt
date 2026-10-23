@@ -381,15 +381,29 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val names=intent.getStringExtra("img_sponsor_names").orEmpty()
     .split("\n").map{it.trim()}.filter{it.isNotEmpty()}.take(12)
    val title=ink(if(names.isEmpty())"No sponsors were added" else names[0],18f)
-   panel.addView(title,LinearLayout.LayoutParams(-1,dp(65)))
+   panel.addView(title,LinearLayout.LayoutParams(-1,dp(44)))
+   val thumbnails=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
+    catch(_:Exception){org.json.JSONArray()}
+   val artwork=android.widget.ImageView(this).apply{
+    scaleType=android.widget.ImageView.ScaleType.FIT_CENTER
+    adjustViewBounds=true
+    setBackgroundColor(Color.rgb(13,26,23))
+   }
+   if(names.isNotEmpty())panel.addView(artwork,LinearLayout.LayoutParams(-1,dp(115)))
+   fun showSponsor(index:Int){
+    title.text=names.getOrNull(index)?:"No sponsor"
+    val raw=if(index<thumbnails.length())thumbnails.optString(index) else ""
+    artwork.setImageBitmap(if(raw.startsWith("data:image/"))decodeLogo(raw) else null)
+   }
+   if(names.isNotEmpty())showSponsor(0)
    if(names.size>1){
     var position=0
     val nav=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
     nav.addView(iconButton(darkButton("Previous"){
-     position=(position-1+names.size)%names.size;title.text=names[position]
+     position=(position-1+names.size)%names.size;showSponsor(position)
     },"undo"),LinearLayout.LayoutParams(0,dp(43),1f))
     nav.addView(iconButton(darkButton("Next"){
-     position=(position+1)%names.size;title.text=names[position]
+     position=(position+1)%names.size;showSponsor(position)
     },"play"),LinearLayout.LayoutParams(0,dp(43),1f).apply{leftMargin=dp(8)})
     panel.addView(nav)
    }
