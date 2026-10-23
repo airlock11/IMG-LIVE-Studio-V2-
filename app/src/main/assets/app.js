@@ -587,8 +587,8 @@ function setupWizard(){
   ((ytSelected&&ytConnected)||(fbSelected&&fbConnected)?
    card('2','Stream Details',`<label class="form-group"><span class="small-label">Stream title</span><input class="input" data-quick="liveTitle" maxlength="100" value="${esc(b.liveTitle||'')}" placeholder="Stream title"></label>
     <label class="form-group"><span class="small-label">Description</span><textarea class="input" rows="3" data-quick="liveDescription" placeholder="Description">${esc(b.liveDescription||'')}</textarea></label>
-    ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option><option disabled>Unlisted — unavailable</option><option disabled>Public — unavailable</option></select></label>
-      <label class="img-wizard-upload-clip" aria-disabled="true">${ic('image',18)} Thumbnail — unavailable until YouTube backend supports it</label>`:''}`):'')+
+    ${ytSelected?`<label class="form-group"><span class="small-label">Visibility</span><select class="input" data-input="youtubePrivacy"><option value="private" selected>Private</option></select></label>
+      <div class="img-wizard-disabled-upload" role="note" aria-label="Thumbnail publishing is not available">${ic('image',18)} Thumbnail</div>`:''}`):'')+
   card('3','Video Quality',`<div class="img-wizard-quality"><div><span class="small-label">Resolution</span><div class="chips">${['720p','1080p'].map(v=>`<button class="chip ${quality===v?'active':''}" data-set="quality:${v}" ${ytSelected&&!profileSupported(v,30)&&!profileSupported(v,60)?'disabled':''}>${v}</button>`).join('')}</div></div>
    <div><span class="small-label">Frame rate</span><div class="chips">${[30,60].map(v=>`<button class="chip ${fps===v?'active':''}" data-set="fps:${v}" ${ytSelected&&!profileSupported('720p',v)&&!profileSupported('1080p',v)?'disabled':''}>${v} FPS</button>`).join('')}</div></div>
    <p class="img-wizard-output">${quality==='1080p'?'1920 × 1080':'1280 × 720'} · ${fps} FPS${ytSelected&&!profileSupported(quality,fps)?' · UNSUPPORTED':''}</p></div>`)+
