@@ -13,8 +13,8 @@ android {
   minSdk = 26
   targetSdk = 35
   testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-  versionCode = if (sideBySideTest) 10 else 9
-  versionName = if (sideBySideTest) "0.9.1-v2-preview-fix" else "0.9.1-v2-preview-fix"
+  versionCode = if (sideBySideTest) 11 else 10
+  versionName = if (sideBySideTest) "0.9.2-v2-reference-graphics" else "0.9.2-v2-reference-graphics"
   manifestPlaceholders["imgAppLabel"] = if (sideBySideTest) "IMG LIVE Studio V2 Test" else "IMG LIVE Studio"
   val oauthOrigin = providers.gradleProperty("imgOAuthBackendUrl").orElse("").get()
   require(oauthOrigin.isEmpty() || (oauthOrigin.startsWith("https://") && !oauthOrigin.contains('"') && !oauthOrigin.contains('\\'))) { "Invalid trusted OAuth backend origin" }
