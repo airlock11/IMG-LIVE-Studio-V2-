@@ -415,6 +415,12 @@ class MainActivity : Activity() {
  @Deprecated("Deprecated in Java")
  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
   super.onActivityResult(requestCode, resultCode, data)
+  if(requestCode==7206&&resultCode==RESULT_OK&&data?.getBooleanExtra("img_native_stream_ended",false)==true){
+   if(::browser.isInitialized)browser.evaluateJavascript(
+    "window.dispatchEvent(new Event('img-native-stream-ended'));",null)
+   publishNativeRecordings()
+   return
+  }
   if(requestCode == fileChooserRequest) {
    val callback = pendingFileChooser ?: return
    pendingFileChooser = null
@@ -488,15 +494,6 @@ class MainActivity : Activity() {
     Toast.makeText(this,"No video player is available for this saved recording.",Toast.LENGTH_LONG).show()
    }
    return
-  }
- }
- @Deprecated("Deprecated in Java")
- override fun onActivityResult(requestCode:Int,resultCode:Int,resultData:Intent?){
-  super.onActivityResult(requestCode,resultCode,resultData)
-  if(requestCode==7206&&resultCode==RESULT_OK&&resultData?.getBooleanExtra("img_native_stream_ended",false)==true){
-   if(::browser.isInitialized)browser.evaluateJavascript(
-    "window.dispatchEvent(new Event('img-native-stream-ended'));",null)
-   publishNativeRecordings()
   }
  }
  private fun handleNativeAction(action: String) {
