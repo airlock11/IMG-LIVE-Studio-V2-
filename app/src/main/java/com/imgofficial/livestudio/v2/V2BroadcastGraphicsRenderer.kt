@@ -231,7 +231,7 @@ internal object V2BroadcastGraphicsRenderer {
    else periodTag(score.period)
   label(c,p,score.clock.ifBlank{"10:00"},x+w*.50f,y+h*.50f,min(42f,h*.34f),WHITE)
   label(c,p,period,x+w*.5f,y+h*.74f,min(25f,h*.19f),accent)
-  if(score.sport!="pickleball")label(c,p,score.shotClock.toString(),x+w*.87f,y+h*.91f,min(20f,h*.15f),0xFFF4B638.toInt())
+  if(score.sport!="pickleball"&&score.shotVisible)label(c,p,score.shotClock.toString(),x+w*.87f,y+h*.91f,min(20f,h*.15f),0xFFF4B638.toInt())
  }
  private fun team(c:Canvas,p:Paint,score:V2Scorecard.State,index:Int,
   x:Float,y:Float,w:Float,h:Float,style:Int,color:Int,accent:Int,
@@ -339,7 +339,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,769f,25f,91f,66f,0xFFF7F9F6.toInt(),0xFFCDD4D6.toInt(),8f,0xFFCFD4D6.toInt())
     label(c,p,s.clock.ifBlank{"10:00"},814f,72f,41f,0xFF101318.toInt())
     shape(c,p,872f,23f,64f,72f,0xFF302B26.toInt(),1f)
-    label(c,p,s.shotClock.toString(),903f,78f,60f,0xFFF6B72D.toInt())
+    if(s.shotVisible)label(c,p,s.shotClock.toString(),903f,78f,60f,0xFFF6B72D.toInt())
     // Original reference contains three independent secondary-info zones.
     bevel(c,p,11f,105f,938f,33f,0xFF3B3D3E.toInt(),0xFF141517.toInt(),2f,0xFF49494D.toInt())
     label(c,p,"FOULS  ${s.homeFouls}   ${if(s.homeFouls>=5)"BONUS" else ""}",
@@ -367,7 +367,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,219f,102f,522f,40f,0xFFE1E4E2.toInt(),0xFF27333B.toInt(),18f,SILVER)
     label(c,p,periodTag(s.period),303f,132f,27f,WHITE)
     label(c,p,s.clock.ifEmpty{"10:00"},480f,132f,31f,WHITE)
-    label(c,p,s.shotClock.toString(),657f,132f,28f,WHITE)
+    if(s.shotVisible)label(c,p,s.shotClock.toString(),657f,132f,28f,WHITE)
    }
    2->{ // Asymmetric beveled floating team nameplates + slim bottom ticker.
     p.setShadowLayer(14f,0f,8f,0xA0000000.toInt())
@@ -382,7 +382,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,185f,108f,598f,34f,0xFF50545B.toInt(),0xFF080C12.toInt(),10f,SILVER)
     label(c,p,if(s.period<=4)"Q${s.period}" else "OT",266f,133f,24f)
     label(c,p,s.clock.ifBlank{"10:00"},485f,133f,26f)
-    label(c,p,"SHOT ${s.shotClock}",685f,133f,24f,accent)
+    if(s.shotVisible)label(c,p,"SHOT ${s.shotClock}",685f,133f,24f,accent)
    }
    3->{ // Exact spatial mapping of the supplied NBA center-clock graphic:
     // opposing team rails, separate score windows, circular clock overlapping
@@ -453,14 +453,14 @@ internal object V2BroadcastGraphicsRenderer {
     label(c,p,periodTag(s.period),
      462f,117f,28f,WHITE)
     shape(c,p,496f,93f,38f,29f,0xFF853A44.toInt(),2f)
-    label(c,p,s.shotClock.toString(),515f,116f,24f,WHITE)
+    if(s.shotVisible)label(c,p,s.shotClock.toString(),515f,116f,24f,WHITE)
    }
    4->{ // Vertical stacked scoreboard with separate game-clock/bonus column.
     bevel(c,p,3f,4f,954f,134f,0xFF20272C.toInt(),0xFF05080C.toInt(),7f,SILVER)
     bevel(c,p,15f,13f,234f,57f,0xFF3B3D42.toInt(),0xFF14171B.toInt(),4f,SILVER)
     label(c,p,s.clock.ifBlank{"10:00"},131f,55f,57f)
     bevel(c,p,15f,75f,234f,51f,WHITE,0xFFB5C1C6.toInt(),4f,SILVER)
-    label(c,p,"Q${s.period}   ${s.shotClock}",131f,112f,38f,INK)
+    label(c,p,if(s.shotVisible)"Q${s.period}   ${s.shotClock}" else "Q${s.period}",131f,112f,38f,INK)
     for(i in 0..1){
      val y=13f+i*59f
      bevel(c,p,252f,y,695f,57f,col[i],mix(col[i],INK,.66f),1f,SILVER)
@@ -483,7 +483,7 @@ internal object V2BroadcastGraphicsRenderer {
     mark(c,p,479f,69f,66f,accent,"IMG",null)
     shape(c,p,432f,55f,94f,65f,0xEC121922.toInt(),18f)
     label(c,p,s.clock.ifBlank{"10:00"},479f,81f,31f)
-    label(c,p,"Q${s.period} ${s.shotClock}",479f,107f,24f,accent)
+    label(c,p,if(s.shotVisible)"Q${s.period} ${s.shotClock}" else "Q${s.period}",479f,107f,24f,accent)
     banner(159f,119f,644f,"IMG • LIVE GAME GRAPHICS")
    }
    6->{ // Legacy network white plates, independent fouls and possession modules.
@@ -511,7 +511,7 @@ internal object V2BroadcastGraphicsRenderer {
     mark(c,p,480f,71f,61f,accent,"IMG",null)
     shape(c,p,424f,53f,112f,62f,0xDB131A22.toInt(),15f)
     label(c,p,s.clock.ifEmpty{"10:00"},480f,81f,32f)
-    label(c,p,"Q${s.period}  ${s.shotClock}",480f,105f,22f,WHITE)
+    label(c,p,if(s.shotVisible)"Q${s.period}  ${s.shotClock}" else "Q${s.period}",480f,105f,22f,WHITE)
    }
   }
  }
@@ -558,7 +558,7 @@ internal object V2BroadcastGraphicsRenderer {
     bevel(c,p,30f,320f,266f,66f,0xFF253D4B.toInt(),0xFF081018.toInt(),6f,SILVER)
     label(c,p,s.clock.ifBlank{"10:00"},162f,366f,52f)
     bevel(c,p,306f,320f,91f,66f,0xFF872734.toInt(),0xFF37151E.toInt(),6f,SILVER)
-    label(c,p,s.shotClock.toString(),351f,365f,51f,0xFFFFC64B.toInt())
+    if(s.shotVisible)label(c,p,s.shotClock.toString(),351f,365f,51f,0xFFFFC64B.toInt())
    }
    else->{ // Legacy TV: embossed stacked teams plus protruding play-clock box.
     team(c,p,s,0,28f,35f,365f,128f,style,c1,accent,logos[0],a)
@@ -567,7 +567,7 @@ internal object V2BroadcastGraphicsRenderer {
     label(c,p,if(s.period<=4)"Q${s.period}" else "OT",80f,365f,32f)
     label(c,p,s.clock.ifBlank{"10:00"},200f,365f,34f)
     bevel(c,p,285f,317f,113f,68f,0xFFAC243C.toInt(),0xFF370B16.toInt(),4f,SILVER)
-    label(c,p,"PLAY  ${s.shotClock}",340f,358f,30f)
+    label(c,p,if(s.shotVisible)"PLAY  ${s.shotClock}" else "",340f,358f,30f)
    }
   }
  }
