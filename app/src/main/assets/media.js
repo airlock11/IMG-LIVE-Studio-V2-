@@ -4,6 +4,7 @@
 (() => {
  'use strict';
  let cameraStream=null, microphoneStream=null, sourceVideo=null, recorder=null, recorderStream=null;
+ let cameraEpoch=0; // Invalidates an in-flight getUserMedia when leaving the recording screen.
  let drawCanvas=null, chunks=[], startedAt=0, latestClip=null, stateReader=null, overlayReader=null, previewRaf=0, lastPreviewFrame=0, liveCapture=null, broadcastPreviewRaf=0, lastBroadcastPreviewFrame=0;
  // The WebView monitor asks Android for the REAL bitmap that RootEncoder uses.
  // Only request a new bitmap when game data or artwork changes (no 60fps
@@ -142,9 +143,21 @@
     width:{min:high?1920:1280,ideal:high?1920:1280},
     height:{min:high?1080:720,ideal:high?1080:720},
     frameRate:{min:rate===60?59:29,ideal:rate}}};
-   if(cameraOpening)return cameraOpening;
-   cameraOpening=navigator.mediaDevices.getUserMedia(requested);
-   try{cameraStream=await cameraOpening;}finally{cameraOpening=null;}
+   if(cameraOpening){await cameraOpening;if(isCameraOn())return cameraStream;}
+   const attempt=++cameraEpoch;
+   const pending=navigator.mediaDevices.getUserMedia(requested);
+   cameraOpening=pending;
+   let opened;
+   try{opened=await pending;}finally{if(cameraOpening===pending)cameraOpening=null;}
+   if(attempt!==cameraEpoch){
+    opened.getTracks().forEach(track=>track.stop());
+    throw new Error('Camera setup was cancelled.');
+   }
+   if(isCameraOn()){
+    opened.getTracks().forEach(track=>track.stop());
+    return cameraStream;
+   }
+   cameraStream=opened;
    const measured=cameraStream.getVideoTracks()[0]?.getSettings?.()||{};
    const width=Math.max(Number(measured.width)||0,Number(measured.height)||0);
    const height=Math.min(Number(measured.width)||0,Number(measured.height)||0);
@@ -179,6 +192,7 @@
  }
  function stopCamera(){
   if(isRecording()||liveCapture)return;
+  cameraEpoch++; // Do not attach delayed camera permission results after leaving.
   if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop());
   cameraStream=null;
   if(sourceVideo){sourceVideo.pause();sourceVideo.srcObject=null;sourceVideo=null;}
@@ -663,7 +677,8 @@
     drawFrameId=requestAnimationFrame(draw);
    };
    try{draw();recorder.start(1000)}catch(e){running=false;cancelAnimationFrame(drawFrameId);
-    stream.getTracks().forEach(t=>t.stop());recorder=null;recorderStream=null;throw e;}
+    stream.getTracks().forEach(t=>t.stop());recorder=null;recorderStream=null;
+    microphoneStream=null;drawCanvas=null;stateReader=null;throw e;}
    recorder.addEventListener('dataavailable',e=>{if(e.data?.size)chunks.push(e.data);});
    recorder._cleanup=()=>{
     running=false;cancelAnimationFrame(drawFrameId);
@@ -682,7 +697,7 @@
    const test={codec,width:outputW,height:outputH,bitrate:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000),framerate:rate,hardwareAcceleration:'prefer-hardware'};
    try{if((await VideoEncoderImpl.isConfigSupported(test)).supported){config=test;break}}catch(e){}
   }
-  if(!config)throw new Error('This phone cannot encode H.264 MP4 at '+quality+' / '+rate+' FPS. Try 720p / 30 FPS.');
+  if(!config){drawCanvas=null;stateReader=null;throw new Error('This phone cannot encode H.264 MP4 at '+quality+' / '+rate+' FPS. Try 720p / 30 FPS.');}
   const muxer=new muxerLib.Muxer({target:new muxerLib.ArrayBufferTarget(),
    video:{codec:'avc',width:outputW,height:outputH},fastStart:'in-memory',firstTimestampBehavior:'offset'});
   let encoderProblem=null;
