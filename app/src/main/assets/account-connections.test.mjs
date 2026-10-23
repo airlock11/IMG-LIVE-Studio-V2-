@@ -530,3 +530,15 @@ test('V2 home offline recording cards, truthful platform marks and single-tap ti
  assert.ok(native.includes('PopupWindow(content,dp(230),-2,false)'),'Popup must not capture the first tap on Resume');
  assert.ok(css.includes('.img-offline-recording-card')&&css.includes('.record-platform-icon'));
 });
+
+test('Home hides the entire Offline Recordings section until a saved clip exists',async()=>{
+ const studio=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const home=studio.slice(studio.indexOf('function home(){'),studio.indexOf('function eventRow('));
+ assert.ok(home.includes("offlineRecordings.length?"),'Offline section is conditional on saved offline videos');
+ assert.ok(home.includes('id="home-offline-recordings"'),'Offline recordings remain accessible on Home when present');
+ assert.ok(home.includes("offlineRecordings.map(x=>savedRecordingCard(x,true))"),'Saved offline clips still render as playable cards');
+ assert.ok(!home.includes('data-action="refresh-recordings"'),'Do not show manual Refresh');
+ assert.ok(!home.includes('Your offline recordings will appear here after recording.'),'No empty recordings placeholder');
+ assert.ok(!home.includes('Choose a connected destination in Broadcast Settings to start a stream.'),'No connected destination helper on Home');
+ assert.ok(studio.includes("window.addEventListener('img-native-recordings'"),'Home continues to receive automatic saved native clip updates');
+});
