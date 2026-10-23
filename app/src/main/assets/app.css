@@ -2318,3 +2318,35 @@ body.img-wizard-active{
 }
 .img-wizard-page .graphics-selected-check{display:inline-flex;align-items:center;color:#7bfaca;height:15px;width:15px;flex:none}
 .img-wizard-page .img-wizard-score-fallback[hidden]{display:none!important}
+
+/* Oct 24 phone review: IME is a resize of the same four-step editor. Do not
+   leave a phantom black lower viewport or cover the active team field. */
+body.img-wizard-active.img-keyboard-active,
+body.img-wizard-active.img-keyboard-active .app.headerless-setup-app,
+body.img-wizard-active.img-keyboard-active .app.headerless-setup-app .img-wizard-page{
+ height:var(--img-keyboard-visible-height,100vh)!important;
+ max-height:var(--img-keyboard-visible-height,100vh)!important;
+ min-height:0!important;
+ overflow:hidden!important;
+}
+body.img-wizard-active.img-keyboard-active .img-wizard-page .img-wizard-footer{
+ display:none!important;
+}
+body.img-wizard-active.img-keyboard-active .img-wizard-page .img-wizard-scroll{
+ flex:1 1 0px!important;min-height:0!important;height:0!important;
+ padding-bottom:20px!important;scroll-padding-bottom:22px;
+ overflow-y:auto!important;-webkit-overflow-scrolling:touch;
+}
+body.img-wizard-active .img-wizard-score-placeholder{background:transparent}
+body.img-wizard-active .img-wizard-sticky-preview .img-wizard-score-origin{
+ display:block;width:min(100%,330px)!important;max-width:330px!important;
+ margin:0 auto!important;aspect-ratio:16/9!important;
+ border-color:#2f4845!important;
+}
+body.img-wizard-active .img-wizard-score-origin,
+body.img-wizard-active .img-wizard-sticky-preview .img-wizard-score-origin{
+ background:transparent!important;background-image:none!important;
+}
+body.img-wizard-active input[type="range"][data-score-range="size"]{
+ touch-action:pan-x;accent-color:#2fe0b0;will-change:auto;
+}
