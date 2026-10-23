@@ -2385,3 +2385,14 @@ body.img-wizard-active .img-wizard-page input[type="range"][data-score-range="si
  -webkit-user-select:none;
  user-select:none;
 }
+
+/* The Android System WebView can ignore aspect-ratio when all contents are
+   absolutely positioned. Reserve real 16:9 height in the ORIGINAL preview. */
+body.img-wizard-active .img-wizard-page .img-wizard-score-origin::before{
+ content:"";
+ display:block;
+ width:100%;
+ padding-top:56.25%;
+ height:0;
+ pointer-events:none;
+}
