@@ -152,6 +152,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var homeFoulsDisplay:TextView
  private lateinit var awayFoulsDisplay:TextView
  private lateinit var clockToggleButton:Button
+ private var displayedClockPlaying:Boolean?=null
  private lateinit var undoButton:Button
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
@@ -276,6 +277,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
       c.drawArc(android.graphics.RectF(5f,5f,19f,19f),310f,100f,false,p)
      }
      "stop"->c.drawRoundRect(5f,5f,19f,19f,2f,2f,p)
+     "play"->{c.drawLine(8f,5f,18f,12f,p);c.drawLine(18f,12f,8f,19f,p);c.drawLine(8f,19f,8f,5f,p)}
+     "pause"->{c.drawLine(8f,5f,8f,19f,p);c.drawLine(16f,5f,16f,19f,p)}
      "close"->{c.drawLine(5f,5f,19f,19f,p);c.drawLine(19f,5f,5f,19f,p)}
     }
     c.restoreToCount(n)
@@ -308,7 +311,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val value="%02d:%02d".format(gameSeconds/60,gameSeconds%60)
   clockDisplay.text=value
   if(::clockToggleButton.isInitialized)
-   clockToggleButton.text=if(gameRunning)"Ⅱ PAUSE" else "▶ START"
+   clockToggleButton.text=if(gameRunning)"PAUSE" else "START"
+   if(displayedClockPlaying!=gameRunning){
+    iconButton(clockToggleButton,if(gameRunning)"pause" else "play",true)
+    displayedClockPlaying=gameRunning
+   }
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
   if(broadcast?.scorecard()?.shotClock!=shotSeconds)broadcast?.setShotClock(shotSeconds)
  }
@@ -396,9 +403,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val actions=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL}
   actions.addView(greenButton("KEEP STREAMING"){dialog.dismiss()},
    LinearLayout.LayoutParams(0,dp(50),1f))
-  actions.addView(dangerButton("■ END UPLOAD"){
+  actions.addView(iconButton(dangerButton("END UPLOAD"){
    dialog.dismiss();broadcast?.stopBroadcast();refresh()
-  },LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
+  },"stop"),LinearLayout.LayoutParams(0,dp(50),1f).apply{leftMargin=dp(10)})
   panel.addView(actions)
  }
  private var operatorSheet:android.app.Dialog?=null
@@ -628,7 +635,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    setTypeface(typeface,android.graphics.Typeface.BOLD)
   }
   clockMain.addView(clockDisplay,LinearLayout.LayoutParams(0,-1,1f))
-  clockToggleButton=greenButton("▶ START"){
+  clockToggleButton=greenButton("START"){
    gameRunning=!gameRunning
    lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
    updateGameClock()
