@@ -1,6 +1,12 @@
 package com.imgofficial.livestudio.v2
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.io.FileOutputStream
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -46,6 +52,33 @@ class BroadcastGraphicsRendererTest {
     assertTrue("Style $i should visibly animate a score award",difference>2)
    }finally{normal.recycle();scored.recycle()}
   }
+ }
+ @Test fun exportRealRendererVisualRegression(){
+  val context=InstrumentationRegistry.getInstrumentation().targetContext
+  val gallery=Bitmap.createBitmap(980,3300,Bitmap.Config.ARGB_8888)
+  val c=Canvas(gallery)
+  c.drawColor(Color.rgb(12,16,20))
+  val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+  paint.color=Color.WHITE
+  paint.textSize=20f
+  var y=24f
+  for(i in 0..11){
+   val image=V2BroadcastGraphicsRenderer.render(sample,1f,null,i,null,null)
+   c.drawText(V2BroadcastGraphicsRenderer.names[i],20f,y,paint)
+   y+=9f
+   val fitted=if(V2BroadcastGraphicsRenderer.compact(i))
+    Bitmap.createScaledBitmap(image,230,230,true)
+    else Bitmap.createScaledBitmap(image,940,141,true)
+   val px=if(V2BroadcastGraphicsRenderer.compact(i))370f else 20f
+   c.drawBitmap(fitted,px,y,paint)
+   y+=fitted.height+12f
+   fitted.recycle()
+   image.recycle()
+  }
+  val file=File(context.getExternalFilesDir(null),"img-v2-native-graphics.png")
+  FileOutputStream(file).use{gallery.compress(Bitmap.CompressFormat.PNG,100,it)}
+  gallery.recycle()
+  assertTrue("Native renderer visual regression must exist",file.isFile&&file.length()>5000L)
  }
  @Test fun invisibleGraphicHasTransparentPixels(){
   for(i in intArrayOf(0,1,3,8,9,11)){
