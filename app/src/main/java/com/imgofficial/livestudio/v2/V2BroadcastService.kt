@@ -87,6 +87,10 @@ class V2BroadcastService:Service(),ConnectChecker {
   try{
    val gl=stream?.getGlInterface()?:return
    sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
+   // Start with a real transparent texture, not a null/black placeholder.
+   val blank=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
+   sponsorFilter?.setImage(blank)
+   sponsorFrame=blank
    sponsorFilter?.setScale(100f,100f)
    sponsorFilter?.setPosition(0f,0f)
   }catch(_:Exception){notifyState("Sponsor overlay could not initialize.")}
@@ -102,7 +106,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    sponsorFrame=frame
    if(old!=null&&old!==frame)ui.postDelayed({
     if(old!==sponsorFrame&&!old.isRecycled)old.recycle()
-   },1500L)
+   },350L)
   }catch(_:Exception){notifyState("Sponsor image unavailable; camera stays active.")}
  }
  private fun transparentSponsor(){
@@ -144,7 +148,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     sponsorTransitionMs).coerceIn(0f,1f)
    val smooth=t*t*(3f-2f*t)
    uploadSponsorFrame(sponsorFrame(previous,index,smooth))
-   if(t<1f)ui.postDelayed({drawStep()},50L)
+   if(t<1f)ui.postDelayed({drawStep()},80L)
   }
   drawStep()
  }
