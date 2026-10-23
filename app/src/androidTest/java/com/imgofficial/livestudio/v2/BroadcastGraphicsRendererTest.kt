@@ -121,6 +121,35 @@ class BroadcastGraphicsRendererTest {
    }finally{twentyFour.recycle();fourteen.recycle()}
   }
  }
+ @Test fun exportThreeDigitScoreboardsForVisualInspection(){
+  val context=InstrumentationRegistry.getInstrumentation().targetContext
+  val gallery=Bitmap.createBitmap(980,3300,Bitmap.Config.ARGB_8888)
+  val canvas=Canvas(gallery)
+  canvas.drawColor(Color.rgb(12,16,20))
+  val ink=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply{
+   color=Color.WHITE;textSize=21f
+  }
+  val stress=sample.copy(home="NORTH ZAMBOANGA",away="METRO QUEZON",
+   homeScore=999,awayScore=100,homeFouls=5,awayFouls=9,
+   period=4,clock="09:59",shotClock=14)
+  var y=24f
+  try{
+   for(i in 0..11){
+    val raw=V2BroadcastGraphicsRenderer.render(stress,1f,null,i,null,null)
+    canvas.drawText(V2BroadcastGraphicsRenderer.names[i]+"  •  999 - 100",20f,y,ink)
+    y+=9f
+    val thumb=if(V2BroadcastGraphicsRenderer.compact(i))
+     Bitmap.createScaledBitmap(raw,230,230,true)
+     else Bitmap.createScaledBitmap(raw,940,141,true)
+    canvas.drawBitmap(thumb,if(V2BroadcastGraphicsRenderer.compact(i))370f else 20f,y,ink)
+    y+=thumb.height+12f
+    thumb.recycle();raw.recycle()
+   }
+   val file=File(context.filesDir,"img-v2-three-digit.png")
+   FileOutputStream(file).use{gallery.compress(Bitmap.CompressFormat.PNG,100,it)}
+   assertTrue("Three-digit native visual evidence must exist",file.length()>5000L)
+  }finally{gallery.recycle()}
+ }
  @Test fun threeDigitScoreRendersInAllTwelveNativeStyles(){
   val high=sample.copy(homeScore=100,awayScore=999)
   val low=sample.copy(homeScore=0,awayScore=9)
