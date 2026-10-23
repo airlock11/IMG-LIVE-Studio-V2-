@@ -142,6 +142,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var lastScoreChange:Pair<Int,Int>?=null
  private var touchFeedback=true
  private var gameSeconds=600
+ private var shotSeconds=24
  private var gameRunning=false
  private var lastTick=0L
  private val timer=android.os.Handler(android.os.Looper.getMainLooper())
@@ -151,7 +152,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val now=android.os.SystemClock.elapsedRealtime()
     if(lastTick>0){
      val passed=((now-lastTick)/1000L).toInt()
-     if(passed>0){gameSeconds=(gameSeconds-passed).coerceAtLeast(0);lastTick+=passed*1000L}
+     if(passed>0){
+      val applied=minOf(passed,gameSeconds)
+      gameSeconds=(gameSeconds-applied).coerceAtLeast(0)
+      shotSeconds=(shotSeconds-applied).coerceAtLeast(0)
+      lastTick+=passed*1000L
+     }
     }else lastTick=now
     if(gameSeconds==0)gameRunning=false
    }
@@ -230,6 +236,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   if(::clockToggleButton.isInitialized)
    clockToggleButton.text=if(gameRunning)"Ⅱ PAUSE" else "▶ START"
   if(broadcast?.scorecard()?.clock!=value)broadcast?.setClock(value)
+  if(broadcast?.scorecard()?.shotClock!=shotSeconds)broadcast?.setShotClock(shotSeconds)
  }
  // Compact, dark broadcast UI dialogs replace Android's generic gray system dialogs.
  private fun customSheet(heading:String):Pair<android.app.Dialog,LinearLayout>{
@@ -412,6 +419,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   heading("CLOCK & GAME")
   pair(tool("EDIT GAME CLOCK"){dialog.dismiss();editClock()},
    tool("RESET TO 10:00"){gameSeconds=600;gameRunning=false;lastTick=0L;updateGameClock()})
+  heading("SHOT CLOCK")
+  pair(tool("RESET 24 SEC"){shotSeconds=24;updateGameClock()},
+   tool("RESET 14 SEC"){shotSeconds=14;updateGameClock()})
+  pair(tool("SHOT −1 SEC"){shotSeconds=(shotSeconds-1).coerceAtLeast(0);updateGameClock()},
+   tool("SHOT +1 SEC"){shotSeconds=(shotSeconds+1).coerceAtMost(99);updateGameClock()})
   if(intent.getStringExtra("img_sport")!="pickleball"){
    heading("FOUL CORRECTIONS")
    pair(tool("HOME FOUL −1"){broadcast?.adjustFoul(0,-1);refreshScoreboard()},
@@ -449,6 +461,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
+  if(savedInstanceState!=null){
+   gameSeconds=savedInstanceState.getInt("v2_clock_seconds",600).coerceIn(0,5999)
+   shotSeconds=savedInstanceState.getInt("v2_shot_seconds",24).coerceIn(0,99)
+   gameRunning=false
+  }
   autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
@@ -771,6 +788,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  override fun onSaveInstanceState(outState:Bundle){
   outState.putInt("v2_clock_seconds",gameSeconds)
+  outState.putInt("v2_shot_seconds",shotSeconds)
   outState.putBoolean("v2_clock_running",gameRunning)
   super.onSaveInstanceState(outState)
  }
