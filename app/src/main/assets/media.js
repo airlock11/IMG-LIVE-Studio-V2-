@@ -622,16 +622,33 @@
   drawCanvas=canvas;stateReader=readState;
   const mime=chooseMime(microphone);
   const nativeMp4=Boolean(!forceWebCodecs&&mime&&HTMLCanvasElement.prototype.captureStream);
+  // Never claim a recording includes commentary when the device can only
+  // produce video-only MP4. A false-success silent MP4 cannot be repaired.
+  if(microphone&&!nativeMp4){
+   drawCanvas=null;stateReader=null;
+   throw new Error('This device cannot record MP4 with microphone audio at the selected quality. Try a supported phone or change audio settings before recording.');
+  }
   if(nativeMp4){
    const stream=canvas.captureStream(rate);recorderStream=stream;
    if(microphone){
     try{microphoneStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
      for(const track of microphoneStream.getAudioTracks())stream.addTrack(track);}
-    catch(e){microphoneStream=null;}
+    catch(e){
+     stream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});
+     microphoneStream=null;recorderStream=null;drawCanvas=null;stateReader=null;
+     throw new Error('Microphone access failed. Offline recording was not started without your commentary audio: '+readableError(e));
+    }
+    if(!microphoneStream?.getAudioTracks().some(track=>track.readyState==='live')){
+     stream.getTracks().forEach(t=>{try{t.stop()}catch(_){}});
+     microphoneStream=null;recorderStream=null;drawCanvas=null;stateReader=null;
+     throw new Error('No active microphone audio track. Recording cancelled to prevent a silent MP4.');
+    }
    }
    try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000)});}
    catch(e){stream.getTracks().forEach(t=>t.stop());recorderStream=null;
     if(microphoneStream){microphoneStream.getTracks().forEach(t=>t.stop());microphoneStream=null;}
+    drawCanvas=null;stateReader=null;
+    if(microphone)throw new Error('MP4 encoder with microphone could not start: '+readableError(e));
     return startRecording(readState,{quality,orientation,fps,microphone:false,forceWebCodecs:true});}
    chunks=[];startedAt=Date.now();let running=true,drawFrameId=0;
    const draw=()=>{
@@ -750,7 +767,7 @@
    mediaRecorder=new MediaRecorder(stream,{mimeType:mime,
     videoBitsPerSecond:high?(rate===60?12000000:8000000):(rate===60?6000000:4000000),
     audioBitsPerSecond:128000});
-   mediaRecorder.addEventListener('dataavailable',e=>{if(active&&e.data?.size)onChunk(e.data)});
+   mediaRecorder.addEventListener('dataavailable',e=>{if(e.data?.size)onChunk(e.data)});
    mediaRecorder.addEventListener('error',e=>{if(active){const err=e?.error||new Error('Live video encoder failed.');if(typeof onError==='function')onError(err);else console.warn('Live capture failed',err?.name||'encoding error')}});
    liveCapture={canvas,stop:()=>{
     if(!active)return;
