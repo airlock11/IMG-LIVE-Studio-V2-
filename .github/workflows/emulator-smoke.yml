@@ -62,6 +62,8 @@ jobs:
             test -s img-v2-wizard-step1.png
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step2.png > img-v2-wizard-step2.png
             test -s img-v2-wizard-step2.png
+            adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step2-scoreboard.png > img-v2-wizard-step2-scoreboard.png
+            test -s img-v2-wizard-step2-scoreboard.png
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step3.png > img-v2-wizard-step3.png
             test -s img-v2-wizard-step3.png
             adb exec-out run-as com.imgofficial.livestudio.v2 cat files/img-v2-wizard-step4.png > img-v2-wizard-step4.png
@@ -105,6 +107,7 @@ jobs:
             img-v2-setup-metrics.txt
             img-v2-wizard-step1.png
             img-v2-wizard-step2.png
+            img-v2-wizard-step2-scoreboard.png
             img-v2-wizard-step3.png
             img-v2-wizard-step4.png
             img-v2-native-graphics.png
