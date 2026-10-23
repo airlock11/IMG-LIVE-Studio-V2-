@@ -34,7 +34,35 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
  private lateinit var monitor:SurfaceView
+ private lateinit var graphicsPreview:android.widget.ImageView
+ private var previewGraphicsPos=floatArrayOf(8f,70f,84f,22f)
  private lateinit var status:TextView
+ private fun placePreviewGraphic(){
+  if(!::graphicsPreview.isInitialized||!::monitor.isInitialized)return
+  val mw=monitor.width;val mh=monitor.height
+  if(mw<=0||mh<=0)return
+  val p=previewGraphicsPos
+  val pw=(mw*p[2]/100f).toInt().coerceAtLeast(1)
+  val ph=(mh*p[3]/100f).toInt().coerceAtLeast(1)
+  val parent=graphicsPreview.parent as? FrameLayout?:return
+  val parentWidth=parent.width
+  val parentHeight=parent.height
+  val bx=if(parentWidth>0)(parentWidth-mw)/2 else monitor.left
+  val by=if(parentHeight>0)(parentHeight-mh)/2 else monitor.top
+  graphicsPreview.layoutParams=FrameLayout.LayoutParams(pw,ph,Gravity.TOP or Gravity.LEFT).apply{
+   leftMargin=bx+(mw*p[0]/100f).toInt()
+   topMargin=by+(mh*p[1]/100f).toInt()
+  }
+ }
+ override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
+  if(!::graphicsPreview.isInitialized)return
+  runOnUiThread {
+   if(isFinishing||isDestroyed)return@runOnUiThread
+   previewGraphicsPos=floatArrayOf(x,y,w,h)
+   graphicsPreview.setImageBitmap(image)
+   placePreviewGraphic()
+  }
+ }
  private lateinit var start:Button
  private lateinit var stop:Button
  private val draftId by lazy {intent.getStringExtra("draftRequestId").orEmpty()}
@@ -453,6 +481,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   monitor=SurfaceView(this)
   camera.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
+  // Separate native operator preview of the *same* GL-uploaded Bitmap.
+  // Screen-only ImageView never enters camera capture or H.264 encoding.
+  // The livestream still uses the original ImageFilterRender directly.
+  graphicsPreview=android.widget.ImageView(this).apply{
+   scaleType=android.widget.ImageView.ScaleType.FIT_XY
+   isClickable=false
+   isFocusable=false
+   importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+  }
+  camera.addView(graphicsPreview,FrameLayout.LayoutParams(1,1,Gravity.TOP or Gravity.LEFT))
   camera.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
    val maxW=r-l;val maxH=b-t
    if(maxW>0&&maxH>0){
@@ -460,6 +498,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
+    graphicsPreview.post{placePreviewGraphic()}
    }
   }
   monitor.holder.addCallback(this)
