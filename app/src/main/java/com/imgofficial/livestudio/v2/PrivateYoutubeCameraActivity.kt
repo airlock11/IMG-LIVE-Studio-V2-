@@ -33,6 +33,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var resumed=false
  // Only a fresh, user-initiated main-screen action can auto-start upload.
  private var autoLaunchAllowed=false
+ private val offlineMode by lazy {intent.getBooleanExtra("img_offline_mode",false)}
+ private var timeoutActive=false
+ private var gameWasRunningBeforeTimeout=false
  private var draftReady=true
  private var videoProfileReady=true
  private lateinit var monitor:SurfaceView
@@ -82,7 +85,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
-   draftReady=broadcast?.prepareNextDraft(draftId)==true
+   draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
     autoLaunchAllowed=false
     refresh()
@@ -92,13 +95,21 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val fps=intent.getIntExtra("img_video_fps",30)
     videoProfileReady=broadcast?.isActive()==true||broadcast?.configureVideoProfile(resolution,fps)==true
     if(!videoProfileReady)autoLaunchAllowed=false
-    broadcast?.configureLocalRecording(intent.getBooleanExtra("img_record_local",false))
+    broadcast?.configureLocalRecording(offlineMode||intent.getBooleanExtra("img_record_local",false))
     broadcast?.configureScorecard(
     intent.getStringExtra("img_sport")?:"basketball",
     intent.getStringExtra("img_home")?:"HOME",
     intent.getStringExtra("img_away")?:"AWAY"
    )
    broadcast?.setShotClockVisible(shotClockVisible)
+   val sponsors=intent.getStringExtra("img_sponsor_names").orEmpty()
+    .split("\n").map{it.trim()}.filter{it.isNotEmpty()}.take(12)
+   val thumbs=try{org.json.JSONArray(intent.getStringExtra("img_sponsor_images")?:"[]")}
+    catch(_:Exception){org.json.JSONArray()}
+   broadcast?.configureSponsorSlides(sponsors,sponsors.indices.map{index->
+    decodeSponsorLogo(thumbs.optString(index))
+   })
+   if(timeoutActive)broadcast?.showSponsorSlides(true)
     val ids=arrayOf("prime-tv","courtside-a","courtside-b","arena-glass",
     "rivalry-plate","center-dial","broadcast-classic","crown-pill",
     "split-box","match-cube","edge-box","legacy-tv")
@@ -141,6 +152,18 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    val options=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,options)
    if(options.outWidth !in 1..128 || options.outHeight !in 1..128)return null
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
+  }catch(_:Exception){null}
+ }
+ private fun decodeSponsorLogo(raw:String?):android.graphics.Bitmap?{
+  if(raw==null||raw.length>7000||
+   !Regex("^data:image/(jpeg|png|webp);base64,",RegexOption.IGNORE_CASE).containsMatchIn(raw))return null
+  return try{
+   val bytes=android.util.Base64.decode(raw.substringAfter(','),android.util.Base64.DEFAULT)
+   if(bytes.size !in 1..5500)return null
+   val settings=android.graphics.BitmapFactory.Options().apply{inJustDecodeBounds=true}
+   android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size,settings)
+   if(settings.outWidth !in 1..128||settings.outHeight !in 1..128)return null
    android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.size)
   }catch(_:Exception){null}
  }
@@ -409,7 +432,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    fun showSponsor(index:Int){
     title.text=names.getOrNull(index)?:"No sponsor"
     val raw=if(index<thumbnails.length())thumbnails.optString(index) else ""
-    artwork.setImageBitmap(if(raw.startsWith("data:image/"))decodeLogo(raw) else null)
+    artwork.setImageBitmap(decodeSponsorLogo(raw))
    }
    if(names.isNotEmpty())showSponsor(0)
    if(names.size>1){
@@ -518,6 +541,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  override fun onCreate(savedInstanceState:Bundle?) {
   super.onCreate(savedInstanceState)
   if(savedInstanceState!=null){
+   timeoutActive=savedInstanceState.getBoolean("v2_timeout_active",false)
+   gameWasRunningBeforeTimeout=savedInstanceState.getBoolean("v2_timeout_was_running",false)
    gameSeconds=savedInstanceState.getInt("v2_clock_seconds",600).coerceIn(0,5999)
    shotSeconds=savedInstanceState.getInt("v2_shot_seconds",24).coerceIn(0,99)
     configuredGameSeconds=savedInstanceState.getInt("v2_initial_clock_seconds",600).coerceIn(0,5999)
@@ -525,7 +550,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    gameRunning=false
   }
   if(savedInstanceState==null)shotClockVisible=intent.getBooleanExtra("img_shot_visible",true)
-   autoLaunchAllowed=savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
+   autoLaunchAllowed=!offlineMode&&savedInstanceState==null&&intent.getBooleanExtra("img_autostart",false)
   window.statusBarColor=Color.rgb(16,23,27)
   window.navigationBarColor=Color.rgb(16,23,27)
   // Operator is landscape-only; never expose portrait for normal sports.
@@ -771,9 +796,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    else service.startPrivateUpload(draftId)
    refresh()
   }.apply{textSize=14f}
-  iconButton(start,"live",true)
+  if(!offlineMode)iconButton(start,"live",true)
   val timeout=iconButton(darkButton("TIMEOUT"){},"clock")
-  timeout.setOnClickListener{showTimeoutPreview(timeout)}
+  timeout.setOnClickListener{
+   if(!timeoutActive){
+    timeoutActive=true
+    gameWasRunningBeforeTimeout=gameRunning
+    gameRunning=false;lastTick=0L;updateGameClock()
+    broadcast?.showSponsorSlides(true)
+   }
+   showTimeoutPreview(timeout)
+  }
   val keys=listOf(start,timeout,
    iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
   val widths=listOf(1.9f,1.15f,1.15f)
@@ -803,7 +836,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   lastTick=if(gameRunning)android.os.SystemClock.elapsedRealtime() else 0L
   timer.post(tick)
 
-  if(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank()){
+  if(!offlineMode&&(!Regex("^[a-f0-9]{32}$").matches(draftId)||BuildConfig.OAUTH_BACKEND_URL.isBlank())){
    status.text="Choose a verified private V2 draft from Connected Accounts."
    start.isEnabled=false
    return
@@ -831,7 +864,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private fun maybeStartPrivateUpload(){
-  if(!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
+  if(offlineMode||!autoLaunchAllowed||!draftReady||!videoProfileReady||!checkPermissions())return
   val service=broadcast?:return
   if(service.isActive()||service.isEnded()){autoLaunchAllowed=false;return}
   autoLaunchAllowed=false
@@ -924,6 +957,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    outState.putInt("v2_initial_clock_seconds",configuredGameSeconds)
    outState.putBoolean("v2_shot_visible",shotClockVisible)
   outState.putBoolean("v2_clock_running",gameRunning)
+  outState.putBoolean("v2_timeout_active",timeoutActive)
+  outState.putBoolean("v2_timeout_was_running",gameWasRunningBeforeTimeout)
   super.onSaveInstanceState(outState)
  }
  override fun onDestroy(){
