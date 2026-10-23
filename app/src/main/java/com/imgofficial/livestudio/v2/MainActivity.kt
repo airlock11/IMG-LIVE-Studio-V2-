@@ -348,7 +348,7 @@ class MainActivity : Activity() {
            }?:""),7206)
          }
         }
- (action.startsWith("native-private-video-start:")) {
+       } else if (action.startsWith("native-private-video-start:")) {
         val payload=action.removePrefix("native-private-video-start:")
         val draftId=payload.substringBefore(':')
         val encodedGame=payload.substringAfter(':',"")
