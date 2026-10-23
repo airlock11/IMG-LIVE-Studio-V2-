@@ -1352,6 +1352,7 @@ if(name==='youtube-connect'){
  // rather than opening duplicate browsers or invalidating that pairing.
  return (pending?accounts.verifyPairing('youtube'):accounts.connect('youtube'))
   .then(state=>{youtubeConnectBusy=false;
+   if(accounts.getStatus?.().youtube==='connected'&&!o.fb){o.yt=true;o.tiktok=false;persist();}
    if(pending&&state==='pending')toast('Finish Google sign-in to connect YouTube.');
    render(true)})
   .catch(e=>{youtubeConnectBusy=false;toast(String(e.message||'YouTube connection failed.'));render(true)})
@@ -1669,7 +1670,18 @@ window.addEventListener('resize',()=>{
  }else keyboardBaseHeight=Math.max(keyboardBaseHeight,window.visualViewport?.height||window.innerHeight);
 });
 window.IMGAccounts?.subscribe?.(status=>{
- if(screen!=='setup'||!youtubeExpanded)return;
+ if(screen!=='setup')return;
+ if(setupStep===3&&status.youtube==='connected'){
+  // A just-authorized account becomes the selected streaming destination.
+  // Folding its connection controls must not turn it off again.
+  if(!data.options.yt&&!data.options.fb){
+   data.options.yt=true;data.options.tiktok=false;persist();
+  }
+  const youtubeDetails=[...document.querySelectorAll('.img-wizard-provider-title')]
+   .some(el=>el.textContent?.includes('YouTube'));
+  if(!youtubeDetails){render(true);return;}
+ }
+ if(!youtubeExpanded)return;
  const label=document.querySelector('#youtube-destination .broadcast-youtube-status');
  if(label){label.textContent=status.youtube==='connected'?'Connected':status.youtube==='verifying'?'Checking account…':
   status.youtube==='authorization-pending'?'Finish Google sign-in':'Not connected';
