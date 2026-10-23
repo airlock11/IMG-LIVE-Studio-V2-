@@ -112,8 +112,16 @@ class MainActivity : Activity() {
     val bmp=V2BroadcastGraphicsRenderer.render(state,
      json.optDouble("opacity",1.0).toFloat().coerceIn(0f,1f),
      null,id,homeLogo,awayLogo)
+    // The browser needs only a small preview; retain full native resolution
+    // for the actual encoder filter. Resize its exact artwork before PNG IPC.
+    val compact=V2BroadcastGraphicsRenderer.compact(id)
+    val targetWidth=if(compact)256 else 640
+    val scale=minOf(1f,targetWidth.toFloat()/bmp.width)
+    val reduced=if(scale<1f)android.graphics.Bitmap.createScaledBitmap(
+     bmp,targetWidth,(bmp.height*scale).toInt().coerceAtLeast(1),true)else bmp
     val bytes=java.io.ByteArrayOutputStream()
-    bmp.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+    reduced.compress(android.graphics.Bitmap.CompressFormat.PNG,100,bytes)
+    if(reduced!==bmp)reduced.recycle()
     bmp.recycle()
     if(epoch!=frameRequestEpoch||bytes.size()>145000)return@Thread
     val src="data:image/png;base64,"+
