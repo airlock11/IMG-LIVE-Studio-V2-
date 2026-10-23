@@ -294,7 +294,7 @@
   if(!canvases.length)return;
   let state;try{state=overlayReader()}catch(_){return}
   if(state?.sport!=='basketball'||state.options?.basketballMode==='streetball')return;
-  if((state.live?.active&&!state.live?.recordOnly)||(!state.live?.active&&(state.options?.yt||state.options?.fb||state.options?.tiktok)))syncNativeGraphic(state);
+  syncNativeGraphic(state);
   const high=state.options?.quality==='1080p';
   const portrait=state.options?.orientation==='portrait';
   const w=portrait?(high?1080:720):(high?1920:1280);
@@ -513,6 +513,18 @@
   text(ctx,call,x+ww*.95,y+hh*.91,hh*.14,'900','right','#fff',ww*.37);
   ctx.restore();
  }
+ const sponsorVideos=new Map();
+ function videoFor(uri){
+  if(typeof uri!=='string'||!uri.startsWith('blob:'))return null;
+  if(!sponsorVideos.has(uri)){
+   const v=document.createElement('video');v.muted=true;v.defaultMuted=true;v.volume=0;
+   v.autoplay=true;v.loop=true;v.playsInline=true;v.preload='auto';
+   v.src=uri;v.addEventListener('loadeddata',()=>{v.play().catch(()=>{});}, {once:true});
+   v.play().catch(()=>{});
+   sponsorVideos.set(uri,v);
+  }
+  return sponsorVideos.get(uri);
+ }
  function drawSponsor(ctx,s,w,h){
   const live=s.live||{},sp=s.sponsors?.[live.slideIndex]||{name:'SPONSOR'};
   ctx.fillStyle='#102c2b';ctx.fillRect(0,0,w,h);
@@ -520,13 +532,16 @@
   block(ctx,w*.08,h*.15,w*.84,h*.7,color(accent,.2),Math.min(35,w*.03));
   const img=imageFor(sp.img);
   if(img){const limW=w*.24,limH=h*.25,m=Math.min(limW/img.width,limH/img.height);ctx.drawImage(img,(w-img.width*m)/2,h*.22,img.width*m,img.height*m);}
+   const sponsorVideo=videoFor(sp.video);
+   if(sponsorVideo&&sponsorVideo.readyState>=2&&sponsorVideo.videoWidth){
+    const limW=w*.62,limH=h*.37,m=Math.min(limW/sponsorVideo.videoWidth,limH/sponsorVideo.videoHeight);
+    ctx.drawImage(sponsorVideo,(w-sponsorVideo.videoWidth*m)/2,h*.24,sponsorVideo.videoWidth*m,sponsorVideo.videoHeight*m);
+   }
   text(ctx,'IMG LIVE STUDIO  •  OFFICIAL PARTNER',w/2,h*.20,Math.max(16,w*.015),'850','center','#e6faef');
   text(ctx,sp.name||'SPONSOR',w/2,h*.58,Math.max(24,w*.055),'900','center','#fff',w*.87);
  }
  function drawFrame(ctx,s,w,h){
-  // Offline video and its preview must contain only the camera picture.
-  const offline=s.live?.recordOnly||(!s.live?.active&&!s.options?.yt&&!s.options?.fb&&!s.options?.tiktok);
-  if(offline){drawVideo(ctx,sourceVideo,w,h);return;}
+  // Local recording and livestreams use the same real scoreboard graphics.
   if(s.live?.slides)drawSponsor(ctx,s,w,h);
   else{
    drawVideo(ctx,sourceVideo,w,h);
@@ -574,7 +589,7 @@
      for(const track of microphoneStream.getAudioTracks())stream.addTrack(track);}
     catch(e){microphoneStream=null;}
    }
-   try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?7000000:3500000});}
+   try{recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000)});}
    catch(e){stream.getTracks().forEach(t=>t.stop());recorderStream=null;
     if(microphoneStream){microphoneStream.getTracks().forEach(t=>t.stop());microphoneStream=null;}
     return startRecording(readState,{quality,orientation,fps,microphone:false,forceWebCodecs:true});}
@@ -601,7 +616,7 @@
   let config=null;
   const levelCandidates=high?['avc1.64002a','avc1.42002a','avc1.42E01F']:['avc1.42E01F','avc1.42002a','avc1.64002a'];
   for(const codec of levelCandidates){
-   const test={codec,width:outputW,height:outputH,bitrate:high?6500000:3000000,framerate:rate,hardwareAcceleration:'prefer-hardware'};
+   const test={codec,width:outputW,height:outputH,bitrate:high?(rate>=60?12000000:8000000):(rate>=60?5500000:4000000),framerate:rate,hardwareAcceleration:'prefer-hardware'};
    try{if((await VideoEncoderImpl.isConfigSupported(test)).supported){config=test;break}}catch(e){}
   }
   if(!config)throw new Error('This phone cannot encode H.264 MP4 at '+quality+' / '+rate+' FPS. Try 720p / 30 FPS.');
