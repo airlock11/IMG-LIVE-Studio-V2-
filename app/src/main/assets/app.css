@@ -2269,7 +2269,7 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
 /* Approved V2 final review: keep true 16:9 graphics free of black sidebars. */
 .img-wizard-page .img-wizard-score-art{background:transparent!important;isolation:isolate}
 .img-wizard-page .img-wizard-sticky-preview{background:#10191f}
-.img-wizard-page .img-wizard-score-origin{background:#1a2826!important}
+.img-wizard-page .img-wizard-score-origin{background:transparent!important}
 .img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{object-fit:contain;touch-action:pan-y}
 .img-wizard-audience{margin-top:15px;padding:12px;border:1px solid #35534c;border-radius:12px;display:grid;gap:10px;color:#e4f8ef}
 .img-wizard-audience legend{font-size:13px;font-weight:800;padding:0 6px}
@@ -2287,3 +2287,112 @@ body.img-wizard-active .app.headerless-setup-app .img-wizard-page>.img-wizard-sc
 .img-my-stream-foot{border-top:1px dashed #4c685e;padding-top:12px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;font-size:12px}
 .img-my-stream-foot span{display:flex;align-items:center;gap:6px;color:#afc7bc}
 .img-my-stream-foot b{font-size:11px;color:#3de0aa}
+
+/* V2 Android compatibility: System WebView versions before dynamic viewport
+   unit support ignore 100dvh. Use vh FIRST, then dvh for modern keyboards.
+   Without the fallback the four-step editor collapsed to about 198px. */
+html.img-native-app .app,
+body.img-wizard-active .app.headerless-setup-app,
+body.img-wizard-active .app.headerless-setup-app .img-wizard-page{
+ height:100vh!important;
+ height:100dvh!important;
+ max-height:100vh!important;
+ max-height:100dvh!important;
+}
+body.img-wizard-active{
+ height:100vh!important;
+ height:100dvh!important;
+}
+
+/* Issues #1–3: keep an exact scroll position and neutral 16:9 artwork frame.
+   Preserve the real Android scoreboard proportions and top-docking preview. */
+.img-wizard-page .img-wizard-scroll{overflow-anchor:none!important;scroll-behavior:auto!important}
+.img-wizard-page .img-wizard-score-art,
+.img-wizard-page .img-wizard-score-origin,
+.img-wizard-page .img-wizard-sticky-preview .img-wizard-score-art{
+ background:transparent!important;
+ background-image:none!important;
+}
+.img-wizard-page .img-wizard-score-art canvas[data-setup-scoreboard]{
+ background:transparent!important;object-fit:fill!important;touch-action:pan-y!important
+}
+.img-wizard-page .graphics-selected-check{display:inline-flex;align-items:center;color:#7bfaca;height:15px;width:15px;flex:none}
+.img-wizard-page .img-wizard-score-fallback[hidden]{display:none!important}
+
+/* Oct 24 phone review: IME is a resize of the same four-step editor. Do not
+   leave a phantom black lower viewport or cover the active team field. */
+body.img-wizard-active.img-keyboard-active,
+body.img-wizard-active.img-keyboard-active .app.headerless-setup-app,
+body.img-wizard-active.img-keyboard-active .app.headerless-setup-app .img-wizard-page{
+ height:var(--img-keyboard-visible-height,100vh)!important;
+ max-height:var(--img-keyboard-visible-height,100vh)!important;
+ min-height:0!important;
+ overflow:hidden!important;
+}
+body.img-wizard-active.img-keyboard-active .img-wizard-page .img-wizard-footer{
+ display:none!important;
+}
+body.img-wizard-active.img-keyboard-active .img-wizard-page .img-wizard-scroll{
+ flex:1 1 0px!important;min-height:0!important;height:0!important;
+ padding-bottom:20px!important;scroll-padding-bottom:22px;
+ overflow-y:auto!important;-webkit-overflow-scrolling:touch;
+}
+body.img-wizard-active .img-wizard-score-placeholder{background:transparent}
+body.img-wizard-active .img-wizard-sticky-preview .img-wizard-score-origin{
+ display:block;width:min(100%,330px)!important;max-width:330px!important;
+ margin:0 auto!important;aspect-ratio:16/9!important;
+ border-color:#2f4845!important;
+}
+body.img-wizard-active .img-wizard-score-origin,
+body.img-wizard-active .img-wizard-sticky-preview .img-wizard-score-origin{
+ background:transparent!important;background-image:none!important;
+}
+body.img-wizard-active input[type="range"][data-score-range="size"]{
+ touch-action:pan-x;accent-color:#2fe0b0;will-change:auto;
+}
+
+/* Phone-confirmed Step 2 behavior: there is exactly ONE preview node.
+   Only the ORIGINAL scoreboard frame takes the fixed position when scrolled. */
+body.img-wizard-active .img-wizard-page .img-wizard-score-origin.img-score-pinned{
+ position:fixed!important;
+ inset:auto!important;
+ top:var(--img-score-top)!important;
+ left:var(--img-score-left)!important;
+ width:var(--img-score-width)!important;
+ height:var(--img-score-height)!important;
+ max-width:var(--img-score-width)!important;
+ min-height:0!important;
+ margin:0!important;
+ transform:none!important;
+ z-index:73!important;
+ box-shadow:0 7px 16px rgba(0,0,0,.24);
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-anchor{
+ background:transparent!important;
+ padding:0!important;
+ border:0!important;
+ margin:0!important;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-anchor[hidden]{
+ display:none!important;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-head{
+ position:relative;
+ z-index:76!important;
+}
+body.img-wizard-active .img-wizard-page input[type="range"][data-score-range="size"]{
+ touch-action:pan-x!important;
+ -webkit-user-select:none;
+ user-select:none;
+}
+
+/* The Android System WebView can ignore aspect-ratio when all contents are
+   absolutely positioned. Reserve real 16:9 height in the ORIGINAL preview. */
+body.img-wizard-active .img-wizard-page .img-wizard-score-origin::before{
+ content:"";
+ display:block;
+ width:100%;
+ padding-top:56.25%;
+ height:0;
+ pointer-events:none;
+}

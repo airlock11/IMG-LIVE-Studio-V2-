@@ -595,6 +595,13 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  internal fun scorecard():V2Scorecard.State=scoreboard.copy()
  fun scorecardVisible()=scoreVisible
+ fun shotClockVisible()=scoreboard.shotVisible
+ fun setShotClockVisible(visible:Boolean){
+  if(scoreboard.shotVisible==visible)return
+  scoreboard=scoreboard.copy(shotVisible=visible)
+  updateScorecard()
+ }
+ fun isStarting()=connecting
  fun graphicsStyle()=graphicsStyle
  fun graphicsSize()=graphicsSize
  fun graphicsPosition()=graphicsPosition
@@ -622,7 +629,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   graphicsOpacity=1f
   graphicsWidth=100;graphicsHeight=100
   graphicsX=0;graphicsY=0;graphicsMargin=3
-  scoreEffectsEnabled=effects
+  // All approved scoreboards animate when scores change; no manual switch.
+  scoreEffectsEnabled=true
   graphicsHomeLogo=homeLogo
   graphicsAwayLogo=awayLogo
   lastGraphicsStyle=-1

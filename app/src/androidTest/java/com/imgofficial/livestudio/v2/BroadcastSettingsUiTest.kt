@@ -28,13 +28,19 @@ class BroadcastSettingsUiTest {
   return null
  }
  private fun js(activity:android.app.Activity,web:WebView,code:String):String {
-  val result=AtomicReference("")
-  val latch=CountDownLatch(1)
-  activity.runOnUiThread{
-   web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+  // Android WebView can discard the callback for a frame that navigates while
+  // evaluateJavascript is in flight. Retry the same read-only query after the
+  // next frame; a continuously unresponsive WebView still fails the test.
+  for(attempt in 1..3){
+   val result=AtomicReference("")
+   val latch=CountDownLatch(1)
+   activity.runOnUiThread{
+    web.evaluateJavascript(code){value->result.set(value?:"");latch.countDown()}
+   }
+   if(latch.await(5,TimeUnit.SECONDS))return result.get()
+   SystemClock.sleep(350)
   }
-  assertTrue("WebView JavaScript did not respond",latch.await(8,TimeUnit.SECONDS))
-  return result.get()
+  throw AssertionError("WebView JavaScript did not respond after 3 attempts")
  }
  private fun waitFor(activity:android.app.Activity,web:WebView,test:String){
   repeat(25){
@@ -82,6 +88,20 @@ class BroadcastSettingsUiTest {
    assertEquals("Step 1 has no camera preview","false",js(activity,web,
     "Boolean(document.querySelector('.img-wizard-page .preview-wrap,.img-wizard-page video[data-img-camera]'))"))
    capture(activity,1)
+   val viewport=js(activity,web,"""(function(){
+    const rect=el=>{if(!el)return null;const r=el.getBoundingClientRect(),c=getComputedStyle(el);return {top:r.top,bottom:r.bottom,height:r.height,scrollHeight:el.scrollHeight,clientHeight:el.clientHeight,overflow:c.overflow,display:c.display,position:c.position,background:c.backgroundColor}};
+    return JSON.stringify({height:window.innerHeight,width:window.innerWidth,
+      app:rect(document.querySelector('.app')),
+      content:rect(document.querySelector('.app>.content')),
+      wizard:rect(document.querySelector('.img-wizard-page')),
+      scroll:rect(document.querySelector('.img-wizard-scroll')),
+      card:rect(document.querySelector('.img-wizard-card')),
+      sport:rect(document.querySelector('.img-wizard-sport')),
+      body:rect(document.body)});
+   })()""")
+   File(context.filesDir,"img-v2-wizard-viewport.txt").writeText(viewport)
+   assertEquals("Wizard must fill the real Android WebView viewport","true",js(activity,web,
+    "(function(){const a=document.querySelector('.app'),w=document.querySelector('.img-wizard-page');return !!a&&!!w&&a.getBoundingClientRect().height>=window.innerHeight*0.85&&w.getBoundingClientRect().height>=window.innerHeight*0.85})()"))
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('.img-wizard-score-art'))")
    SystemClock.sleep(600)
@@ -101,24 +121,84 @@ class BroadcastSettingsUiTest {
    assertEquals("Preview becomes sticky only after it scrolls out","true",js(activity,web,
     "(function(){const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');if(!p||!a)return false;p.scrollTop+=a.getBoundingClientRect().bottom-p.getBoundingClientRect().top+30;p.dispatchEvent(new Event('scroll',{bubbles:true}));return true})()"))
    SystemClock.sleep(700)
+   // The FIRST native canvas itself must remain one DOM element and pin in place.
    try {
-    waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&!e.hidden})()")
+    waitFor(activity,web,"(function(){const a=document.querySelector('.img-wizard-score-origin');return !!a&&a.classList.contains('img-score-pinned')})()")
    }catch(ex:AssertionError){
     val debug=js(activity,web,"""(function(){
-     const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin'),
-      c=document.querySelector('[data-img-scoreboard-settings]'),h=document.querySelector('.img-wizard-sticky-preview');
-     return JSON.stringify({scroll:p?.scrollTop,maxScroll:p?(p.scrollHeight-p.clientHeight):0,
-      paneTop:p?.getBoundingClientRect().top,artBottom:a?.getBoundingClientRect().bottom,
-      sectionBottom:c?.getBoundingClientRect().bottom,hasHolder:!!h,holderHidden:h?.hidden,
-      sectionCount:document.querySelectorAll('[data-img-scoreboard-settings]').length});
-    })()""")
-    throw AssertionError("Sticky preview diagnostic: "+debug,ex)
+      const p=document.querySelector('.img-wizard-scroll'),a=document.querySelector('.img-wizard-score-origin');
+      return JSON.stringify({scroll:p?.scrollTop,max:p?(p.scrollHeight-p.clientHeight):0,
+       artTop:a?.getBoundingClientRect().top,paneTop:p?.getBoundingClientRect().top,
+       pinned:a?.classList.contains('img-score-pinned'),canvases:document.querySelectorAll('canvas[data-setup-scoreboard]').length});
+     })()""")
+    throw AssertionError("Original in-place sticky preview: "+debug,ex)
    }
-   assertEquals("Sticky preview must preserve native 16:9 space","true",js(activity,web,
-    "(function(){const c=document.querySelector('.img-wizard-sticky-preview canvas');return !!c&&c.width===1280&&c.height===720})()"))
+   assertEquals("Exactly one physical scoreboard preview","true",js(activity,web,
+    "document.querySelectorAll('canvas[data-setup-scoreboard]').length===1"))
+   assertEquals("Native 16:9 bitmap stays in original Scoreboard card","true",js(activity,web,
+    "(function(){const c=document.querySelector('.img-wizard-score-origin canvas');return !!c&&c.width===1280&&c.height===720})()"))
+   assertEquals("No duplicate preview container","false",js(activity,web,
+    "Boolean(document.querySelector('.img-wizard-sticky-preview'))"))
+   val visiblePinned=js(activity,web,
+    """(function(){
+      const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll');
+      if(!a||!p)return false;
+      const r=a.getBoundingClientRect(),b=p.getBoundingClientRect();
+      const node=document.elementFromPoint(r.left+r.width/2,r.top+Math.min(25,r.height/2));
+      return getComputedStyle(a).position==='fixed'&&a.classList.contains('img-score-pinned')
+       &&Math.abs(r.top-b.top)<5&&r.width>150&&r.height>80
+       &&(node===a||a.contains(node));
+     })()""")
+   if(visiblePinned!="true"){
+    val debug=js(activity,web,"""(function(){
+     const a=document.querySelector('.img-wizard-score-origin'),p=document.querySelector('.img-wizard-scroll'),r=a?.getBoundingClientRect(),b=p?.getBoundingClientRect(),pt=r?{x:r.left+r.width/2,y:r.top+Math.min(25,r.height/2)}:null,n=pt?document.elementFromPoint(pt.x,pt.y):null;
+     return JSON.stringify({pinned:a?.classList.contains('img-score-pinned'),parent:a?.parentElement?.className,position:a?getComputedStyle(a).position:null,
+      styleTop:a?.style.getPropertyValue('--img-score-top'),styleLeft:a?.style.getPropertyValue('--img-score-left'),
+      art:r?{top:r.top,left:r.left,width:r.width,height:r.height,bottom:r.bottom}:null,pane:b?{top:b.top,left:b.left,width:b.width,height:b.height}:null,
+      node:n?.tagName,hitClass:n?.className,inside:a?.contains(n),atPoint:pt,device:window.devicePixelRatio});
+    })()""")
+    throw AssertionError("Original preview visibility diagnostic: "+debug)
+   }
    capture(activity,2,"scoreboard")
    js(activity,web,"(function(){const p=document.querySelector('.img-wizard-scroll');if(!p)return false;p.scrollTop=0;return true})()")
-   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-sticky-preview');return !!e&&e.hidden})()")
+   waitFor(activity,web,"(function(){const e=document.querySelector('.img-wizard-score-origin');return !!e&&!e.classList.contains('img-score-pinned')})()")
+
+   // Issue 1: selecting another original on-air graphic never scrolls the pane.
+   assertEquals("Choosing a scoreboard must preserve exact scrolling","true",js(activity,web,
+    """(function(){
+      const p=document.querySelector('.img-wizard-scroll');
+      const library=document.querySelector('.graphics-library');
+      if(!p||!library)return false;
+      p.scrollTop=Math.min(300,p.scrollHeight-p.clientHeight);
+      const before=p.scrollTop;
+      const selected=library.querySelector('[data-set="overlay:courtside-a"]');
+      if(!selected)return false;
+      selected.click();
+      return p.scrollTop===before&&selected.classList.contains('active')
+       &&document.querySelector('.img-wizard-page')!==null;
+     })()"""))
+   // Issue 2: both dragging and releasing the Size slider avoid DOM rebuild.
+   assertEquals("Scoreboard slider input and change must preserve scroll","true",js(activity,web,
+    """(function(){
+      const p=document.querySelector('.img-wizard-scroll');
+      const slider=document.querySelector('[data-score-range="size"]');
+      if(!p||!slider)return false;
+      p.scrollTop=Math.min(300,p.scrollHeight-p.clientHeight);
+      const before=p.scrollTop,original=slider;
+      slider.value='75';
+      slider.dispatchEvent(new Event('input',{bubbles:true}));
+      slider.dispatchEvent(new Event('change',{bubbles:true}));
+      return p.scrollTop===before&&document.querySelector('[data-score-range="size"]')===original
+       &&document.querySelector('[data-score-range-output="size"]')?.textContent==='75%';
+     })()"""))
+   assertEquals("Scoreboard frame must have no dark side fill","true",js(activity,web,
+    """(function(){
+      const a=document.querySelector('.img-wizard-score-origin'),c=a?.querySelector('canvas');
+      if(!a||!c)return false;
+      const back=getComputedStyle(a).backgroundColor;
+      return (back==='rgba(0, 0, 0, 0)'||back==='transparent')&&c.width===1280&&c.height===720;
+    })()"""))
+
 
    click(activity,web,"setup-next")
    waitFor(activity,web,"Boolean(document.querySelector('[data-upload=\"sponsor-clip\"]'))")
@@ -189,6 +269,12 @@ class BroadcastSettingsUiTest {
   })
   try{
    val web=seek(activity.window.decorView)!!
+   // Previous instrumentation may leave the WebView hash on an offline page.
+   // Navigate to Home deterministically before checking Create League.
+   waitFor(activity,web,"Boolean(document.querySelector('.app'))")
+   activity.runOnUiThread {
+    web.evaluateJavascript("history.replaceState({screen:'home'},'', '#/home');window.dispatchEvent(new PopStateEvent('popstate',{state:{screen:'home'}}))",null)
+   }
    waitFor(activity,web,"Boolean(document.querySelector('[data-go=create]'))")
    // A navigation click replaces WebView DOM; do not await an evaluateJavascript
    // return callback that Android is allowed to discard during navigation.
