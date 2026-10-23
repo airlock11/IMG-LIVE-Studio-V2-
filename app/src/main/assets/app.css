@@ -2396,3 +2396,60 @@ body.img-wizard-active .img-wizard-page .img-wizard-score-origin::before{
  height:0;
  pointer-events:none;
 }
+
+/* Step 2 review: Size lives immediately beneath the one original broadcast
+   artwork and shares its sticky movement (no second preview or percentage). */
+.img-wizard-page .img-wizard-score-sticky-unit{
+ position:relative;
+ display:block;
+ width:100%;
+ max-width:100%;
+ margin:0 0 12px;
+ padding:0;
+ box-sizing:border-box;
+ overflow:visible;
+}
+.img-wizard-page .img-wizard-score-sticky-unit .img-wizard-score-origin{
+ margin:0!important;
+ width:100%!important;
+}
+.img-wizard-page .img-wizard-score-sticky-unit .img-wizard-score-size-control{
+ display:flex;
+ align-items:center;
+ gap:13px;
+ box-sizing:border-box;
+ min-height:49px;
+ padding:7px 11px;
+ margin:7px 0 0;
+ background:#193027;
+ border:1px solid #36564d;
+ border-radius:10px;
+ font-size:13px;
+ font-weight:750;
+ color:#e4f5ef;
+}
+.img-wizard-page .img-wizard-score-sticky-unit .img-wizard-score-size-control input[type="range"]{
+ flex:1 1 0;
+ min-width:0;
+ width:100%;
+ height:28px;
+ margin:0;
+ accent-color:#2fe0b0;
+ touch-action:pan-x!important;
+}
+body.img-wizard-active .img-wizard-page .img-wizard-score-sticky-unit.img-score-pinned{
+ position:fixed!important;
+ inset:auto!important;
+ top:var(--img-score-top)!important;
+ left:var(--img-score-left)!important;
+ width:var(--img-score-width)!important;
+ height:var(--img-score-height)!important;
+ max-width:var(--img-score-width)!important;
+ min-height:0!important;
+ margin:0!important;
+ padding:0!important;
+ transform:none!important;
+ z-index:73!important;
+ background:#10191f;
+ box-shadow:0 7px 16px rgba(0,0,0,.24);
+}
