@@ -76,7 +76,9 @@ class V2BroadcastService:Service(),ConnectChecker {
    notifyState("Scoreboard cannot fit beside replay without clipping. Choose Full.")
    return false
   }
-  if(!replay.putOnAir(mode))return false
+  if(!replay.isPrepared())return false
+  // Fade old scoreboard out and move it to a verified free sector BEFORE
+  // the replay window becomes visible on the encoded stream.
   startReplayLayout(mode,candidate.scoreboard)
   return true
  }
@@ -371,10 +373,20 @@ class V2BroadcastService:Service(),ConnectChecker {
     if(epoch!=replayLayoutEpoch||ended)return@postDelayed
     val t=step/6f
     replayScoreFade=if(t<=.5f)1f-t*2f else (t-.5f)*2f
-    if(step==3){replayTempRect=rect;placeGraphics()}
+    if(step==3){
+     replayTempRect=rect
+     placeGraphics()
+     // Scoreboard is now fully transparent, clear of both video windows.
+     if(!replay.putOnAir(mode)){
+      notifyState("Unable to show this replay mode; LIVE preserved.")
+      endReplayLayout()
+      return@postDelayed
+     }
+    }
     if(step==6)replayScoreFade=1f
     updateScorecard()
-    updateReplayBorders(mode,t*t*(3f-2f*t))
+    val visual=((t-.5f)*2f).coerceIn(0f,1f)
+    updateReplayBorders(mode,visual*visual*(3f-2f*visual))
    },step*80L)
   }
  }
@@ -383,16 +395,20 @@ class V2BroadcastService:Service(),ConnectChecker {
   val mode=replayScreenMode
   replayScreenMode=0
   val epoch=++replayLayoutEpoch
-  for(step in 1..6){
+  for(step in 1..8){
    ui.postDelayed({
     if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    val t=step/6f
-    replayScoreFade=if(t<=.5f)1f-t*2f else (t-.5f)*2f
+    // Keep scoreboard invisible until 500ms GPU replay exit completes.
+    replayScoreFade=when{
+     step<=2->1f-step/2f
+     step<=5->0f
+     else->(step-5)/3f
+    }
     if(step==3){replayTempRect=null;placeGraphics()}
-    if(step==6)replayScoreFade=1f
+    if(step==8)replayScoreFade=1f
     updateScorecard()
-    updateReplayBorders(mode,1f-t)
-   },step*80L)
+    updateReplayBorders(mode,(1f-step/6f).coerceIn(0f,1f))
+   },step*90L)
   }
  }
  private var latestGraphics:android.graphics.Bitmap?=null
