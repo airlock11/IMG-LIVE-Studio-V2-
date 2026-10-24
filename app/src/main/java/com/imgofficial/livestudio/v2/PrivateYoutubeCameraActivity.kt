@@ -1156,7 +1156,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val accepted=broadcast?.prepareInstantReplay{ready->
      if(!isFinishing&&!isDestroyed){
       replayUi.setPrepared(ready,broadcast?.instantReplayDurationMs()?:10_000L)
-      if(ready)showPrivateReplay() else hidePrivateReplay()
+      // A button tap only opens compact OFF AIR controls, never video.
+      hidePrivateReplay()
      }
     }==true
     if(!accepted)replayUi.setPrepared(false)
