@@ -137,7 +137,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(sponsorFilter!=null)return
   try{
    val gl=stream?.getGlInterface()?:return
-   sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
+   sponsorFilter=ImageFilterRender().also{
+    // Sponsors belong only to encoded broadcast, never the clean replay feed.
+    it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+    gl.addFilter(it)
+   }
    // Start with a real transparent texture, not a null/black placeholder.
    val blank=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
    sponsorFilter?.setImage(blank)
@@ -814,7 +818,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     engine.getStreamClient().setLogs(false)
     stream=engine
     applyFraming()
-    replay.installGl(engine)
+    replay.installGl(engine,videoWidth,videoHeight,videoFps)
     replayBorderFilter=ImageFilterRender().also{
     // Only the encoded broadcast receives labels/frames; operator video stays clean.
     it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
