@@ -5,6 +5,8 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Bundle
 import android.os.SystemClock
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import com.pedro.encoder.utils.gl.AspectRatioMode
 import com.pedro.library.generic.GenericStream
@@ -84,7 +86,14 @@ class V2ReplayCleanCapture(private val ring: V2ReplayRing) {
       }
      }
     }catch(_:Exception){
-     // Source and streaming encoder remain completely independent.
+     // If the extra codec fails, remove its EGL surface immediately instead
+     // of allowing a broken buffer queue to block the LIVE camera GL thread.
+     if(capturing.compareAndSet(true,false)){
+      Handler(Looper.getMainLooper()).post{
+       ring.setCleanCaptureEnabled(false)
+       stop()
+      }
+     }
     }
    }
    true
