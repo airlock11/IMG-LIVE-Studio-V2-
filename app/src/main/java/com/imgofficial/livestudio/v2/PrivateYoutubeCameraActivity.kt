@@ -234,6 +234,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
+ private val replayUi by lazy{V2ReplayPanel(this){broadcast}}
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
  private var touchFeedback=true
@@ -716,7 +717,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
    contentDescription="Flip camera";setPadding(0,0,0,0)
   }
-  monitor=SurfaceView(this)
+  monitor=SurfaceView(this).apply{
+    setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
+   }
   camera.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   // Separate native operator preview of the *same* GL-uploaded Bitmap.
   // Screen-only ImageView never enters camera capture or H.264 encoding.
@@ -947,9 +950,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      setTimeoutMode(false)
     }else showTimeoutPreview(timeoutButton)
    }
-   val keys=listOf(start,timeoutButton,
-   iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
-  val widths=listOf(1.9f,1.15f,1.15f)
+   val replayButton=darkButton("REPLAY"){}
+   replayButton.setOnClickListener{replayUi.show(replayButton)}
+   val keys=listOf(start,timeoutButton,replayButton,
+    iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
+   val widths=listOf(1.55f,1.05f,1.05f,1.05f)
   for((index,button) in keys.withIndex())
    actions.addView(button,LinearLayout.LayoutParams(0,dp(43),widths[index]).apply{
     if(index>0)leftMargin=gap
@@ -1123,8 +1128,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   operatorSheet?.dismiss()
   operatorSheet=null
   timeoutPreview?.dismiss()
-  timeoutPreview=null
-  if(bound){
+   timeoutPreview=null
+   replayUi.close()
+   if(bound){
    broadcast?.unregister(this)
    broadcast?.detachPreview()
    unbindService(conn)
