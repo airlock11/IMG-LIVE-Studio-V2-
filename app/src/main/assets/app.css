@@ -2615,3 +2615,6 @@ body.img-wizard-active .img-wizard-page .img-wizard-score-sticky-unit.img-score-
 .img-player-toolbar input{flex:1;min-width:0;accent-color:#fff;height:28px}
 .img-compact-player:fullscreen,.img-compact-player.img-player-expanded{width:100vw;height:100dvh;border-radius:0;aspect-ratio:auto}
 .img-compact-player:fullscreen video,.img-compact-player.img-player-expanded video{object-fit:contain}
+
+@keyframes img-player-retract{to{opacity:0;transform:scale(.91)}}
+.img-compact-player.img-player-retracting{animation:img-player-retract .16s ease-in forwards;pointer-events:none}
