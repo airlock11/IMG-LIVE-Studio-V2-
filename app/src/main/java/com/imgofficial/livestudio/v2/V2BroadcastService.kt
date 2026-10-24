@@ -110,6 +110,11 @@ class V2BroadcastService:Service(),ConnectChecker {
 
  private var saveLocalCopy=false
  private var currentRecordFile:File?=null
+ private var currentSessionId=""
+ private fun ensureReplaySession(){
+  if(currentSessionId.isBlank())currentSessionId=V2RecordingLibrary.nextId()
+  replay.setSession(currentSessionId,scoreboard.sport,scoreboard.home,scoreboard.away)
+ }
  private var offlineRecording=false
  private var offlinePaused=false
  // Only actual uploaded images are sent on air: never sponsor names,
@@ -278,6 +283,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   // The Android encoder may flush the MP4 trailer after stopRecord returns.
   // Finalize and publish on a worker, not on the UI/binder thread.
   val finalScore=scoreboard.copy()
+  val savedSessionId=currentSessionId
   // Preserve bounded team emblems in each successfully saved recording's
   // local metadata. No full-resolution logos or OAuth credentials are stored.
   fun thumbnail(bitmap:android.graphics.Bitmap?):String{
@@ -324,11 +330,9 @@ class V2BroadcastService:Service(),ConnectChecker {
       file.delete()
       // Only recordings successfully published to the phone's MediaStore
       // appear in My Streams. This is NOT based on merely toggling Save.
-      val prefs=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE)
-      val previous=try{org.json.JSONArray(prefs.getString("clips","[]"))}
-       catch(_:Exception){org.json.JSONArray()}
-      val clip=org.json.JSONObject()
-       .put("id",System.currentTimeMillis().toString())
+            val clip=org.json.JSONObject()
+       .put("id",savedSessionId.ifBlank{V2RecordingLibrary.nextId()})
+       .put("sessionId",savedSessionId)
        .put("name",file.name)
        .put("createdAt",System.currentTimeMillis())
        .put("uri",uri.toString())
@@ -340,8 +344,7 @@ class V2BroadcastService:Service(),ConnectChecker {
        .put("awayLogo",savedAwayLogo)
        .put("platform",if(wasOffline)"Offline" else "YouTube")
         .put("platforms",if(wasOffline)org.json.JSONArray() else org.json.JSONArray().put("YouTube"))
-      previous.put(clip)
-      prefs.edit().putString("clips",previous.toString()).apply()
+      V2RecordingLibrary.addRecording(this,clip)
      }catch(error:Exception){contentResolver.delete(uri,null,null);throw error}
     }catch(_:Exception){
      // Preserve recording in app-owned Movies directory on storage export failure.
@@ -899,6 +902,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   val engine=stream?:return false
   if(!engine.isOnPreview){notifyState("Camera preview is not ready. Allow Camera permission.");return false}
   offlineRecording=true;offlinePaused=false;saveLocalCopy=true
+  ensureReplaySession()
   replay.setCapturing(true)
   if(!beginLocalRecording(engine)){
    replay.setCapturing(false);offlineRecording=false;return false
@@ -934,6 +938,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   attempted=true
   activeDraftRequestId=draftId
   connecting=true
+  ensureReplaySession()
   recoveryAttempts=0
   connectedAtLeastOnce=false
   ingestDestination=null
