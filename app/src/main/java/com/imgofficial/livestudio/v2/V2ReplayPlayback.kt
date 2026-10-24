@@ -25,6 +25,7 @@ class V2ReplayPlayback(
  private val surface:Surface,
  private val speed:()->Float,
  private val positionChanged:(Long)->Unit,
+ private val returnToLiveAtEnd:Boolean,
  private val finished:(Boolean)->Unit
 ) {
  private val main=Handler(Looper.getMainLooper())
@@ -114,7 +115,7 @@ class V2ReplayPlayback(
     }
     if(info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0){
      decoder.releaseOutputBuffer(indexOut,false)
-     if(requestedPlay){playedToEnd=true;break}
+     if(requestedPlay&&returnToLiveAtEnd){playedToEnd=true;break}
      // Keep final private frame displayed: a later seek can reuse this codec.
      playing=false;requestedPlay=false
      while(!stopped&&revision.get()==seenRevision)Thread.sleep(12)
