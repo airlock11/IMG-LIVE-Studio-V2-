@@ -28,6 +28,7 @@ class V2ReplayManager(
  private val ui=Handler(Looper.getMainLooper())
  private var filter:V2ReplayFilter?=null
  private var operatorDecoder:V2ReplayPlayback?=null
+ private var operatorSurface:android.view.Surface?=null
  private var onAirDecoder:V2ReplayPlayback?=null
  private var preparedFile:File?=null
  private var snapshot:V2ReplayRing.Snapshot?=null
@@ -118,6 +119,10 @@ class V2ReplayManager(
 
  /** A separate TextureView on the operator phone. Never fed into encoder. */
  fun attachPrivatePreview(surface:android.view.Surface):Boolean{
+  operatorSurface=surface
+  // During async fresh-snapshot export the Surface is retained and will
+  // display the selected mode once it is actually ready, never stale footage.
+  if(preparingOnAir)return true
   val file=preparedFile?.takeIf{prepared&&it.isFile}?:return false
   operatorDecoder?.cancel()
   operatorDecoder=V2ReplayPlayback(file,surface,{speed},{
@@ -128,7 +133,7 @@ class V2ReplayManager(
   }
   return true
  }
- fun detachPrivatePreview(){operatorDecoder?.cancel();operatorDecoder=null}
+ fun detachPrivatePreview(){operatorSurface=null;operatorDecoder?.cancel();operatorDecoder=null}
 
  /**
   * Same fixed clip is routed into encoded GPU composition ONLY on explicit
@@ -146,6 +151,10 @@ class V2ReplayManager(
   }
   modeLocked=true
   preparingOnAir=true
+  // Stop the old OFF AIR preview immediately; its image must not masquerade
+  // as footage from the newly selected 10-second period.
+  operatorDecoder?.cancel()
+  operatorDecoder=null
   val request=++epoch
   val output=File(context.cacheDir,"IMG_REPLAY_MODE_${System.currentTimeMillis()}.mp4")
   ring.export(fresh,output){ok->
@@ -165,7 +174,7 @@ class V2ReplayManager(
     onAirEnded()
     return@export
    }
-   detachPrivatePreview()
+   operatorDecoder?.cancel();operatorDecoder=null
    onAirDecoder?.cancel();onAirDecoder=null
    val old=preparedFile
    preparedFile=output
@@ -180,6 +189,15 @@ class V2ReplayManager(
    renderer.enter(mode)
    // Apply GPU graphics/layout only when the selected clip is actually ready.
    onAirStarted(mode)
+   // The operator sees the SAME selected MP4 privately on a dedicated
+   // TextureView. The broadcast uses its separate GL decoder/Surface.
+   operatorSurface?.let{previewSurface->
+    operatorDecoder=V2ReplayPlayback(output,previewSurface,{speed},{},
+     false,{ /* no effect on broadcast lifecycle */ }).also{
+      it.seekTo(playbackOffsetMs,false)
+      it.start()
+     }
+   }
    onAirDecoder=V2ReplayPlayback(output,surface,{speed},{pos->
     if(active){val visible=(pos-playbackOffsetMs).coerceIn(0L,snapshotDurationMs);playheadMs=visible;timelineChanged(visible)}
    },mode!=V2ReplayFilter.FULL,{successful->
@@ -205,7 +223,7 @@ class V2ReplayManager(
   playheadMs=safe
   timelineChanged(safe)
   if(active)onAirDecoder?.seekTo(safe+playbackOffsetMs,dragging)
-  else operatorDecoder?.seekTo(safe+playbackOffsetMs,dragging)
+  operatorDecoder?.seekTo(safe+playbackOffsetMs,dragging)
  }
  /** A completed Diagonal/Corner unlocks AFTER GPU exit, not mid-animation. */
  fun stopOnAir(){
@@ -213,6 +231,7 @@ class V2ReplayManager(
   active=false
   epoch++
   onAirDecoder?.cancel();onAirDecoder=null
+  operatorDecoder?.cancel();operatorDecoder=null
   filter?.exit()
   val exitRevision=epoch
   ui.postDelayed({
@@ -230,6 +249,7 @@ class V2ReplayManager(
   if(active){
    active=false
    onAirDecoder?.cancel();onAirDecoder=null
+   operatorDecoder?.cancel();operatorDecoder=null
    filter?.exit()
   }
   detachPrivatePreview()
