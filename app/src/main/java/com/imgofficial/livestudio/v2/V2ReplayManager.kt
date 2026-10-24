@@ -87,7 +87,7 @@ class V2ReplayManager(
   operatorDecoder?.cancel()
   operatorDecoder=V2ReplayPlayback(file,surface,{speed},{
    if(!active){playheadMs=it;timelineChanged(it)}
-  },{ /* private playback simply pauses on its final frame */ }).also{it.start()}
+  },false,{ /* private playback remains seekable after it ends */ }).also{it.start()}
   return true
  }
  fun detachPrivatePreview(){operatorDecoder?.cancel();operatorDecoder=null}
@@ -111,7 +111,7 @@ class V2ReplayManager(
   renderer.enter(mode)
   onAirDecoder=V2ReplayPlayback(file,surface,{speed},{
    if(active){playheadMs=it;timelineChanged(it)}
-  },{successful->
+  },true,{successful->
    if(request==epoch&&active){
     stopOnAir()
     onAirEnded()
