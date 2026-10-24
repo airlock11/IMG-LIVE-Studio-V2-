@@ -184,6 +184,25 @@ class V2ReplayManager(
   * Snapshot at DISPLAY MODE selection, never at OFF AIR panel opening.
   * Export on the worker, leaving the original LIVE pipeline uninterrupted.
   */
+ /**
+  * Keep normal LIVE framing until an actual decoded replay frame reaches GL.
+  * Never air an empty REPLAY panel while MediaCodec is still preparing.
+  */
+ private fun awaitFirstBroadcastFrame(revision:Int,mode:Int,startedAt:Long){
+  if(revision!=epoch||!active)return
+  if(filter?.hasDecodedFrame()==true){
+   onAirStarted(mode)
+   if(mode==V2ReplayFilter.FULL)
+    historicalScoreListener(historicalAtPlayhead())
+   return
+  }
+  if(android.os.SystemClock.uptimeMillis()-startedAt>4_500L){
+   status("Replay produced no decodable frames; LIVE preserved")
+   stopOnAir()
+   return
+  }
+  ui.postDelayed({awaitFirstBroadcastFrame(revision,mode,startedAt)},24L)
+ }
  fun putOnAir(mode:Int):Boolean{
   if(mode !in V2ReplayFilter.FULL..V2ReplayFilter.CORNER ||
      !prepared||modeLocked||active||preparingOnAir)return false
@@ -229,9 +248,8 @@ class V2ReplayManager(
    val playbackRevision=++epoch
    active=true
    renderer.enter(mode)
-   // Apply GPU graphics/layout only when the selected clip is actually ready.
-   onAirStarted(mode)
-   if(mode==V2ReplayFilter.FULL)historicalScoreListener(historicalAtPlayhead())
+   // GPU compositor remains in LIVE presentation until first actual frame.
+   // Display geometry and scoreboard are activated in awaitFirstBroadcastFrame.
    // The operator sees the SAME selected MP4 privately on a dedicated
    // TextureView. The broadcast uses its separate GL decoder/Surface.
    operatorSurface?.let{previewSurface->
@@ -257,6 +275,7 @@ class V2ReplayManager(
     it.seekTo(playbackOffsetMs,false)
     it.start()
    }
+   awaitFirstBroadcastFrame(playbackRevision,mode,android.os.SystemClock.uptimeMillis())
   }
   return true
  }
