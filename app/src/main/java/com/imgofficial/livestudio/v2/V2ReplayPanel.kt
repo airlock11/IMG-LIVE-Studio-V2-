@@ -11,17 +11,31 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.PopupWindow
+import android.widget.SeekBar
 import android.widget.TextView
 
 /**
- * Compact three-row native replay panel; preview gestures are accepted ONLY
- * while Full replay is active, never on the live camera.
+ * Original compact IMG styling. Four rows only:
+ * Full/Diagonal/Corner; slim bidirectional seek with timing;
+ * SPEED .25x/.5x/1x; Save/Back to Live.
+ *
+ * Opening NEVER goes on-air. Only tapping a display mode enables the
+ * compositor. Dragging shows precise decoder-targeted frames OFF AIR or
+ * ON AIR, and lifting the thumb starts forward playback at selected speed.
  */
 class V2ReplayPanel(
  private val activity:Activity,
- private val service:()->V2BroadcastService?
+ private val service:()->V2BroadcastService?,
+ private val onAirSelected:()->Unit,
+ private val onClosed:()->Unit
 ){
  private var popup:PopupWindow?=null
+ private var seek:SeekBar?=null
+ private var current:TextView?=null
+ private var total:TextView?=null
+ private var durationMs=10_000L
+ private var dragging=false
+ private var ready=false
  private var zoom=1f
  private var focusX=.5f
  private var focusY=.5f
@@ -37,7 +51,7 @@ class V2ReplayPanel(
   isAllCaps=false
   textSize=11f
   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
-  setPadding(dp(4),0,dp(4),0)
+  setPadding(dp(3),0,dp(3),0)
   setTextColor(Color.rgb(231,247,237))
   background=bg(Color.rgb(39,67,57))
   setOnClickListener{click()}
@@ -45,6 +59,10 @@ class V2ReplayPanel(
  private fun line()=LinearLayout(activity).apply{
   orientation=LinearLayout.HORIZONTAL
   gravity=Gravity.CENTER_VERTICAL
+ }
+ private fun clock(ms:Long):String{
+  val seconds=ms.coerceAtLeast(0L)/1000L
+  return "${seconds/60}:"+ (seconds%60).toString().padStart(2,'0')
  }
  private val scaling by lazy{
   ScaleGestureDetector(activity,object:ScaleGestureDetector.SimpleOnScaleGestureListener(){
@@ -72,12 +90,9 @@ class V2ReplayPanel(
  fun handleTouch(view:View,event:MotionEvent):Boolean{
   if(service()?.instantReplayIsFull()!=true)return false
   target=view
-  tapping.onTouchEvent(event)
-  scaling.onTouchEvent(event)
+  tapping.onTouchEvent(event);scaling.onTouchEvent(event)
   when(event.actionMasked){
-   MotionEvent.ACTION_DOWN->{
-    oldX=event.x;oldY=event.y
-   }
+   MotionEvent.ACTION_DOWN->{oldX=event.x;oldY=event.y}
    MotionEvent.ACTION_MOVE->{
     if(event.pointerCount==1&&zoom>1f){
      val dx=(event.x-oldX)/view.width.coerceAtLeast(1)
@@ -91,55 +106,117 @@ class V2ReplayPanel(
   }
   return true
  }
+ fun setPrepared(ok:Boolean,duration:Long=10_000L){
+  ready=ok
+  durationMs=duration.coerceIn(1000L,30_000L)
+  seek?.max=durationMs.toInt()
+  seek?.isEnabled=ok
+  seek?.progress=0
+  current?.text="0:00"
+  total?.text=clock(durationMs)
+ }
+ fun onTimelinePosition(positionMs:Long){
+  if(!dragging){
+   val safe=positionMs.coerceIn(0L,durationMs)
+   seek?.progress=safe.toInt()
+   current?.text=clock(safe)
+  }
+ }
  fun show(anchor:View){
-  popup?.dismiss()
-  val container=LinearLayout(activity).apply{
+  close()
+  val panel=LinearLayout(activity).apply{
    orientation=LinearLayout.VERTICAL
-   setPadding(dp(7),dp(7),dp(7),dp(7))
+   setPadding(dp(7),dp(6),dp(7),dp(6))
    background=bg(Color.rgb(15,30,25))
   }
+  // ROW 1: three display modes. No replay goes to video output until tap.
   val layouts=line()
-  listOf("Full","Diagonal","Corner").forEachIndexed{index,name->
-   layouts.addView(button(name){
-    if(service()?.startInstantReplay(index+1)==true) {
+  listOf("Full","Diagonal","Corner").forEachIndexed{index,label->
+   layouts.addView(button(label){
+    if(ready&&service()?.startInstantReplay(index+1)==true){
+     onAirSelected()
      zoom=1f;focusX=.5f;focusY=.5f
     }
-   },LinearLayout.LayoutParams(0,dp(30),1f).apply{
-    if(index!=0)leftMargin=dp(4)
+   },LinearLayout.LayoutParams(0,dp(29),1f).apply{
+    if(index>0)leftMargin=dp(3)
    })
   }
-  container.addView(layouts)
+  panel.addView(layouts)
+  // ROW 2: smooth target-frame seek, with small current/total indicators.
+  val timeline=line()
+  fun small(label:String)=TextView(activity).apply{
+   text=label;textSize=10f;gravity=Gravity.CENTER
+   setTextColor(Color.rgb(180,220,195))
+  }
+  current=small("0:00")
+  total=small("0:10")
+  timeline.addView(current,LinearLayout.LayoutParams(dp(35),dp(25)))
+  val bar=SeekBar(activity).apply{
+   max=10_000
+   progress=0
+   isEnabled=false
+   splitTrack=false
+   setPadding(0,0,0,0)
+   progressTintList=android.content.res.ColorStateList.valueOf(Color.rgb(55,210,142))
+   thumbTintList=android.content.res.ColorStateList.valueOf(Color.rgb(185,245,209))
+   setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
+    override fun onStartTrackingTouch(seekBar:SeekBar){
+     dragging=true
+     service()?.seekInstantReplay(seekBar.progress.toLong(),true)
+    }
+    override fun onProgressChanged(seekBar:SeekBar,progress:Int,fromUser:Boolean){
+     if(!fromUser||!ready)return
+     current?.text=clock(progress.toLong())
+     // Both directions request exact presentation frames; request never
+     // touches main RTMPS/MP4 encoder or changes on-air state.
+     service()?.seekInstantReplay(progress.toLong(),true)
+    }
+    override fun onStopTrackingTouch(seekBar:SeekBar){
+     dragging=false
+     if(ready){
+      // No extra Play button: release starts selected-speed forward playback.
+      service()?.seekInstantReplay(seekBar.progress.toLong(),false)
+     }
+    }
+   })
+  }
+  seek=bar
+  timeline.addView(bar,LinearLayout.LayoutParams(0,dp(28),1f))
+  timeline.addView(total,LinearLayout.LayoutParams(dp(35),dp(25)))
+  panel.addView(timeline,LinearLayout.LayoutParams(-1,dp(29)).apply{topMargin=dp(2)})
+  // ROW 3: speed affects PRIVATE and ON AIR autoplay equally.
   val speeds=line()
-  val speedLabel=TextView(activity).apply{
-   text="SPEED";textSize=10f;setTextColor(Color.rgb(145,200,172))
-   gravity=Gravity.CENTER_VERTICAL
-  }
-  speeds.addView(speedLabel,LinearLayout.LayoutParams(dp(52),dp(30)))
+  speeds.addView(small("SPEED"),LinearLayout.LayoutParams(dp(48),dp(29)))
   listOf(.25f,.5f,1f).forEachIndexed{index,value->
-   val name=if(value==1f)"1×" else "${value}×"
-   speeds.addView(button(name){service()?.setInstantReplaySpeed(value)},
-    LinearLayout.LayoutParams(0,dp(30),1f).apply{
-     if(index!=0)leftMargin=dp(4)
-    })
+   speeds.addView(button(if(value==1f)"1×" else "${value}×"){
+    service()?.setInstantReplaySpeed(value)
+   },LinearLayout.LayoutParams(0,dp(29),1f).apply{
+    if(index>0)leftMargin=dp(3)
+   })
   }
-  container.addView(speeds,LinearLayout.LayoutParams(-1,dp(30)).apply{topMargin=dp(3)})
+  panel.addView(speeds,LinearLayout.LayoutParams(-1,dp(30)).apply{topMargin=dp(2)})
+  // ROW 4: save the fixed full snapshot, not just selected region.
   val actions=line()
   actions.addView(button("Save"){service()?.saveInstantReplay()},
-   LinearLayout.LayoutParams(0,dp(31),1f))
+   LinearLayout.LayoutParams(0,dp(30),1f))
   actions.addView(button("Back to Live"){
    service()?.stopInstantReplay()
+   onClosed()
    close()
-  },LinearLayout.LayoutParams(0,dp(31),1.45f).apply{leftMargin=dp(4)})
-  container.addView(actions,LinearLayout.LayoutParams(-1,dp(31)).apply{topMargin=dp(3)})
-  popup=PopupWindow(container,dp(280),-2,false).apply{
+  },LinearLayout.LayoutParams(0,dp(30),1.45f).apply{leftMargin=dp(3)})
+  panel.addView(actions,LinearLayout.LayoutParams(-1,dp(30)).apply{topMargin=dp(3)})
+  popup=PopupWindow(panel,dp(285),-2,false).apply{
    isOutsideTouchable=false
    setBackgroundDrawable(bg(Color.rgb(15,30,25)))
    elevation=dp(5).toFloat()
-   showAsDropDown(anchor,0,-anchor.height-dp(125),Gravity.CENTER_HORIZONTAL)
+   showAsDropDown(anchor,0,-anchor.height-dp(158),Gravity.CENTER_HORIZONTAL)
   }
+  setPrepared(false)
  }
  fun close(){
   popup?.dismiss();popup=null
+  seek=null;current=null;total=null
+  dragging=false;ready=false
   zoom=1f;focusX=.5f;focusY=.5f
  }
 }

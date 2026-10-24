@@ -8,108 +8,173 @@ import android.os.Looper
 import android.os.SystemClock
 import android.view.Surface
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.concurrent.thread
 
 /**
- * Decodes an immutable short MP4 to the compositor's external OES surface.
- * Playback is muted: game/microphone audio continues from the live encoder.
- * Decoder frame pacing is independent from game and shot clocks.
+ * Private or on-air video decoder, independently driven by an indexed replay
+ * playhead. The live camera and encoder are never seeked or restarted.
+ *
+ * Exact seeks decode forward from PREVIOUS_SYNC and discard intermediate codec
+ * output until the chosen presentation timestamp, rather than displaying only
+ * keyframes. One persistent MediaCodec is reused; no codec recreate per drag.
+ * Responsiveness still depends on source GOP and hardware decoder performance.
  */
 class V2ReplayPlayback(
-  private val file:File,
-  private val surface:Surface,
-  private val speed:()->Float,
-  private val finished:(Boolean)->Unit
-){
- @Volatile private var stop=false
+ private val file:File,
+ private val surface:Surface,
+ private val speed:()->Float,
+ private val positionChanged:(Long)->Unit,
+ private val returnToLiveAtEnd:Boolean,
+ private val finished:(Boolean)->Unit
+) {
  private val main=Handler(Looper.getMainLooper())
+ private val revision=AtomicLong(1L)
+ @Volatile private var stopped=false
+ @Volatile private var playing=false
+ @Volatile private var requestedPositionUs=0L
+ @Volatile private var displayedUs=0L
+ @Volatile private var requestedPlay=false
  private var worker:Thread?=null
  fun start(){
   if(worker!=null)return
-  worker=thread(name="img-replay-decoder",isDaemon=true){decode()}
+  worker=thread(name="img-v2-replay-seek",isDaemon=true){decode()}
  }
- fun cancel(){stop=true;worker?.interrupt()}
- private fun decode(){
+ fun cancel(){stopped=true;revision.incrementAndGet();worker?.interrupt()}
+ fun seekTo(positionMs:Long,dragging:Boolean) {
+  requestedPositionUs=positionMs.coerceAtLeast(0L)*1000L
+  requestedPlay=!dragging
+  playing=false
+  revision.incrementAndGet()
+ }
+ fun pause(){playing=false;requestedPlay=false}
+ fun play(){requestedPlay=true;playing=true}
+ fun positionMs()=displayedUs/1000L
+ private fun decode() {
   var extractor:MediaExtractor?=null
   var decoder:MediaCodec?=null
-  var completed=false
-  try {
+  var playedToEnd=false
+  try{
    extractor=MediaExtractor().apply{setDataSource(file.absolutePath)}
    var index=-1
    for(i in 0 until extractor.trackCount){
-    val fmt=extractor.getTrackFormat(i)
-    if(fmt.getString(MediaFormat.KEY_MIME)?.startsWith("video/")==true){index=i;break}
+    if(extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME)
+       ?.startsWith("video/")==true){index=i;break}
    }
-   if(index<0)throw IllegalStateException("Replay has no video track")
+   if(index<0)throw IllegalStateException("No replay video")
    extractor.selectTrack(index)
-   val format=extractor.getTrackFormat(index)
-   decoder=MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
-   decoder.configure(format,surface,null,0)
+   val fmt=extractor.getTrackFormat(index)
+   decoder=MediaCodec.createDecoderByType(fmt.getString(MediaFormat.KEY_MIME)!!)
+   decoder.configure(fmt,surface,null,0)
    decoder.start()
    val info=MediaCodec.BufferInfo()
-   var inputEnded=false
-   var firstPts=-1L
-   var startAt=0L
-   var playedUs=0L
-   val maxUs=50_000_000L // 10s at 0.25x, plus safety
-   while(!stop){
-    if(!inputEnded){
-     val input=decoder.dequeueInputBuffer(10000L)
-     if(input>=0){
-      val target=decoder.getInputBuffer(input)!!
-      target.clear()
-      val n=extractor.readSampleData(target,0)
-      if(n<0){
-       decoder.queueInputBuffer(input,0,0,0L,MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-       inputEnded=true
+   var seenRevision=0L
+   var seeking=true
+   var requestedUs=0L
+   var inputDone=false
+   var frameStartUs=0L
+   var wallStartMs=0L
+   while(!stopped){
+    val requestedRevision=revision.get()
+    if(requestedRevision!=seenRevision){
+     seenRevision=requestedRevision
+     requestedUs=requestedPositionUs
+     // Keyframe is a DECODE START, not the displayed seek result.
+     extractor.seekTo(requestedUs,MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+     decoder.flush()
+     inputDone=false;seeking=true
+     frameStartUs=-1L;wallStartMs=0L
+     playing=false
+    }
+    if(!seeking&&!requestedPlay&&!playing){
+     Thread.sleep(8)
+     continue
+    }
+    if(!inputDone){
+     val indexIn=decoder.dequeueInputBuffer(5000L)
+     if(indexIn>=0){
+      val bytes=decoder.getInputBuffer(indexIn)!!
+      bytes.clear()
+      val count=extractor.readSampleData(bytes,0)
+      if(count<0){
+       decoder.queueInputBuffer(indexIn,0,0,0L,MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+       inputDone=true
       }else{
-       decoder.queueInputBuffer(input,0,n,extractor.sampleTime,extractor.sampleFlags)
+       decoder.queueInputBuffer(indexIn,0,count,extractor.sampleTime,extractor.sampleFlags)
        extractor.advance()
       }
      }
     }
-    val output=decoder.dequeueOutputBuffer(info,10000L)
-    if(output==MediaCodec.INFO_TRY_AGAIN_LATER)continue
-    if(output==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)continue
-    if(output>=0){
-     if(info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0){
-      decoder.releaseOutputBuffer(output,false)
-      completed=true;break
-     }
-     // Surface decoders may report size=0 even for displayable frames.
-     // The output presentation timestamp, not buffer size, drives rendering.
-     if(info.presentationTimeUs>=0L){
-      if(firstPts<0){firstPts=info.presentationTimeUs;startAt=SystemClock.elapsedRealtimeNanos()}
-      val mediaDeltaUs=(info.presentationTimeUs-firstPts).coerceAtLeast(0L)
-      val position=mediaDeltaUs/1_000_000f
-      val safeSpeed=speed().coerceIn(.25f,1f)
-      // Retiming permits interactive speed changes without replaying/skipping
-      // the underlying codec buffers.
-      val deltaUs=(mediaDeltaUs-playedUs).coerceAtLeast(0L)
-      val wantNs=(deltaUs/safeSpeed*1000f).toLong()
-      var waited=0L
-      while(!stop&&waited<wantNs){
-       val step=(wantNs-waited).coerceAtMost(20_000_000L)
-       if(step>=1_000_000L)Thread.sleep(step/1_000_000L)
-       waited+=step
-      }
-      playedUs=mediaDeltaUs
-      if(stop)decoder.releaseOutputBuffer(output,false)
-      else decoder.releaseOutputBuffer(output,true)
-      if(position>maxUs/1_000_000f)break
-     }else decoder.releaseOutputBuffer(output,false)
+    val indexOut=decoder.dequeueOutputBuffer(info,5000L)
+    if(indexOut==MediaCodec.INFO_TRY_AGAIN_LATER||
+      indexOut==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)continue
+    if(indexOut<0)continue
+    if(seenRevision!=revision.get()){
+     decoder.releaseOutputBuffer(indexOut,false)
+     continue
     }
+    if(info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0){
+     decoder.releaseOutputBuffer(indexOut,false)
+     if(requestedPlay&&returnToLiveAtEnd){playedToEnd=true;break}
+     // Keep final private frame displayed: a later seek can reuse this codec.
+     playing=false;requestedPlay=false
+     while(!stopped&&revision.get()==seenRevision)Thread.sleep(12)
+     continue
+    }
+    val pts=info.presentationTimeUs.coerceAtLeast(0L)
+    if(seeking){
+     // Decode all dependent P/B frames; display selected presentation frame
+     // instead of jumping back to the previous I-frame.
+     val frameDurationUs=1_000_000L/
+       (if(fmt.containsKey(MediaFormat.KEY_FRAME_RATE))
+        fmt.getInteger(MediaFormat.KEY_FRAME_RATE).coerceIn(1,120) else 30)
+     if(pts+frameDurationUs/2<requestedUs){
+      decoder.releaseOutputBuffer(indexOut,false)
+      continue
+     }
+     decoder.releaseOutputBuffer(indexOut,true)
+     displayedUs=pts
+     main.post{positionChanged(pts/1000L)}
+     seeking=false
+     frameStartUs=pts
+     wallStartMs=SystemClock.elapsedRealtime()
+     playing=requestedPlay
+     continue
+    }
+    if(!requestedPlay||!playing){
+     decoder.releaseOutputBuffer(indexOut,false)
+     continue
+    }
+    // Variable-rate playback clock follows the media presentation times.
+    // Re-anchor after every emitted frame so mid-replay speed changes work.
+    val rate=speed().coerceIn(.25f,1f)
+    val deltaUs=(pts-frameStartUs).coerceAtLeast(0L)
+    val sleepTargetMs=(deltaUs/1000f/rate).toLong()
+    while(!stopped&&seenRevision==revision.get()){
+     val remaining=wallStartMs+sleepTargetMs-SystemClock.elapsedRealtime()
+     if(remaining<=0)break
+     Thread.sleep(remaining.coerceAtMost(12L))
+    }
+    if(stopped||revision.get()!=seenRevision){
+     decoder.releaseOutputBuffer(indexOut,false)
+     continue
+    }
+    decoder.releaseOutputBuffer(indexOut,true)
+    displayedUs=pts
+    main.post{positionChanged(pts/1000L)}
+    frameStartUs=pts
+    wallStartMs=SystemClock.elapsedRealtime()
    }
   }catch(_:InterruptedException){
    Thread.currentThread().interrupt()
   }catch(_:Exception){
-   completed=false
+   playedToEnd=false
   }finally{
    try{decoder?.stop()}catch(_:Exception){}
    try{decoder?.release()}catch(_:Exception){}
    try{extractor?.release()}catch(_:Exception){}
-   val end=completed&&!stop
-   main.post{finished(end)}
+   val clean=playedToEnd&&!stopped
+   main.post{finished(clean)}
   }
  }
 }

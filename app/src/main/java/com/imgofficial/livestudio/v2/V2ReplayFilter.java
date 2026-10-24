@@ -146,6 +146,10 @@ public final class V2ReplayFilter extends BaseFilterRender {
       if(freshFrame.compareAndSet(true,false)&&replayTexture!=null){
         replayTexture.updateTexImage();
         replayTexture.getTransformMatrix(replayMatrix);
+        // Begin the 500ms entry fade ONLY after a decoded replay frame
+        // is available. This prevents a late-decoder sudden on-air cut.
+        if (!hasFrame && mode!=NONE && !leaving)
+          changeAt=SystemClock.uptimeMillis();
         hasFrame=true;
       }
     }catch(Exception ignored){}

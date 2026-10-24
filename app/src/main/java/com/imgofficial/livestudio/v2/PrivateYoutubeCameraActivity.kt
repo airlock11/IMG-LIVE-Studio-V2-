@@ -91,6 +91,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   override fun onServiceConnected(name:ComponentName?,binder:IBinder?){
    broadcast=(binder as? V2BroadcastService.LocalBinder)?.service()
    broadcast?.register(this@PrivateYoutubeCameraActivity)
+    broadcast?.setReplayTimelineListener{pos->
+     if(!isFinishing&&!isDestroyed)replayUi.onTimelinePosition(pos)
+    }
+    broadcast?.setReplayCompletedListener{
+     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true)
+      showPrivateReplay()
+    }
    draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
     autoLaunchAllowed=false
@@ -234,7 +241,32 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
- private val replayUi by lazy{V2ReplayPanel(this){broadcast}}
+ private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{hidePrivateReplay()},{hidePrivateReplay()})}
+ private lateinit var privateReplayView:android.view.TextureView
+ private var privateReplaySurface:android.view.Surface?=null
+ private var privateReplayVisible=false
+ private fun attachPrivateReplay(){
+  if(!privateReplayVisible||!::privateReplayView.isInitialized||!privateReplayView.isAvailable)return
+  val texture=privateReplayView.surfaceTexture?:return
+  broadcast?.detachPrivateReplayPreview()
+  privateReplaySurface?.release()
+  privateReplaySurface=android.view.Surface(texture)
+  if(broadcast?.attachPrivateReplayPreview(privateReplaySurface!!)!=true)
+   privateReplayView.alpha=0f
+ }
+ private fun showPrivateReplay(){
+  if(!::privateReplayView.isInitialized)return
+  privateReplayVisible=true;privateReplayView.alpha=0f;privateReplayView.visibility=View.VISIBLE
+  if(privateReplayView.isAvailable)attachPrivateReplay()
+ }
+ private fun hidePrivateReplay(){
+  privateReplayVisible=false
+  broadcast?.detachPrivateReplayPreview()
+  if(::privateReplayView.isInitialized){
+   privateReplayView.visibility=View.GONE;privateReplayView.alpha=0f
+  }
+  privateReplaySurface?.release();privateReplaySurface=null
+ }
  private val periodQuickButtons=mutableListOf<Button>()
  private var lastScoreChange:Pair<Int,Int>?=null
  private var touchFeedback=true
@@ -721,6 +753,25 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
    }
   camera.addView(monitor,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
+  // Operator-only TextureView: never supplied to the live H264 encoder.
+  privateReplayView=android.view.TextureView(this).apply{
+   visibility=View.GONE;alpha=0f;isOpaque=true
+   surfaceTextureListener=object:android.view.TextureView.SurfaceTextureListener{
+    override fun onSurfaceTextureAvailable(t:android.graphics.SurfaceTexture,w:Int,h:Int){
+     attachPrivateReplay()
+    }
+    override fun onSurfaceTextureSizeChanged(t:android.graphics.SurfaceTexture,w:Int,h:Int){}
+    override fun onSurfaceTextureUpdated(t:android.graphics.SurfaceTexture){
+     if(privateReplayVisible&&alpha<1f)alpha=1f
+    }
+    override fun onSurfaceTextureDestroyed(t:android.graphics.SurfaceTexture):Boolean{
+     broadcast?.detachPrivateReplayPreview()
+     privateReplaySurface?.release();privateReplaySurface=null
+     return true
+    }
+   }
+  }
+  camera.addView(privateReplayView,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
   // Separate native operator preview of the *same* GL-uploaded Bitmap.
   // Screen-only ImageView never enters camera capture or H.264 encoding.
   // The livestream still uses the original ImageFilterRender directly.
@@ -741,6 +792,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
+    val replayParams=privateReplayView.layoutParams
+    if(w>0&&h>0&&(replayParams.width!=w||replayParams.height!=h))
+     privateReplayView.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
     graphicsPreview.post{placePreviewGraphic()}
    }
   }
@@ -950,11 +1004,21 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      setTimeoutMode(false)
     }else showTimeoutPreview(timeoutButton)
    }
-   val replayButton=darkButton("REPLAY"){}
-   replayButton.setOnClickListener{replayUi.show(replayButton)}
+   val replayButton=darkButton("INSTANT REPLAY"){}
+   replayButton.setOnClickListener{
+    replayUi.show(replayButton)
+    val accepted=broadcast?.prepareInstantReplay{ready->
+     if(!isFinishing&&!isDestroyed){
+      replayUi.setPrepared(ready,broadcast?.instantReplayDurationMs()?:10_000L)
+      if(ready)showPrivateReplay() else hidePrivateReplay()
+     }
+    }==true
+    if(!accepted)replayUi.setPrepared(false)
+   }
    val keys=listOf(start,timeoutButton,replayButton,
     iconButton(darkButton("TOOLS"){openOperatorSettings()},"tools"))
-   val widths=listOf(1.55f,1.05f,1.05f,1.05f)
+   val widths=listOf(1.35f,1.0f,1.50f,.95f)
+   replayButton.textSize=10f
   for((index,button) in keys.withIndex())
    actions.addView(button,LinearLayout.LayoutParams(0,dp(43),widths[index]).apply{
     if(index>0)leftMargin=gap
@@ -1130,6 +1194,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   timeoutPreview?.dismiss()
    timeoutPreview=null
    replayUi.close()
+   hidePrivateReplay()
    if(bound){
    broadcast?.unregister(this)
    broadcast?.detachPreview()
