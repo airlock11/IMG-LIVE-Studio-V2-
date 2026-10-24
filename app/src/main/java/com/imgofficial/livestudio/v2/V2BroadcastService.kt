@@ -48,7 +48,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   // Mirrors the same bitmap submitted to H.264's GL filter. UI receives
   // one frame only when score, clock or a finite transition actually changes.
   fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){}
-  fun onPreviewReplayFrame(image:android.graphics.Bitmap){}
+  fun onPreviewReplayFrame(image:android.graphics.Bitmap,mode:Int,progress:Float){}
  }
  inner class LocalBinder:Binder(){ fun service():V2BroadcastService=this@V2BroadcastService }
  private val binder=LocalBinder()
@@ -380,7 +380,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    filter.setScale(100f,100f)
    filter.setPosition(0f,0f)
    listeners.toList().forEach{listener->
-    try{listener.onPreviewReplayFrame(image)}catch(_:Exception){}
+    try{listener.onPreviewReplayFrame(image,mode,progress)}catch(_:Exception){}
    }
   }catch(_:Exception){notifyState("Replay broadcast frames unavailable.")}
  }
