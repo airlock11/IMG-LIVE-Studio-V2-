@@ -41,6 +41,7 @@ class V2ReplayManager(
  private var onAirEnded:()->Unit={}
  private var onAirStarted:(Int)->Unit={}
  private var snapshotDurationMs=10_000L
+ private var playbackOffsetMs=0L
 
  fun installStreamRecorder(engine:GenericStream){engine.setRecordController(ring)}
  /** Insert BEFORE scorecard overlays, so replay zoom never scales score/clock. */
@@ -72,7 +73,8 @@ class V2ReplayManager(
   backToLive()
   val request=++epoch
   snapshot=sample
-  snapshotDurationMs=(sample.durationUs/1000L).coerceAtLeast(1000L)
+  snapshotDurationMs=10_000L
+  playbackOffsetMs=sample.playbackOffsetUs/1000L
   playheadMs=0L
   speed=1f
   prepared=false
@@ -92,8 +94,11 @@ class V2ReplayManager(
   val file=preparedFile?.takeIf{prepared&&it.isFile}?:return false
   operatorDecoder?.cancel()
   operatorDecoder=V2ReplayPlayback(file,surface,{speed},{
-   if(!active){playheadMs=it;timelineChanged(it)}
-  },false,{ /* private playback remains seekable after it ends */ }).also{it.start()}
+   if(!active){val visible=(it-playbackOffsetMs).coerceIn(0L,snapshotDurationMs);playheadMs=visible;timelineChanged(visible)}
+  },false,{ /* private playback remains seekable after it ends */ }).also{
+   it.seekTo(playbackOffsetMs,false)
+   it.start()
+  }
   return true
  }
  fun detachPrivatePreview(){operatorDecoder?.cancel();operatorDecoder=null}
@@ -139,7 +144,8 @@ class V2ReplayManager(
    preparedFile=output
    if(old!=null&&old!==output)ui.postDelayed({old.delete()},1700L)
    snapshot=fresh
-   snapshotDurationMs=(fresh.durationUs/1000L).coerceAtLeast(1000L)
+   snapshotDurationMs=10_000L
+   playbackOffsetMs=fresh.playbackOffsetUs/1000L
    playheadMs=0L
    timelineChanged(0L)
    val playbackRevision=++epoch
@@ -148,14 +154,14 @@ class V2ReplayManager(
    // Apply GPU graphics/layout only when the selected clip is actually ready.
    onAirStarted(mode)
    onAirDecoder=V2ReplayPlayback(output,surface,{speed},{pos->
-    if(active){playheadMs=pos;timelineChanged(pos)}
+    if(active){val visible=(pos-playbackOffsetMs).coerceIn(0L,snapshotDurationMs);playheadMs=visible;timelineChanged(visible)}
    },mode!=V2ReplayFilter.FULL,{successful->
     if(playbackRevision==epoch&&active){
      stopOnAir()
      if(!successful)status("Replay decoder stopped; LIVE restored")
     }
    }).also{
-    it.seekTo(0L,false)
+    it.seekTo(playbackOffsetMs,false)
     it.start()
    }
   }
@@ -171,8 +177,8 @@ class V2ReplayManager(
   val safe=positionMs.coerceIn(0L,(snapshotDurationMs-1).coerceAtLeast(0L))
   playheadMs=safe
   timelineChanged(safe)
-  if(active)onAirDecoder?.seekTo(safe,dragging)
-  else operatorDecoder?.seekTo(safe,dragging)
+  if(active)onAirDecoder?.seekTo(safe+playbackOffsetMs,dragging)
+  else operatorDecoder?.seekTo(safe+playbackOffsetMs,dragging)
  }
  /** A completed Diagonal/Corner unlocks AFTER GPU exit, not mid-animation. */
  fun stopOnAir(){
@@ -203,6 +209,7 @@ class V2ReplayManager(
   prepared=false
   playheadMs=0L
   snapshot=null
+  playbackOffsetMs=0L
   val old=preparedFile
   preparedFile=null
   if(old!=null)ui.postDelayed({old.delete()},1700L)
