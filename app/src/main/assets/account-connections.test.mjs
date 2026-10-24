@@ -569,7 +569,7 @@ test('Native V2 replay: rolling encoded ring, on-air 3-mode GPU compositor and o
  assert.ok(render.includes('float elapsed=')&&render.includes('/500f'),'500ms transitions');
  assert.ok(render.includes('Math.min(4f,amount)'),'Full replay zoom max 4x');
  assert.ok(decoder.includes('MediaExtractor')&&decoder.includes('MediaCodec.createDecoderByType'));
- assert.ok(decoder.includes('safeSpeed=speed().coerceIn(.25f,1f)'));
+ assert.ok(decoder.includes('rate=speed().coerceIn(.25f,1f)'));
  assert.ok(panel.includes('listOf("Full","Diagonal","Corner")'),'Three equal display buttons');
  assert.ok(panel.includes('listOf(.25f,.5f,1f)'),'Three speed choices');
  assert.ok(panel.includes('button("Save")')&&panel.includes('button("Back to Live")'));
@@ -610,7 +610,7 @@ test('V2 Instant Replay update: four compact rows, fixed OFF AIR snapshot, bidir
  assert.ok(m.includes('else operatorDecoder?.seekTo(safe,dragging)'),'OFF AIR scrubbing stays private');
  assert.ok(player.includes('MediaExtractor.SEEK_TO_PREVIOUS_SYNC'),'Seek starts from decode keyframe');
  assert.ok(player.includes('if(pts+frameDurationUs/2<requestedUs)'),'Decode dependent frames to requested time');
- assert.ok(player.includes('val safeSpeed=speed().coerceIn(.25f,1f)'),'Auto-play honors selected rate');
+ assert.ok(player.includes('val rate=speed().coerceIn(.25f,1f)'),'Auto-play honors selected rate');
  assert.ok(player.includes('private val returnToLiveAtEnd:Boolean'),'Only ON AIR completion returns to LIVE');
  assert.ok(service.includes('fun seekInstantReplay(positionMs:Long,dragging:Boolean)'),'Both broadcast modes share seek');
 });
