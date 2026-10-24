@@ -27,7 +27,8 @@ class V2ReplayPanel(
  private val activity:Activity,
  private val service:()->V2BroadcastService?,
  private val onAirSelected:(Int)->Unit,
- private val onClosed:()->Unit
+ private val onClosed:()->Unit,
+ private val onPrivateSeek:()->Unit = {}
 ){
  private var popup:PopupWindow?=null
  private var seek:SeekBar?=null
@@ -172,6 +173,8 @@ class V2ReplayPanel(
    setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
     override fun onStartTrackingTouch(seekBar:SeekBar){
      dragging=true
+     // Only an intentional seek reveals a PRIVATE off-air replay preview.
+     if(service()?.instantReplayIsActive()!=true)onPrivateSeek()
      service()?.seekInstantReplay(seekBar.progress.toLong(),true)
     }
     override fun onProgressChanged(seekBar:SeekBar,progress:Int,fromUser:Boolean){
