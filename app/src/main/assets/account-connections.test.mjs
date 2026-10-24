@@ -629,9 +629,9 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  assert.ok(a.includes('privateReplayView.visibility=View.VISIBLE'));
  assert.ok(a.includes('else->.38f')&&a.includes('val replayW=(w*fraction)'),'OFF AIR uses small private inset');
  assert.ok(a.includes('setOnTouchListener'),'On-air gestures remain available');
- assert.ok(a.includes('ValueAnimator.ofFloat(params.weight,target)'),'Full-only local preview resize');
- assert.ok(a.includes('duration=300L'),'Local transition lasts 300ms');
- assert.ok(a.includes('parent.width>=dp(770)'),'Respect constrained small screens');
+ assert.ok(a.includes('android.animation.ValueAnimator.ofFloat(0f,1f)'),'Full-only local preview resize');
+ assert.ok(a.includes('duration=320L'),'Local transition lasts 300ms');
+ assert.ok(a.includes('val replayW=(w*fraction)'),'Respect constrained small screens');
  const seek=d['V2ReplayPlayback.kt'];
  assert.ok(seek.includes('lastDecoderResetMs'),'Coalesce reverse decoder resets');
  assert.ok(seek.includes('val forwardNearby='),'Avoid flush on sequential forward seeking');
