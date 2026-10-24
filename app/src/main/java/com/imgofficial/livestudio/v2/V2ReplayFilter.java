@@ -56,7 +56,7 @@ public final class V2ReplayFilter extends BaseFilterRender {
       "if(uMode<2.5){"+
       // Final view is two same-sized nonoverlapping complete rectangles.
       "vec4 a=mix(vec4(0.,0.,1.,1.),vec4(.025,.525,.475,.975),uBlend);"+
-      "vec4 b=vec4(.525,.025,.975,.475);"+
+      "vec4 b=mix(vec4(.974,.025,.975,.026),vec4(.525,.025,.975,.475),uBlend);"+
       "vec4 outc=vec4(.02,.045,.04,1.);"+
       "if(inRect(vUV,a))outc=texture2D(uLive,inside(vUV,a));"+
       "if(inRect(vUV,b))outc=rep(inside(vUV,b));"+
