@@ -48,4 +48,32 @@ class V2ReplayRingTest {
   ring.setCaptureEnabled(true)
   assertFalse("Resume requires fresh live frames",ring.ready())
  }
+ @Test fun cleanEncoderPacketsNeverMixWithCompositedBroadcastPackets(){
+  val ring=V2ReplayRing()
+  val primaryFmt=MediaFormat.createVideoFormat("video/avc",1280,720)
+  val cleanFmt=MediaFormat.createVideoFormat("video/avc",640,360)
+  ring.setVideoFormat(primaryFmt)
+  ring.setCaptureEnabled(true)
+  ring.setCleanCaptureEnabled(true)
+  ring.setCleanVideoFormat(cleanFmt)
+  for(i in 0..125){
+   val ts=i*100_000L
+   val info=MediaCodec.BufferInfo().apply{
+    set(0,64,ts,if(i%2==0)MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+   }
+   ring.recordVideo(ByteBuffer.wrap(ByteArray(64){0x22.toByte()}),info)
+   ring.recordCleanVideo(ByteBuffer.wrap(ByteArray(64){0x77.toByte()}),info)
+  }
+  assertTrue("Only the dedicated graphics-free replay feed can enable replay",ring.ready())
+  val snapshot=ring.snapshot()
+  assertNotNull(snapshot)
+  assertEquals(640,snapshot!!.videoFormat.getInteger(MediaFormat.KEY_WIDTH))
+  assertTrue("Never record bytes from the composited H264 encoder",
+   snapshot.video.all{it.bytes.all{b->b==0x77.toByte()}})
+  assertEquals(10_000_000L,
+   snapshot.durationUs-snapshot.playbackOffsetUs)
+  ring.setCleanCaptureEnabled(false)
+  assertFalse("Disabling clean input invalidates all old replay packets",ring.ready())
+ }
+
 }
