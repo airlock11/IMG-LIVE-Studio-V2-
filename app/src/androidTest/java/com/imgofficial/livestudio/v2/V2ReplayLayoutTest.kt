@@ -17,7 +17,7 @@ class V2ReplayLayoutTest {
     assertNotNull("Vertical style $style mode $mode",result)
     val rect=result!!.scoreboard
     assertTrue("Bounds safe",rect.inCanvas())
-    assertTrue("Move to left",rect.x<original.x)
+    assertEquals("Nearest available right edge",97f,rect.right,0.02f)
     assertTrue("Keep width readable",rect.w>=17f)
     assertTrue("No video collision",V2ReplayLayout.windows(mode).none{it.meets(rect)})
    }
@@ -43,6 +43,10 @@ class V2ReplayLayoutTest {
   assertEquals("Center of unused quadrant is transparent",0,frame.getPixel(640,360))
   assertNotEquals("Metallic edge rendered",0,frame.getPixel(34,17))
   frame.recycle()
+  val full=V2ReplayFrameGraphics.render(V2ReplayFilter.FULL,1280,720)
+  assertEquals("Full frame reuses the Corner-style metallic border",1280,full.width)
+  assertNotEquals(0,full.getPixel(29,16))
+  full.recycle()
   val empty=V2ReplayFrameGraphics.render(V2ReplayFilter.NONE,1280,720)
   assertEquals(0,empty.getPixel(32,16))
   empty.recycle()
