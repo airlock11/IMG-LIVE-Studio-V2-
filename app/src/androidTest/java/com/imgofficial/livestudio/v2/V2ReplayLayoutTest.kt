@@ -66,6 +66,20 @@ class V2ReplayLayoutTest {
   assertEquals(original,V2ReplayLayout.interpolate(original,selected,0f))
   assertEquals(selected,V2ReplayLayout.interpolate(original,selected,1f))
  }
+ @Test fun scoreboardNeverCollidesWithAnimatedReplay(){
+  val original=V2ReplayLayout.Rect(66f,73f,31f,23f)
+  for(mode in listOf(V2ReplayFilter.CORNER,V2ReplayFilter.DIAGONAL)){
+   val selected=V2ReplayLayout.choose(mode,original,true)!!.scoreboard
+   for(step in 0..20){
+    val t=step/20f
+    val moving=V2ReplayLayout.followingScoreboard(mode,original,selected,t)
+    val replay=V2ReplayLayout.animatedWindows(mode,t).last()
+    assertTrue("Replay and scoreboard must not overlap at t=$t",moving.right<=replay.x-2.49f)
+    assertTrue("Scoreboard must stay on screen",moving.inCanvas())
+    assertEquals("Maintain artwork ratio",original.w/original.h,moving.w/moving.h,.001f)
+   }
+  }
+ }
  @Test fun actualVideoFramesAreTransparentOutsideControls(){
   val frame=V2ReplayFrameGraphics.render(V2ReplayFilter.DIAGONAL,1280,720)
   assertEquals(1280,frame.width)
