@@ -74,6 +74,17 @@ class V2ReplayRingTest {
    snapshot.durationUs-snapshot.playbackOffsetUs)
   ring.setCleanCaptureEnabled(false)
   assertFalse("Disabling clean input invalidates all old replay packets",ring.ready())
+  // A failing clean encoder MUST NOT silently switch replay back to the
+  // composed broadcast packets containing scoreboard/sponsor graphics.
+  ring.setVideoFormat(primaryFmt)
+  for(i in 126..260){
+   val info=MediaCodec.BufferInfo().apply{
+    set(0,64,i*100_000L,if(i%2==0)MediaCodec.BUFFER_FLAG_KEY_FRAME else 0)
+   }
+   ring.recordVideo(ByteBuffer.wrap(ByteArray(64){0x22.toByte()}),info)
+  }
+  assertFalse("Never fall back to scored broadcast H264 after clean codec failure",ring.ready())
+  assertNull("No scored replay clip may be exported",ring.snapshot())
  }
 
 }
