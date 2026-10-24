@@ -48,6 +48,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   // Mirrors the same bitmap submitted to H.264's GL filter. UI receives
   // one frame only when score, clock or a finite transition actually changes.
   fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){}
+  fun onPreviewReplayFrame(image:android.graphics.Bitmap){}
  }
  inner class LocalBinder:Binder(){ fun service():V2BroadcastService=this@V2BroadcastService }
  private val binder=LocalBinder()
@@ -75,7 +76,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     historicalReplayScore=replay.historicalAtPlayhead()
     replayScoreFade=1f
     updateScorecard()
-    updateReplayBorders(V2ReplayFilter.FULL,0f)
+    updateReplayBorders(V2ReplayFilter.FULL,1f,replay.visualProgress())
     animateFullReplayBorder(true)
    }
    return replay.putOnAir(mode)
@@ -369,94 +370,90 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(compact)100f-width-3f else (100f-width)/2f,
    100f-height-3f,width,height)
  }
- private fun updateReplayBorders(mode:Int,alpha:Float){
+ private fun updateReplayBorders(mode:Int,alpha:Float,progress:Float=1f){
   try{
    val filter=replayBorderFilter?:return
-   val image=V2ReplayFrameGraphics.render(mode,videoWidth,videoHeight,alpha)
+   val w=videoWidth.coerceAtMost(1280)
+   val h=(videoHeight.toLong()*w/videoWidth).toInt().coerceAtLeast(1)
+   val image=V2ReplayFrameGraphics.render(mode,w,h,alpha,progress)
    filter.setImage(image)
    filter.setScale(100f,100f)
    filter.setPosition(0f,0f)
-  }catch(_:Exception){
-   notifyState("Replay broadcast frames unavailable.")
-  }
+   listeners.toList().forEach{listener->
+    try{listener.onPreviewReplayFrame(image)}catch(_:Exception){}
+   }
+  }catch(_:Exception){notifyState("Replay broadcast frames unavailable.")}
+ }
+ /** Frame and video use the same GPU transition clock; no independent scale. */
+ private fun animateReplayFrames(mode:Int,epoch:Int,durationMs:Long){
+  val steps=(durationMs/55L).toInt().coerceAtLeast(1)
+  for(step in 0..steps)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   updateReplayBorders(mode,1f,replay.visualProgress())
+  },step*durationMs/steps)
  }
  private fun startReplayLayout(mode:Int,rect:V2ReplayLayout.Rect){
   val epoch=++replayLayoutEpoch
   replayLayoutRestoring=false
   replayScreenMode=mode
   historicalReplayScore=null
-  replayTempRect=rect
-  replayScoreFade=0f
-  placeGraphics()
+  val original=originalGraphicsRect()
+  replayTempRect=original
+  replayScoreFade=if(mode==V2ReplayFilter.CORNER)1f else 0f
   updateScorecard()
-  updateReplayBorders(mode,0f)
-  for(step in 1..4){
-   ui.postDelayed({
-    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    val t=step/4f
-    replayScoreFade=t*t*(3f-2f*t)
+  for(step in 0..10)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   val progress=replay.visualProgress()
+   replayTempRect=V2ReplayLayout.interpolate(original,rect,progress)
+   placeGraphics()
+   if(mode==V2ReplayFilter.DIAGONAL){
+    replayScoreFade=progress
     updateScorecard()
-    updateReplayBorders(mode,replayScoreFade)
-   },step*60L)
-  }
+   }else replayScoreFade=1f
+   updateReplayBorders(mode,1f,progress)
+   if(step==10){
+    replayTempRect=rect
+    placeGraphics()
+    if(mode==V2ReplayFilter.DIAGONAL){
+     replayScoreFade=1f;updateScorecard()
+    }
+    updateReplayBorders(mode,1f,1f)
+   }
+  },step*50L)
  }
- // Scale one uploaded graphic in GL instead of allocating a new bitmap each tick.
  private fun animateFullReplayBorder(enter:Boolean){
-  val epoch=replayLayoutEpoch
-  if(enter&&!replay.hasDecodedFrame()){
-   // Keep broadcast frame fully invisible until a NEW decoded clip frame exists.
-   ui.postDelayed({
-    if(epoch==replayLayoutEpoch&&replay.active)animateFullReplayBorder(true)
-   },33L)
-   return
-  }
-  if(enter)updateReplayBorders(V2ReplayFilter.FULL,1f)
-  for(step in 0..17){
-   ui.postDelayed({
-    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    val t=step/17f
-    val e=t*t*(3f-2f*t)
-    val fraction=if(enter)e else 1f-e
-    val width=30f+70f*fraction
-    try{
-     replayBorderFilter?.setScale(width,width)
-     replayBorderFilter?.setPosition(100f-width,100f-width)
-    }catch(_:Exception){}
-   },(step*850L/17L))
-  }
+  animateReplayFrames(V2ReplayFilter.FULL,replayLayoutEpoch,850L)
  }
  private fun endReplayLayout(){
   if(replayScreenMode==0&&replayTempRect==null)return
   val mode=replayScreenMode
+  val initialRect=replayTempRect
+  val original=originalGraphicsRect()
   replayScreenMode=0
   historicalReplayScore=null
   operatorFullReplayExitActive=mode==V2ReplayFilter.FULL
   replayLayoutRestoring=true
   val epoch=++replayLayoutEpoch
-  if(mode==V2ReplayFilter.FULL)animateFullReplayBorder(false)
-  val steps=if(mode==V2ReplayFilter.FULL)10 else 8
-  for(step in 1..steps){
-   ui.postDelayed({
-    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    replayScoreFade=if(mode==V2ReplayFilter.FULL){
-     if(step<=7)0f else (step-7)/3f
-    }else when{
-     step<=2->1f-step/2f
-     step<=5->0f
-     else->(step-5)/3f
-    }
-    if(step==3){replayTempRect=null;placeGraphics()}
-    if(step==steps){
-     replayScoreFade=1f
-     replayLayoutRestoring=false
-     operatorFullReplayExitActive=false
-    }
-    updateScorecard()
-    if(mode==V2ReplayFilter.FULL){
-     if(step==steps)updateReplayBorders(0,0f)
-    }else updateReplayBorders(mode,(1f-step.toFloat()/steps).coerceIn(0f,1f))
-   },step*90L)
-  }
+  val totalMs=if(mode==V2ReplayFilter.FULL)850L else 500L
+  val steps=(totalMs/55L).toInt().coerceAtLeast(1)
+  for(step in 0..steps)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   val progress=replay.visualProgress()
+   // Corner always retains its existing alpha. Move and scale with video.
+   replayScoreFade=1f
+   if(initialRect!=null){
+    replayTempRect=V2ReplayLayout.interpolate(original,initialRect,progress)
+    placeGraphics()
+   }
+   if(step==steps){
+    replayTempRect=null
+    replayLayoutRestoring=false
+    operatorFullReplayExitActive=false
+    placeGraphics()
+    updateReplayBorders(0,0f)
+   }else updateReplayBorders(mode,1f,progress)
+   updateScorecard()
+  },step*totalMs/steps)
  }
  private var latestGraphics:android.graphics.Bitmap?=null
  private var latestOperatorGraphics:android.graphics.Bitmap?=null
@@ -687,6 +684,7 @@ class V2BroadcastService:Service(),ConnectChecker {
 
  override fun onCreate(){
   super.onCreate()
+  replay.setOnAirStopping { endReplayLayout() }
   replay.setHistoricalScoreListener { historical ->
    if(replayScreenMode==V2ReplayFilter.FULL &&
      historical!=null && historical!=historicalReplayScore){
