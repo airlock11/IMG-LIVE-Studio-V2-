@@ -109,7 +109,7 @@ function applyAppearance(){
  if(meta)meta.setAttribute('content',theme==='dark'?'#10191f':'#f8f6f2');
 }
 applyAppearance();
-let offlineClips=[],nativeClips=[],scoreFlashTeam=-1,scoreFlashAt=0;
+let offlineClips=[],nativeClips=[],nativeReplays=[],scoreFlashTeam=-1,scoreFlashAt=0;
 let offlineStartBusy=false,offlineStopBusy=false,offlinePlaybackUrl=null;let screen='home',createStep=0,setupStep=0,selectedLeagueId=data.selectedLeagueId,selectedEventId=data.selectedEventId,focusTab='score',sponsorOpen=false,dialog=null,toastTimer=null,draft=null,gameDraft=null,toastText='',needsRender=false;
 let remotePublishTimer=0,remoteLastPublished='';
 let youtubeExpanded=false,youtubeBusy=false,youtubeConnectBusy=false,youtubeAudience="",youtubeFeedback="",advancedOpen=false;
@@ -395,25 +395,55 @@ function platformMarks(values){
  };
  return '<span class="recording-platform-logos">'+values.map(x=>icons[x]).join('')+'</span>';
 }
+
+function allSavedClips(){
+ const all=[...offlineClips.filter(x=>x.saved===true),...nativeClips.map(x=>({...x,native:true}))];
+ const ids=new Set();
+ return all.filter(x=>Number.isFinite(Number(x.createdAt))&&Number(x.createdAt)>0)
+  .filter(x=>{const id=(x.native?'native:':'browser:')+String(x.id);if(ids.has(id))return false;ids.add(id);return true})
+  .sort((a,b)=>Number(b.createdAt)-Number(a.createdAt)||String(b.id).localeCompare(String(a.id)));
+}
+const replayDropdownOpen=new Set();
+function replayItems(clip){
+ const sid=String(clip.sessionId||clip.id);
+ const items=clip.native?nativeReplays.filter(x=>String(x.sessionId)===sid)
+  .sort((a,b)=>Number(b.createdAt)-Number(a.createdAt)):[];
+ const entries=items.map((item,index)=>{
+  const id=esc(String(item.id)),seconds=Math.round(Math.max(0,Number(item.duration)||0)/1000);
+  return '<div class="img-saved-replay-row"><span>Replay '+(items.length-index)+
+   ' · '+seconds+'s</span><button data-action="native-open-replay-'+id+'">Play</button>'+
+   '<button data-action="native-export-replay-'+id+'">Download</button></div>';
+ }).join('');
+ return '<details class="img-replay-dropdown" data-replay-session="'+esc(sid)+'"'+
+  (replayDropdownOpen.has(sid)?' open':'')+'><summary>Instant Replays ('+items.length+')</summary>'+
+  '<div class="img-replay-list">'+(items.length?entries+
+   '<button class="img-replay-download-all" data-action="native-export-all-'+esc(sid)+'">Download All Replays</button>':
+   '<small>No saved instant replays</small>')+'</div></details>';
+}
 function savedRecordingCard(clip,offline=false){
  const m=clip.native?clip:clip.metadata||{},scores=Array.isArray(m.scores)?m.scores:[];
  const names=[String(m.home||'HOME'),String(m.away||'AWAY')];
  const logo=(raw)=>raw&&raw.startsWith('data:image/')&&raw.length<=35000?
   '<img src="'+esc(raw)+'" alt="">':ic(m.sport==='pickleball'?'pickleball':'basketball',22);
  const date=new Date(clip.createdAt).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
- const brands=recordedPlatforms(clip),action=(clip.native?'open-native-recording-':'play-recording-')+clip.id;
+ const brands=recordedPlatforms(clip);
+ const native=Boolean(clip.native),id=esc(String(clip.id));
+ const hasVideo=!(native&&m.kind==='replay_session');
+ const action=(native?'open-native-recording-':'play-recording-')+id;
  const game='<div class="img-my-stream-teams"><div class="img-my-stream-logo">'+logo(m.homeLogo)+'</div>'+
   '<div class="img-my-stream-score"><span>'+esc(names[0])+'</span><strong>'+(scores[0]!=null?Math.max(0,Number(scores[0])||0):'—')+'</strong>'+
   '<span>'+esc(names[1])+'</span><strong>'+(scores[1]!=null?Math.max(0,Number(scores[1])||0):'—')+'</strong></div>'+
   '<div class="img-my-stream-logo">'+logo(m.awayLogo)+'</div></div>';
- if(!offline)return '<button class="img-my-stream-card" data-action="'+esc(action)+'" aria-label="Play saved livestream">'+game+
-  '<div class="img-my-stream-foot"><span>'+platformMarks(brands)+esc(brands.map(x=>x==='youtube'?'YouTube':'Facebook').join(' + '))+'</span><b>'+esc(date)+'</b></div></button>';
- return '<article class="img-my-stream-card img-offline-recording-card">'+game+
-  '<div class="img-my-stream-foot"><span>Saved locally</span><b>'+esc(date)+'</b></div>'+
-  '<div class="img-offline-recording-actions"><button data-action="'+esc(action)+'">Play</button>'+
-  (!clip.native?'<button data-action="download-recording-'+esc(clip.id)+'">Download</button>'+
-  '<button class="img-recording-delete" data-action="delete-recording-'+esc(clip.id)+'">Delete</button>':'')+
-  '</div></article>';
+ const foot='<div class="img-my-stream-foot"><span>'+
+  (brands.length?platformMarks(brands)+esc(brands.map(x=>x==='youtube'?'YouTube':'Facebook').join(' + ')):
+   (m.kind==='replay_session'?'Instant Replays':'Saved locally'))+'</span><b>'+esc(date)+'</b></div>';
+ const remove='<button class="img-recording-card-x" data-action="'+(native?'delete-native-game-':'delete-recording-')+id+'" aria-label="Delete game">×</button>';
+ const play=hasVideo?'<button class="img-recording-main" data-action="'+action+'" aria-label="Play recording">'+game+foot+'</button>':
+  '<div class="img-recording-main">'+game+foot+'</div>';
+ const actions=!native&&hasVideo?'<div class="img-offline-recording-actions"><button data-action="'+action+'">Play</button>'+
+  '<button data-action="download-recording-'+id+'">Download</button></div>':'';
+ return '<article class="img-my-stream-card img-offline-recording-card img-recording-library-card">'+
+  remove+play+actions+replayItems(clip)+'</article>';
 }
 // Native Offline Recording shares the EXACT camera, clock, scoring, fouls,
 // Timeout and Tools controls used by native YouTube. Opening this screen does
@@ -565,9 +595,7 @@ async function startOfflineRecording(){
 
 function home(){
  const upcomingEvents=upcoming(),leagues=sportLeagues();
- const clips=[...offlineClips.filter(x=>x.saved===true),...nativeClips.map(x=>({...x,native:true}))]
-  .filter(x=>Number.isFinite(Number(x.createdAt))&&Number(x.createdAt)>0)
-  .sort((a,b)=>b.createdAt-a.createdAt);
+ const clips=allSavedClips();
  const streams=clips.filter(x=>recordedPlatforms(x).length>0);
  const offlineRecordings=clips.filter(x=>!recordedPlatforms(x).length);
  return `<main class="page home-page sport-${activeSport()}" data-scroll="main"><div class="home-intro"><div class="eyebrow">YOUR BROADCAST DESK</div><h1>Good to see you.</h1><p class="lead">Ready for your next game?</p></div><div class="hero-media"><div class="hero-copy"><span>IMG LIVE STUDIO · ${sportName().toUpperCase()}</span><strong>Every game.<br>One great broadcast.</strong></div></div><button class="action-line primary" data-go="create">${ic('plus',19)}<span>Create League</span>${ic('arrow',19)}</button>${leagues.length?`<section><div class="section-heading"><h2>My Leagues</h2><button class="text-link" data-go="leagues">View all</button></div><div class="logo-rail" aria-label="Your leagues, swipe horizontally">${leagues.map(l=>`<button class="logo-item" data-league="${l.id}" aria-label="Open ${esc(l.name)}"><div class="logo-circle">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name.split(/\s+/).map(w=>w[0]).join('').slice(0,3))}</span>`}</div><span>${esc(l.name)}</span></button>`).join('')}</div></section>`:''}${leagues.length&&upcomingEvents.length?`<section><div class="section-heading"><h2>My Events</h2><button class="text-link" data-go="schedule">View schedule</button></div>${upcomingEvents.slice(0,4).map(eventRow).join('')}</section>`:''}
@@ -582,7 +610,7 @@ offlineRecordings.map(x=>savedRecordingCard(x,true)).join('')+
 '</div></section>':''}</main>`}
 function eventRow(e){const l=data.leagues.find(x=>x.id===e.leagueId);const h=l?.teams?.find(t=>t.id===e.home),a=l?.teams?.find(t=>t.id===e.away);const dt=new Date(e.date+'T12:00:00');return `<button class="event-row" data-event="${e.id}"><div class="date-block"><span>${Number.isNaN(dt.valueOf())?'GAME':dt.toLocaleDateString(undefined,{month:'short'}).toUpperCase()}</span>${Number.isNaN(dt.valueOf())?'–':dt.getDate()}</div><div class="grow"><div class="names">${esc(h?.name||'Home')} vs ${esc(a?.name||'Away')}</div><div class="detail">${esc(e.time||'TBD')} · ${esc(e.venue||'Venue TBD')}</div></div><span class="arrow">${ic('arrow',17)}</span></button>`}
 function leagues(){const list=sportLeagues();return `<main class="page" data-scroll="main"><div class="row between" style="padding:3px 0 20px"><div><div class="eyebrow">MANAGEMENT</div><h1 style="margin:5px 0 0">My Leagues</h1></div><button class="icon-btn dark" data-go="create" aria-label="Create league">${ic('plus',20)}</button></div>${!list.length?`<div style="padding:50px 6px;text-align:center">${ic('trophy',40)}<h2 style="margin:20px 0 8px">Start your first ${sportName()} league</h2><p class="lead">Add teams, choose a format, and manage your game schedule.</p><button class="solid-btn" data-go="create" style="margin-top:24px">${ic('plus',18)} Create League</button></div>`:list.map(l=>`<button class="list-link" data-league="${l.id}"><div class="logo-circle" style="width:57px;height:57px">${l.logo?`<img src="${esc(l.logo)}" alt="">`:`<span class="logo-initial">${esc(l.name[0])}</span>`}</div><span class="main">${esc(l.name)}<span class="sub">${esc(l.season||'Season')} · ${l.teams.length} teams</span></span>${ic('arrow',19)}</button>`).join('')}</main>`}
-function schedule(){const events=upcoming(),leagues=sportLeagues(),finals=data.events.filter(e=>e.status==='final'&&leagues.some(l=>l.id===e.leagueId));return `<main class="page" data-scroll="main"><div class="row between" style="padding:3px 0 20px"><div><div class="eyebrow">LEAGUE CALENDAR</div><h1 style="margin:5px 0 0">Events</h1></div>${leagues.length?`<button class="icon-btn dark" data-go="add-game">${ic('plus')}</button>`:''}</div>${events.length?`<div class="small-label">Upcoming games · ${events.length}</div>${events.map(eventRow).join('')}`:`<div style="padding:48px 5px;text-align:center"><div style="display:flex;justify-content:center;color:var(--green)">${ic('calendar',42)}</div><h2 style="margin:18px 0 9px">Nothing scheduled yet</h2><p class="lead">Create a league and add a game to see events here.</p><button class="solid-btn" data-go="${leagues.length?'add-game':'create'}" style="margin-top:25px">${ic('plus',18)} ${leagues.length?'Schedule a game':'Create League'}</button></div>`}${finals.length?`<div class="section-heading"><h2>Completed games</h2></div>${finals.map(e=>`<div class="event-row"><div class="grow"><div class="names">${esc((data.leagues.find(l=>l.id===e.leagueId)?.teams?.find(t=>t.id===e.home)?.name)||'Home')} vs ${esc((data.leagues.find(l=>l.id===e.leagueId)?.teams?.find(t=>t.id===e.away)?.name)||'Away')}</div><div class="detail">FINAL · ${e.finalScore?.join(' – ')||''}</div></div></div>`).join('')}`:''}</main>`}
+function schedule(){const library=allSavedClips(),events=upcoming(),leagues=sportLeagues(),finals=data.events.filter(e=>e.status==='final'&&leagues.some(l=>l.id===e.leagueId));return `<main class="page" data-scroll="main"><div class="row between" style="padding:3px 0 20px"><div><div class="eyebrow">LEAGUE CALENDAR</div><h1 style="margin:5px 0 0">Events</h1></div>${leagues.length?`<button class="icon-btn dark" data-go="add-game">${ic('plus')}</button>`:''}</div>${library.length?'<section class="img-my-streams img-events-recordings"><div class="section-heading"><h2>Saved Recordings</h2></div><div class="img-events-recording-grid">'+library.map(x=>savedRecordingCard(x,!recordedPlatforms(x).length)).join('')+'</div></section>':''}${events.length?`<div class="small-label">Upcoming games · ${events.length}</div>${events.map(eventRow).join('')}`:`<div style="padding:48px 5px;text-align:center"><div style="display:flex;justify-content:center;color:var(--green)">${ic('calendar',42)}</div><h2 style="margin:18px 0 9px">Nothing scheduled yet</h2><p class="lead">Create a league and add a game to see events here.</p><button class="solid-btn" data-go="${leagues.length?'add-game':'create'}" style="margin-top:25px">${ic('plus',18)} ${leagues.length?'Schedule a game':'Create League'}</button></div>`}${finals.length?`<div class="section-heading"><h2>Completed games</h2></div>${finals.map(e=>`<div class="event-row"><div class="grow"><div class="names">${esc((data.leagues.find(l=>l.id===e.leagueId)?.teams?.find(t=>t.id===e.home)?.name)||'Home')} vs ${esc((data.leagues.find(l=>l.id===e.leagueId)?.teams?.find(t=>t.id===e.away)?.name)||'Away')}</div><div class="detail">FINAL · ${e.finalScore?.join(' – ')||''}</div></div></div>`).join('')}`:''}</main>`}
 
 /* Cloud remote scoring — separate controller on Phone 2, actual game state on Phone 1. */
 const remoteApi=()=>window.IMGRemote;
