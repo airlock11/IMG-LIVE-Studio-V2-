@@ -188,7 +188,7 @@ public final class V2ReplayFilter extends BaseFilterRender {
     if(leaving&&elapsedMs>=(mode==FULL?850f:500f)){
       mode=NONE;leaving=false;resetZoom();
     }
-    float blend=!hasFrame||mode==NONE?0f:leaving?1f-easing:easing;
+    float blend=!hasFrame||mode==NONE?0f:mode==FULL?1f:leaving?1f-easing:easing;
     GLES20.glUniform1f(locationMode,mode);
     GLES20.glUniform1f(locationBlend,blend);
     GLES20.glUniform1f(locationZoom,zoom);
