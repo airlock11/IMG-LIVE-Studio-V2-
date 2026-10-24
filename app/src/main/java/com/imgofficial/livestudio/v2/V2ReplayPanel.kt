@@ -33,6 +33,7 @@ class V2ReplayPanel(
 ){
  private var popup:PopupWindow?=null
  private var seek:SeekBar?=null
+ private var seekRow:LinearLayout?=null
  private var current:TextView?=null
  private var total:TextView?=null
  private var durationMs=10_000L
@@ -117,7 +118,13 @@ class V2ReplayPanel(
   displayLocked=locked
   displayButtons.forEach{it.isEnabled=!locked;it.alpha=if(locked).48f else 1f}
  }
- fun onReplayFinished(){setDisplayLocked(false)}
+ private fun setSeekVisible(full:Boolean){
+  seekRow?.visibility=if(full)View.VISIBLE else View.GONE
+ }
+ fun onReplayFinished(){
+  setDisplayLocked(false)
+  setSeekVisible(false)
+ }
  fun setPrepared(ok:Boolean,duration:Long=10_000L){
   ready=ok
   durationMs=duration.coerceIn(1000L,30_000L)
@@ -147,6 +154,7 @@ class V2ReplayPanel(
    val option=button(label){
     if(ready&&!displayLocked&&service()?.startInstantReplay(index+1)==true){
      setDisplayLocked(true)
+     setSeekVisible(index==0)
      onAirSelected(index+1)
      zoom=1f;focusX=.5f;focusY=.5f
     }
@@ -159,6 +167,7 @@ class V2ReplayPanel(
   panel.addView(layouts)
   // ROW 2: smooth target-frame seek, with small current/total indicators.
   val timeline=line()
+  seekRow=timeline
   fun small(label:String)=TextView(activity).apply{
    text=label;textSize=10f;gravity=Gravity.CENTER
    setTextColor(Color.rgb(180,220,195))
@@ -201,6 +210,7 @@ class V2ReplayPanel(
   timeline.addView(bar,LinearLayout.LayoutParams(0,dp(28),1f))
   timeline.addView(total,LinearLayout.LayoutParams(dp(35),dp(25)))
   panel.addView(timeline,LinearLayout.LayoutParams(-1,dp(29)).apply{topMargin=dp(2)})
+  setSeekVisible(false)
   // ROW 3: speed affects PRIVATE and ON AIR autoplay equally.
   val speeds=line()
   speeds.addView(small("SPEED"),LinearLayout.LayoutParams(dp(48),dp(29)))
@@ -233,7 +243,7 @@ class V2ReplayPanel(
  fun close(){
   popup?.dismiss();popup=null
   displayButtons.clear();displayLocked=false
-  seek=null;current=null;total=null
+  seek=null;seekRow=null;current=null;total=null
   dragging=false;ready=false
   zoom=1f;focusX=.5f;focusY=.5f
  }
