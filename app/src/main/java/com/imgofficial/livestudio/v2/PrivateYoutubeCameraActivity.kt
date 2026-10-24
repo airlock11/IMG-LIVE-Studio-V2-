@@ -48,6 +48,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var previousGraphicBitmap:android.graphics.Bitmap?=null
  private var previousGraphicBounds=intArrayOf(-1,-1,-1,-1)
  private lateinit var graphicsPreview:android.widget.ImageView
+ private lateinit var replayFramePreview:android.widget.ImageView
  private var previewGraphicsPos=floatArrayOf(8f,70f,84f,22f)
  private lateinit var status:TextView
  private fun placePreviewGraphic(){
@@ -69,6 +70,12 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   graphicsPreview.layoutParams=FrameLayout.LayoutParams(pw,ph,Gravity.TOP or Gravity.LEFT).apply{
    leftMargin=left
    topMargin=top
+  }
+ }
+ override fun onPreviewReplayFrame(image:android.graphics.Bitmap){
+  runOnUiThread {
+   if(isFinishing||isDestroyed||!::replayFramePreview.isInitialized)return@runOnUiThread
+   replayFramePreview.setImageBitmap(image)
   }
  }
  override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
@@ -994,6 +1001,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
   camera.addView(graphicsPreview,FrameLayout.LayoutParams(1,1,Gravity.TOP or Gravity.LEFT))
+  replayFramePreview=android.widget.ImageView(this).apply{
+   scaleType=android.widget.ImageView.ScaleType.FIT_XY
+   isClickable=false
+   isFocusable=false
+   importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+  }
+  // The same frame/labels bitmap as the on-air GPU compositor.
+  camera.addView(replayFramePreview,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
   camera.addView(flip,FrameLayout.LayoutParams(dp(38),dp(38),Gravity.TOP or Gravity.RIGHT).apply{
    rightMargin=dp(8);topMargin=dp(8)
   })
