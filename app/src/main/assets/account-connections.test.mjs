@@ -643,7 +643,7 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  assert.ok(service.includes('V2ReplayFrameGraphics.render'),'LIVE and REPLAY encoded art');
  assert.ok(service.includes('replayTempRect=null'),'Restore saved default scoreboard position');
  assert.ok(service.includes('replayScoreFade'),'Fade out -> position -> fade in');
- assert.ok(service.includes('Scoreboard cannot fit beside replay'),'Refuse unsafe layout');
+ assert.ok(service.includes('Cannot fit scoreboard beside replay without overlap.'),'Refuse unsafe layout');
  const layout=d['V2ReplayLayout.kt'];
  assert.ok(layout.includes('V2ReplayFilter.DIAGONAL'));
  assert.ok(layout.includes('V2ReplayFilter.CORNER'));
