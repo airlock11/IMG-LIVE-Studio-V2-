@@ -37,6 +37,8 @@ object V2ReplayLayout {
   if(factor<=0f)return null
   val w=original.w*factor
   val h=original.h*factor
+  // A scoreboard too small to read is a rejected layout, not a 'success'.
+  if(w<(if(vertical)17f else 24f)||h<7f)return null
   // Keep the right edge aligned and stay as close as practical to bottom-right.
   val x=zone.right-w
   val y=zone.bottom-h
