@@ -57,6 +57,14 @@ class V2ReplayManager(
  private var onAirStarted:(Int)->Unit={}
  private var snapshotDurationMs=10_000L
  private var playbackOffsetMs=0L
+ private var sessionId=""
+ private var sessionSport="basketball"
+ private var sessionHome="HOME"
+ private var sessionAway="AWAY"
+ @Volatile private var automaticSaveRequested=false
+ fun setSession(id:String,sport:String,home:String,away:String){
+  sessionId=id;sessionSport=sport;sessionHome=home;sessionAway=away
+ }
 
  fun installStreamRecorder(engine:GenericStream){
   sourceEngine=engine
@@ -195,6 +203,7 @@ class V2ReplayManager(
   if(revision!=epoch||!active)return
   if(filter?.hasDecodedFrame()==true){
    onAirStarted(mode)
+   automaticSaveOnAir()
    if(mode==V2ReplayFilter.FULL)
     historicalScoreListener(historicalAtPlayhead())
    return
@@ -243,6 +252,7 @@ class V2ReplayManager(
    preparedFile=output
    if(old!=null&&old!==output)ui.postDelayed({old.delete()},1700L)
    snapshot=fresh
+   automaticSaveRequested=false
    lockScoreboardHistory(fresh)
    snapshotDurationMs=10_000L
    playbackOffsetMs=fresh.playbackOffsetUs/1000L
@@ -341,7 +351,21 @@ class V2ReplayManager(
  }
  fun zoom(amount:Float,x:Float,y:Float){if(active)filter?.setZoom(amount,x,y)}
  fun resetZoom(){filter?.resetZoom()}
+ private fun automaticSaveOnAir(){
+  if(automaticSaveRequested)return
+  val file=preparedFile?.takeIf{it.isFile}?:return
+  val owner=sessionId
+  if(owner.isBlank())return
+  automaticSaveRequested=true
+  val sport=sessionSport;val home=sessionHome;val away=sessionAway
+  val duration=snapshotDurationMs
+  Thread{
+   val ok=publish(file,owner,duration,sport,home,away)
+   if(!ok){automaticSaveRequested=false;ui.post{status("Replay save failed; try Save again")}}
+  }.start()
+ }
  fun save(){
+  if(automaticSaveRequested){status("Replay is already saving automatically");return}
   val captured=snapshot
   if(captured==null){status("No prepared 10-second replay available");return}
   val output=File(context.cacheDir,"IMG_REPLAY_SAVE_${System.currentTimeMillis()}.mp4")
@@ -349,14 +373,14 @@ class V2ReplayManager(
   ring.export(captured,output){ok->
    if(!ok){status("Replay MP4 save failed");return@export}
    Thread {
-    val good=publish(output)
+    val good=publish(output,sessionId,snapshotDurationMs,sessionSport,sessionHome,sessionAway)
     output.delete()
     ui.post{status(if(good)"Replay saved to phone gallery" else
      "Unable to save clip; main recording remains active")}
    }.start()
   }
  }
- private fun publish(source:File):Boolean{
+ private fun publish(source:File,owner:String,duration:Long,sport:String,home:String,away:String):Boolean{
   if(!source.isFile||source.length()<4096L)return false
   var destination:android.net.Uri?=null
   return try {
@@ -382,38 +406,14 @@ class V2ReplayManager(
     },null,null)
     // The gallery MP4 also appears in IMG LIVE Studio's saved local clips.
     // Its platform is Offline: exporting a video is not a livestream.
-    indexSavedClip(destination!!,source.name)
+    if(!V2RecordingLibrary.addReplay(context,owner,destination!!,duration,sport,home,away))
+     throw IllegalStateException("Replay metadata could not be stored")
     true
    }
   }catch(_:Exception){
    destination?.let{try{context.contentResolver.delete(it,null,null)}catch(_:Exception){}}
    false
   }
- }
- private fun indexSavedClip(uri:android.net.Uri,name:String){
-  try{
-   val prefs=context.getSharedPreferences("img-v2-native-clips",Context.MODE_PRIVATE)
-   val history=try{org.json.JSONArray(prefs.getString("clips","[]"))}
-    catch(_:Exception){org.json.JSONArray()}
-   val item=org.json.JSONObject()
-    .put("id",System.currentTimeMillis().toString())
-    .put("name",name)
-    .put("createdAt",System.currentTimeMillis())
-    .put("uri",uri.toString())
-    .put("home","REPLAY")
-    .put("away","")
-    .put("scores",org.json.JSONArray())
-    .put("sport","basketball")
-    .put("kind","instant_replay")
-    .put("platform","Offline")
-    .put("platforms",org.json.JSONArray())
-   history.put(item)
-   // Trim metadata to 80 entries, never delete user's actual saved MP4 files.
-   val start=(history.length()-80).coerceAtLeast(0)
-   val trimmed=org.json.JSONArray()
-   for(i in start until history.length())trimmed.put(history.get(i))
-   prefs.edit().putString("clips",trimmed.toString()).apply()
-  }catch(_:Exception){}
  }
  fun release(){
   cleanCapture.stop()
