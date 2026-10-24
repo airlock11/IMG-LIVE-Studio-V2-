@@ -71,6 +71,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    replay.setOnAirStartedListener {
     replayLayoutEpoch++
     replayScreenMode=V2ReplayFilter.FULL
+    operatorFullReplayExitActive=false
     replayScoreFade=0f
     updateScorecard()
     updateReplayBorders(V2ReplayFilter.FULL,0f)
@@ -425,6 +426,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(replayScreenMode==0&&replayTempRect==null)return
   val mode=replayScreenMode
   replayScreenMode=0
+  operatorFullReplayExitActive=mode==V2ReplayFilter.FULL
   replayLayoutRestoring=true
   val epoch=++replayLayoutEpoch
   if(mode==V2ReplayFilter.FULL)animateFullReplayBorder(false)
@@ -443,6 +445,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     if(step==steps){
      replayScoreFade=1f
      replayLayoutRestoring=false
+     operatorFullReplayExitActive=false
     }
     updateScorecard()
     if(mode==V2ReplayFilter.FULL){
@@ -453,6 +456,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private var latestGraphics:android.graphics.Bitmap?=null
  private var latestOperatorGraphics:android.graphics.Bitmap?=null
+ private var operatorFullReplayExitActive=false
  private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
  private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestOperatorGraphics?:latestGraphics){
   if(image==null)return
@@ -1184,7 +1188,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Clock ticks should update the native ImageView only once per frame.
    placeGraphics(notifyPreview=false)
    latestGraphics=picture
-   latestOperatorGraphics=if(replayScreenMode==V2ReplayFilter.FULL)
+   latestOperatorGraphics=if(replayScreenMode==V2ReplayFilter.FULL||operatorFullReplayExitActive)
     V2BroadcastGraphicsRenderer.render(
      scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
     else null
