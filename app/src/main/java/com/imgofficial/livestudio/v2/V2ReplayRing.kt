@@ -2,6 +2,7 @@ package com.imgofficial.livestudio.v2
 
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.media.MediaExtractor
 import android.media.MediaMuxer
 import android.os.Handler
 import android.os.Looper
@@ -196,13 +197,18 @@ class V2ReplayRing(
     val audioClockShift=if(audio.isNotEmpty())audio.last().pts-lastPts else 0L
     val audioPackets=audio.map { it.copy(pts=it.pts-audioClockShift) }
       .filter { it.pts>=begin && it.pts<=lastPts }
-    Snapshot(fmt,audioFormat,frames,audioPackets,lastPts - begin,threshold-begin)
+    // Clean camera replays are intentionally SILENT. Mixed-clock primary AAC
+    // is retained for the main recording only, never interleaved into replay MP4.
+    Snapshot(fmt,if(cleanOnlySession)null else audioFormat,frames,
+      if(cleanOnlySession)emptyList() else audioPackets,
+      lastPts - begin,threshold-begin)
   }
   /** Snapshot is immutable, so exporting never blocks the encoder callback. */
   fun export(snapshot: Snapshot, file: File, result: (Boolean)->Unit) {
     saver.execute {
       val ok = try {
         mux(snapshot,file)
+        validateVideoTrack(file)
         true
       }catch (_:Exception) {
         try{file.delete()}catch (_:Exception){}
@@ -210,6 +216,32 @@ class V2ReplayRing(
       }
       main.post{result(ok)}
     }
+  }
+  private fun validateVideoTrack(file:File){
+    // A muxer success isn't proof that the export contains real video.
+    val extractor=MediaExtractor()
+    try{
+      extractor.setDataSource(file.absolutePath)
+      val videoTrack=(0 until extractor.trackCount).firstOrNull{
+        extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/")==true
+      }?:throw IllegalStateException("Replay export has no video track")
+      val format=extractor.getTrackFormat(videoTrack)
+      if(format.getInteger(MediaFormat.KEY_WIDTH)<=0 ||
+        format.getInteger(MediaFormat.KEY_HEIGHT)<=0)
+        throw IllegalStateException("Replay has no video dimensions")
+      extractor.selectTrack(videoTrack)
+      var frames=0
+      var first=-1L
+      var last=-1L
+      while(frames<1200 && extractor.sampleTime>=0){
+        if(first<0)first=extractor.sampleTime
+        last=extractor.sampleTime
+        frames++
+        if(!extractor.advance())break
+      }
+      if(frames<10||last-first<9_800_000L)
+        throw IllegalStateException("Replay export missing frames or duration")
+    }finally{extractor.release()}
   }
   private fun mux(s:Snapshot,file:File) {
     var muxer:MediaMuxer?=null
