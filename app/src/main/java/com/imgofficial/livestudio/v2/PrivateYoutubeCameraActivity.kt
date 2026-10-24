@@ -95,9 +95,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      if(!isFinishing&&!isDestroyed)replayUi.onTimelinePosition(pos)
     }
     broadcast?.setReplayCompletedListener{
-     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true){
+     if(!isFinishing&&!isDestroyed){
+      replayUi.onReplayFinished()
+      if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
       animateOperatorReplayExpansion(false)
-      showPrivateReplay()
+      if(broadcast?.instantReplayIsPrepared()==true)showPrivateReplay()
+      else hidePrivateReplay()
+      refresh()
      }
     }
    draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
@@ -245,9 +249,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var timeoutPreview:android.widget.PopupWindow?=null
  private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
   hidePrivateReplay()
+  // Operator-only graphics remain visible for Full, never in a clean split/PiP.
+  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=
+   if(mode==V2ReplayFilter.FULL)View.VISIBLE else View.GONE
   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
  },{
   hidePrivateReplay()
+  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
   animateOperatorReplayExpansion(false)
  })}
  private var operatorCameraFrame:FrameLayout?=null
@@ -1048,6 +1056,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    }
    val replayButton=darkButton("INSTANT REPLAY"){}
    replayButton.setOnClickListener{
+    if(broadcast?.instantReplayModeLocked()==true){
+     status.text="Finish this replay or tap Back to Live first."
+     return@setOnClickListener
+    }
     replayUi.show(replayButton)
     val accepted=broadcast?.prepareInstantReplay{ready->
      if(!isFinishing&&!isDestroyed){
