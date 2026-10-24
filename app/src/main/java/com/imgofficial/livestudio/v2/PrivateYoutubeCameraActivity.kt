@@ -250,8 +250,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var timeoutPreview:android.widget.PopupWindow?=null
  private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
   showOnAirReplayPreview(mode)
-  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=
-   if(mode==V2ReplayFilter.FULL)View.VISIBLE else View.GONE
+  // The operator must see exactly the same single scoreboard as the output:
+  // historical during FULL, current LIVE to the left in other replay modes.
+  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
  },{
   if(operatorReplayMode==V2ReplayFilter.FULL)animateOperatorFullReplayExit()
