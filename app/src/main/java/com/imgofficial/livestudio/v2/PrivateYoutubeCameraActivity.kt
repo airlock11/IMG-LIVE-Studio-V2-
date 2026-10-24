@@ -99,8 +99,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
       replayUi.onReplayFinished()
       if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
       animateOperatorReplayExpansion(false)
-      if(broadcast?.instantReplayIsPrepared()==true)showPrivateReplay()
-      else hidePrivateReplay()
+      // Automatic replay completion restores normal LIVE; no stale replay PiP.
+      hidePrivateReplay()
       refresh()
      }
     }
