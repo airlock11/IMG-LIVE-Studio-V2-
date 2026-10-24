@@ -532,7 +532,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   /** Select the actual H.264 capture/encoder profile before preparing the camera. */
   fun configureVideoProfile(resolution:Int,fps:Int):Boolean {
    if(resolution !in listOf(720,1080)||fps !in listOf(30,60))return false
-   if(running||connecting||stream?.isStreaming==true)return false
+   // Never tear down a camera/encoder that is actively saving an offline MP4.
+  if(running||connecting||offlineRecording||stream?.isStreaming==true)return false
    if(stream!=null){
     replay.release()
     try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
