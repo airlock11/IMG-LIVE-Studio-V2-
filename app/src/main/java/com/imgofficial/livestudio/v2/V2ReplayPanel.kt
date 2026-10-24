@@ -28,7 +28,8 @@ class V2ReplayPanel(
  private val service:()->V2BroadcastService?,
  private val onAirSelected:(Int)->Unit,
  private val onClosed:()->Unit,
- private val onPrivateSeek:()->Unit = {}
+ private val onPrivateSeek:()->Unit = {},
+ private val onZoomChanged:(Float,Float,Float)->Unit = {_,_,_->}
 ){
  private var popup:PopupWindow?=null
  private var seek:SeekBar?=null
@@ -76,6 +77,7 @@ class V2ReplayPanel(
     focusX=(detector.focusX/t.width.coerceAtLeast(1)).coerceIn(0f,1f)
     focusY=(1f-detector.focusY/t.height.coerceAtLeast(1)).coerceIn(0f,1f)
     service()?.setInstantReplayZoom(zoom,focusX,focusY)
+     onZoomChanged(zoom,focusX,focusY)
     return true
    }
   })
@@ -86,6 +88,7 @@ class V2ReplayPanel(
    override fun onDoubleTap(e:MotionEvent):Boolean{
     zoom=1f;focusX=.5f;focusY=.5f
     service()?.resetInstantReplayZoom()
+    onZoomChanged(1f,.5f,.5f)
     return true
    }
   })
@@ -103,6 +106,7 @@ class V2ReplayPanel(
      focusX=(focusX-dx/zoom).coerceIn(0f,1f)
      focusY=(focusY+dy/zoom).coerceIn(0f,1f)
      service()?.setInstantReplayZoom(zoom,focusX,focusY)
+     onZoomChanged(zoom,focusX,focusY)
     }
     oldX=event.x;oldY=event.y
    }
