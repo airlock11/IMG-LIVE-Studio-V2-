@@ -17,7 +17,9 @@ class V2ReplayLayoutTest {
     assertNotNull("Vertical style $style mode $mode",result)
     val rect=result!!.scoreboard
     assertTrue("Bounds safe",rect.inCanvas())
-    assertEquals("Nearest available right edge",97f,rect.right,0.02f)
+    val replay=V2ReplayLayout.windows(mode).last()
+    assertTrue("Scoreboard must be to LEFT of replay",rect.right<replay.x)
+    assertTrue("Scoreboard must sit in lower part",rect.bottom>90f)
     assertTrue("Keep width readable",rect.w>=17f)
     assertTrue("No video collision",V2ReplayLayout.windows(mode).none{it.meets(rect)})
    }
@@ -32,6 +34,7 @@ class V2ReplayLayoutTest {
    val rect=V2ReplayLayout.choose(mode,original,false)!!.scoreboard
    assertTrue(rect.inCanvas())
    assertTrue(V2ReplayLayout.windows(mode).none{it.meets(rect)})
+    assertTrue(rect.right<V2ReplayLayout.windows(mode).last().x)
   }
   val impossible=V2ReplayLayout.Rect(0f,0f,10f,100f)
   assertNull(V2ReplayLayout.choose(V2ReplayFilter.DIAGONAL,impossible,true))
