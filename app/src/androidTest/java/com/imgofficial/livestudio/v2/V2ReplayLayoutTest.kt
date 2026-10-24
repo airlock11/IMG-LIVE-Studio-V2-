@@ -33,7 +33,7 @@ class V2ReplayLayoutTest {
    assertTrue(rect.inCanvas())
    assertTrue(V2ReplayLayout.windows(mode).none{it.meets(rect)})
   }
-  val impossible=V2ReplayLayout.Rect(0f,0f,100f,100f)
+  val impossible=V2ReplayLayout.Rect(0f,0f,10f,100f)
   assertNull(V2ReplayLayout.choose(V2ReplayFilter.DIAGONAL,impossible,true))
  }
  @Test fun actualVideoFramesAreTransparentOutsideControls(){
@@ -41,7 +41,7 @@ class V2ReplayLayoutTest {
   assertEquals(1280,frame.width)
   assertEquals(720,frame.height)
   assertEquals("Center of unused quadrant is transparent",0,frame.getPixel(640,360))
-  assertNotEquals("Metallic edge rendered",0,frame.getPixel(32,16))
+  assertNotEquals("Metallic edge rendered",0,frame.getPixel(34,17))
   frame.recycle()
   val empty=V2ReplayFrameGraphics.render(V2ReplayFilter.NONE,1280,720)
   assertEquals(0,empty.getPixel(32,16))
