@@ -47,6 +47,7 @@ class V2ReplayRing(
   private var lastPts = 0L
   @Volatile private var accepting = false
   @Volatile private var cleanRequired=false
+  private var cleanLastWallUs=0L
   private val saver = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
 
@@ -66,6 +67,7 @@ class V2ReplayRing(
   fun setCleanCaptureEnabled(enabled:Boolean)=synchronized(lock){
     cleanRequired=enabled
     video.clear();audio.clear();storedBytes=0L;lastPts=0L
+    cleanLastWallUs=0L
     videoFormat=null
   }
   fun setCleanVideoFormat(format:MediaFormat)=synchronized(lock){
@@ -76,9 +78,17 @@ class V2ReplayRing(
     packet(buf,info)?.let{p->
       synchronized(lock){
         if(cleanRequired&&accepting){
-          video.addLast(p)
-          storedBytes+=p.size
-          lastPts=p.pts
+          val wall=android.os.SystemClock.elapsedRealtimeNanos()/1000L
+          // A multi-preview encoder surface may not provide explicit EGL
+          // presentation timestamps. Never allow duplicated/zero PTS to
+          // collapse ten seconds of real footage into one frozen instant.
+          val stamp=if(video.isEmpty()||p.pts>lastPts)p.pts else
+           lastPts+(wall-cleanLastWallUs).coerceAtLeast(1L)
+          val corrected=if(stamp==p.pts)p else p.copy(pts=stamp)
+          video.addLast(corrected)
+          cleanLastWallUs=wall
+          storedBytes+=corrected.size
+          lastPts=corrected.pts
           pruneLocked()
         }
       }
