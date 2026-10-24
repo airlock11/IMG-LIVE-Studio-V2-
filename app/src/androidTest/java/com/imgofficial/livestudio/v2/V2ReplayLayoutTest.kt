@@ -39,6 +39,33 @@ class V2ReplayLayoutTest {
   val impossible=V2ReplayLayout.Rect(0f,0f,10f,100f)
   assertNull(V2ReplayLayout.choose(V2ReplayFilter.DIAGONAL,impossible,true))
  }
+ @Test fun animatedFrameGeometryMatchesEachModeVideoWindows(){
+  for(mode in listOf(V2ReplayFilter.FULL,V2ReplayFilter.DIAGONAL,V2ReplayFilter.CORNER)){
+   val end=V2ReplayLayout.animatedWindows(mode,1f)
+   assertTrue("Mode has at least one panel",end.isNotEmpty())
+   for(panel in end)assertTrue("Final replay frame stays on screen",panel.inCanvas())
+   for(progress in listOf(0f,.1f,.3f,.5f,.8f,1f)){
+    val windows=V2ReplayLayout.animatedWindows(mode,progress)
+    assertEquals(end.size,windows.size)
+    assertTrue(windows.all{it.inCanvas()})
+   }
+   if(mode==V2ReplayFilter.FULL){
+    assertEquals(100f,end[0].w,.001f)
+    assertEquals(100f,end[0].h,.001f)
+   }else assertEquals(V2ReplayLayout.windows(mode),end)
+  }
+ }
+ @Test fun cornerScoreboardMovesWithoutChangingArtworkScaleRatio(){
+  val original=V2ReplayLayout.Rect(8f,78f,55f,18f)
+  val selected=V2ReplayLayout.choose(V2ReplayFilter.CORNER,original,false)!!.scoreboard
+  val replay=V2ReplayLayout.windows(V2ReplayFilter.CORNER).last()
+  assertTrue(selected.right<replay.x)
+  val mid=V2ReplayLayout.interpolate(original,selected,.5f)
+  assertEquals((original.x+selected.x)/2f,mid.x,.01f)
+  assertEquals((original.w+selected.w)/2f,mid.w,.01f)
+  assertEquals(original,V2ReplayLayout.interpolate(original,selected,0f))
+  assertEquals(selected,V2ReplayLayout.interpolate(original,selected,1f))
+ }
  @Test fun actualVideoFramesAreTransparentOutsideControls(){
   val frame=V2ReplayFrameGraphics.render(V2ReplayFilter.DIAGONAL,1280,720)
   assertEquals(1280,frame.width)
