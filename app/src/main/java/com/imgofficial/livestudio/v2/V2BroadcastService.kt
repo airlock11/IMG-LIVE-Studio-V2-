@@ -404,7 +404,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   for(step in 0..10)ui.postDelayed({
    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
    val progress=replay.visualProgress()
-   replayTempRect=V2ReplayLayout.interpolate(original,rect,progress)
+   replayTempRect=V2ReplayLayout.followingScoreboard(mode,original,rect,progress)
    placeGraphics()
    if(mode==V2ReplayFilter.DIAGONAL){
     replayScoreFade=progress
@@ -442,7 +442,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Corner always retains its existing alpha. Move and scale with video.
    replayScoreFade=1f
    if(initialRect!=null){
-    replayTempRect=V2ReplayLayout.interpolate(original,initialRect,progress)
+    replayTempRect=V2ReplayLayout.followingScoreboard(mode,original,initialRect,progress)
     placeGraphics()
    }
    if(step==steps){
