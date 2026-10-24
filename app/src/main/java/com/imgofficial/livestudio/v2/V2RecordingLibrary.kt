@@ -30,7 +30,7 @@ object V2RecordingLibrary {
   result.put(clip)
   prefs.edit().putString("clips",result.toString()).commit()
  }
- @Synchronized fun addReplay(context:Context,session:String,uri:Uri,durationMs:Long):Boolean {
+ @Synchronized fun addReplay(context:Context,session:String,uri:Uri,durationMs:Long,sport:String,home:String,away:String):Boolean {
   if(session.isBlank())return false
   val prefs=context.getSharedPreferences(PREFS,Context.MODE_PRIVATE)
   val replays=array(prefs,"replays")
@@ -38,6 +38,7 @@ object V2RecordingLibrary {
    .put("uri",uri.toString()).put("createdAt",System.currentTimeMillis())
    .put("duration",durationMs.coerceAtLeast(0))
    .put("name","IMG-Replay-${session}-${replays.length()+1}.mp4")
+   .put("sport",sport).put("home",home).put("away",away)
   replays.put(item)
   return prefs.edit().putString("replays",replays.toString()).commit()
  }
