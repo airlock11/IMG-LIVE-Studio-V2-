@@ -647,7 +647,7 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  const layout=d['V2ReplayLayout.kt'];
  assert.ok(layout.includes('V2ReplayFilter.DIAGONAL'));
  assert.ok(layout.includes('V2ReplayFilter.CORNER'));
- assert.ok(layout.includes('if(w<minW||h<7f)return null'),'Reject unreadable resizing');
+ assert.ok(layout.includes('if(w<(if(vertical)17f else 24f)||h<7f)return null'),'Reject unreadable resizing');
  const frames=d['V2ReplayFrameGraphics.kt'];
  assert.ok(frames.includes('"LIVE"')&&frames.includes('"REPLAY"'));
  assert.ok(frames.includes('Paint.Style.STROKE'));
