@@ -950,8 +950,9 @@ class V2BroadcastService:Service(),ConnectChecker {
      setReferenceCounted(false);acquire()
     }
     ingestDestination=url
-    replay.setCapturing(true)
+    // Secondary replay capture requires an active main encoder/GL camera.
     stream?.startStream(url)
+    replay.setCapturing(true)
     stream?.let{beginLocalRecording(it)}
     notifyState("Connecting private RTMPS; waiting for server…")
    }catch(_:Exception){
