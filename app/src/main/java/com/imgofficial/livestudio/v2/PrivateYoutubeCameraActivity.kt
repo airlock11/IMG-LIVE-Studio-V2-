@@ -47,6 +47,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private lateinit var monitor:SurfaceView
  private var previousGraphicBitmap:android.graphics.Bitmap?=null
  private var previousGraphicBounds=intArrayOf(-1,-1,-1,-1)
+ private var replayModeWaitingForFrame=0
  private lateinit var graphicsPreview:android.widget.ImageView
  private lateinit var replayFramePreview:android.widget.ImageView
  private var previewGraphicsPos=floatArrayOf(8f,70f,84f,22f)
@@ -77,6 +78,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(isFinishing||isDestroyed||!::replayFramePreview.isInitialized)return@runOnUiThread
    replayFramePreview.setImageBitmap(image)
    syncOperatorReplayLayout(mode,progress)
+   if(replayModeWaitingForFrame==mode &&
+     (mode==V2ReplayFilter.CORNER||mode==V2ReplayFilter.DIAGONAL)){
+    replayModeWaitingForFrame=0
+    replayUi.close()
+   }
   }
  }
  override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
@@ -256,11 +262,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
- private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{_->
+ private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
+  replayModeWaitingForFrame=if(mode==V2ReplayFilter.CORNER||
+    mode==V2ReplayFilter.DIAGONAL)mode else 0
   // Wait for actual decoded ON AIR frame; preview must not lead broadcast.
  },{
   // Continue mirroring the output during its exit animation. The last
   // output callback restores the normal 16:9 LIVE monitor and size.
+  replayModeWaitingForFrame=0
   if(operatorReplayMode==0){
    hidePrivateReplay()
    restoreOperatorReplayLayout()
@@ -1275,6 +1284,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      status.text="Finish this replay or tap Back to Live first."
      return@setOnClickListener
     }
+    replayModeWaitingForFrame=0
     replayUi.show(replayButton)
     val accepted=broadcast?.prepareInstantReplay{ready->
      if(!isFinishing&&!isDestroyed){

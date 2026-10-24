@@ -30,6 +30,8 @@ import androidx.webkit.WebViewAssetLoader
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
  private val savedPlayer by lazy { V2SavedMp4Player(this) }
+ private var exportingReplay:String?=null
+ private var exportingSession:String?=null
  // Receive origin-verified original sponsor images in bounded chunks and
  // store them locally, without thumbnail degradation or Intent-size failures.
  private val incomingSponsorParts=mutableMapOf<String,MutableList<StringBuilder>>()
@@ -349,7 +351,25 @@ class MainActivity : Activity() {
        } else if(action.startsWith("native-open-recording:")){
         val key=action.removePrefix("native-open-recording:")
         if(key.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{openSavedRecording(key)}
-       } else if(action=="img-video-capabilities"){
+       } else if(action.startsWith("native-open-replay:")){
+         val id=action.removePrefix("native-open-replay:")
+         if(id.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{openSavedReplay(id)}
+        } else if(action.startsWith("native-export-replay:")){
+         val id=action.removePrefix("native-export-replay:")
+         if(id.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{requestReplayExport(id)}
+        } else if(action.startsWith("native-export-all:")){
+         val id=action.removePrefix("native-export-all:")
+         if(id.matches(Regex("^[0-9]{10,18}$")))runOnUiThread{requestReplayZip(id)}
+        } else if(action.startsWith("native-delete-game:")){
+         val id=action.removePrefix("native-delete-game:")
+         if(id.matches(Regex("^[0-9]{10,18}$")))Thread{
+          val ok=V2RecordingLibrary.removeSession(this@MainActivity,id)
+          runOnUiThread{
+           Toast.makeText(this@MainActivity,if(ok)"Game deleted" else "Could not delete every game file",Toast.LENGTH_LONG).show()
+           publishNativeRecordings()
+          }
+         }.start()
+        } else if(action=="img-video-capabilities"){
         reportVideoCapabilities()
        } else if(action=="native-graphics-gallery"){
         // Preview generation is on demand only, not during app launch or stream.
@@ -512,7 +532,43 @@ class MainActivity : Activity() {
    publishNativeRecordings()
    return
   }
-  if(requestCode == fileChooserRequest) {
+  if(requestCode==7210||requestCode==7211){
+    val replay=exportingReplay;val session=exportingSession
+    exportingReplay=null;exportingSession=null
+    val dest=data?.data
+    if(resultCode==RESULT_OK&&dest!=null){
+     Thread{
+      val ok=try{
+       contentResolver.openOutputStream(dest,"w")?.use{output->
+        if(requestCode==7210&&replay!=null){
+         val meta=V2RecordingLibrary.getReplay(this,replay)
+          ?:throw java.io.FileNotFoundException("Replay not found")
+         contentResolver.openInputStream(Uri.parse(meta.getString("uri")))?.use{input->
+          input.copyTo(output)
+         }?:throw java.io.FileNotFoundException("Replay file unavailable")
+        }else if(requestCode==7211&&session!=null){
+         val items=V2RecordingLibrary.replaysForSession(this,session)
+         if(items.isEmpty())throw java.io.FileNotFoundException("No saved replays")
+         java.util.zip.ZipOutputStream(output).use{zip->
+          items.forEachIndexed{index,item->
+           val entry=java.util.zip.ZipEntry("IMG-Replay-${index+1}.mp4")
+           zip.putNextEntry(entry)
+           contentResolver.openInputStream(Uri.parse(item.getString("uri")))?.use{input->
+            input.copyTo(zip)
+           }?:throw java.io.FileNotFoundException("Saved replay missing")
+           zip.closeEntry()
+          }
+         }
+        }else throw IllegalStateException("Export canceled")
+       }?:throw IllegalStateException("Export destination unavailable")
+       true
+      }catch(_:Exception){false}
+      runOnUiThread{Toast.makeText(this,if(ok)"Export complete" else "Export failed; check storage and saved clips",Toast.LENGTH_LONG).show()}
+     }.start()
+    }
+    return
+   }
+   if(requestCode == fileChooserRequest) {
    val callback = pendingFileChooser ?: return
    pendingFileChooser = null
    callback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
@@ -563,40 +619,48 @@ class MainActivity : Activity() {
 
  private fun publishNativeRecordings(){
   if(!::browser.isInitialized||isFinishing)return
-  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
-  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
+  val payload=V2RecordingLibrary.snapshot(this)
   browser.evaluateJavascript(
-   "window.dispatchEvent(new CustomEvent('img-native-recordings',{detail:{clips:"+clips.toString()+"}}));",null)
+   "window.dispatchEvent(new CustomEvent('img-native-recordings',{detail:"+payload.toString()+"}));",null)
  }
  private fun openSavedRecording(key:String){
-  val raw=getSharedPreferences("img-v2-native-clips",MODE_PRIVATE).getString("clips","[]")?:"[]"
-  val clips=try{JSONArray(raw)}catch(_:Exception){JSONArray()}
-  for(index in 0 until clips.length()){
-   val clip=clips.optJSONObject(index)?:continue
-   if(clip.optString("id")!=key)continue
-   val uri=try{Uri.parse(clip.optString("uri"))}catch(_:Exception){return}
-   if(uri.scheme!="content"||uri.authority!="media")return
-   val label=clip.optString("home","HOME")+" vs "+clip.optString("away","AWAY")
-   // Android player chooser: keeps the MediaStore file intact.
-   try{
-    contentResolver.openAssetFileDescriptor(uri,"r")?.use{descriptor->
-     if(descriptor.length==0L)throw java.io.FileNotFoundException("Empty recording")
-    }?:throw java.io.FileNotFoundException("Saved recording is unavailable")
-    val view=Intent(Intent.ACTION_VIEW).apply{
-     setDataAndType(uri,"video/mp4")
-     clipData=android.content.ClipData.newUri(contentResolver,label,uri)
-     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    startActivity(Intent.createChooser(view,"Play recording with").apply{
-     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    })
-   }catch(ex:android.content.ActivityNotFoundException){
-    savedPlayer.show(uri,label)
-   }catch(ex:Exception){
-    Toast.makeText(this,"Cannot open video: "+(ex.message?:"unknown error"),Toast.LENGTH_LONG).show()
-   }
+  val clips=V2RecordingLibrary.snapshot(this).optJSONArray("clips")?:return
+  for(i in 0 until clips.length()){
+   val item=clips.optJSONObject(i)?:continue
+   if(item.optString("id")!=key)continue
+   val uri=Uri.parse(item.optString("uri"))
+   if(uri.scheme=="content"&&uri.authority=="media")savedPlayer.show(uri)
    return
   }
+ }
+ private fun openSavedReplay(id:String){
+  val item=V2RecordingLibrary.getReplay(this,id)?:return
+  val uri=Uri.parse(item.optString("uri"))
+  if(uri.scheme=="content"&&uri.authority=="media")savedPlayer.show(uri)
+ }
+ private fun requestReplayExport(id:String){
+  if(exportingReplay!=null||exportingSession!=null)return
+  val item=V2RecordingLibrary.getReplay(this,id)?:return
+  exportingReplay=id
+  try{
+   startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
+    addCategory(Intent.CATEGORY_OPENABLE)
+    type="video/mp4"
+    putExtra(Intent.EXTRA_TITLE,item.optString("name","IMG-Replay.mp4"))
+   },7210)
+  }catch(_:Exception){exportingReplay=null;Toast.makeText(this,"Cannot choose export destination",Toast.LENGTH_SHORT).show()}
+ }
+ private fun requestReplayZip(session:String){
+  if(exportingReplay!=null||exportingSession!=null)return
+  if(V2RecordingLibrary.replaysForSession(this,session).isEmpty())return
+  exportingSession=session
+  try{
+   startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply{
+    addCategory(Intent.CATEGORY_OPENABLE)
+    type="application/zip"
+    putExtra(Intent.EXTRA_TITLE,"IMG-${session}-All-Replays.zip")
+   },7211)
+  }catch(_:Exception){exportingSession=null;Toast.makeText(this,"Cannot choose export destination",Toast.LENGTH_SHORT).show()}
  }
  private fun handleNativeAction(action: String) {
     when(action) {
