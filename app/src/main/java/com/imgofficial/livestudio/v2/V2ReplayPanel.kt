@@ -36,6 +36,8 @@ class V2ReplayPanel(
  private var durationMs=10_000L
  private var dragging=false
  private var ready=false
+ private var displayLocked=false
+ private val displayButtons=mutableListOf<Button>()
  private var zoom=1f
  private var focusX=.5f
  private var focusY=.5f
@@ -106,6 +108,11 @@ class V2ReplayPanel(
   }
   return true
  }
+ fun setDisplayLocked(locked:Boolean){
+  displayLocked=locked
+  displayButtons.forEach{it.isEnabled=!locked;it.alpha=if(locked).48f else 1f}
+ }
+ fun onReplayFinished(){setDisplayLocked(false)}
  fun setPrepared(ok:Boolean,duration:Long=10_000L){
   ready=ok
   durationMs=duration.coerceIn(1000L,30_000L)
@@ -132,12 +139,15 @@ class V2ReplayPanel(
   // ROW 1: three display modes. No replay goes to video output until tap.
   val layouts=line()
   listOf("Full","Diagonal","Corner").forEachIndexed{index,label->
-   layouts.addView(button(label){
-    if(ready&&service()?.startInstantReplay(index+1)==true){
+   val option=button(label){
+    if(ready&&!displayLocked&&service()?.startInstantReplay(index+1)==true){
+     setDisplayLocked(true)
      onAirSelected(index+1)
      zoom=1f;focusX=.5f;focusY=.5f
     }
-   },LinearLayout.LayoutParams(0,dp(29),1f).apply{
+   }
+   displayButtons.add(option)
+   layouts.addView(option,LinearLayout.LayoutParams(0,dp(29),1f).apply{
     if(index>0)leftMargin=dp(3)
    })
   }
@@ -215,6 +225,7 @@ class V2ReplayPanel(
  }
  fun close(){
   popup?.dismiss();popup=null
+  displayButtons.clear();displayLocked=false
   seek=null;current=null;total=null
   dragging=false;ready=false
   zoom=1f;focusX=.5f;focusY=.5f
