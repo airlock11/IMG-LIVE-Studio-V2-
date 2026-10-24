@@ -47,6 +47,9 @@ class V2ReplayRing(
   private var lastPts = 0L
   @Volatile private var accepting = false
   @Volatile private var cleanRequired=false
+  // Fail closed: no encoded graphics may enter this ring after clean capture
+  // has been configured, even if the secondary codec later fails.
+  @Volatile private var cleanOnlySession=false
   private var cleanLastWallUs=0L
   private val saver = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
@@ -66,6 +69,7 @@ class V2ReplayRing(
   /** Switching clean input invalidates previous composited history. */
   fun setCleanCaptureEnabled(enabled:Boolean)=synchronized(lock){
     cleanRequired=enabled
+    if(enabled)cleanOnlySession=true
     video.clear();audio.clear();storedBytes=0L;lastPts=0L
     cleanLastWallUs=0L
     videoFormat=null
@@ -101,7 +105,7 @@ class V2ReplayRing(
       videoFormat != null
   }
   override fun setVideoFormat(videoFormat: MediaFormat) {
-    synchronized(lock) { if(!cleanRequired)this.videoFormat=videoFormat }
+    synchronized(lock) { if(!cleanOnlySession)this.videoFormat=videoFormat }
     delegate.setVideoFormat(videoFormat)
   }
   override fun setAudioFormat(audioFormat: MediaFormat) {
@@ -130,10 +134,10 @@ class V2ReplayRing(
     return Packet(bytes,info.presentationTimeUs,info.flags)
   }
   override fun recordVideo(videoBuffer: ByteBuffer, videoInfo: MediaCodec.BufferInfo) {
-    if (accepting && !cleanRequired) {
+    if (accepting && !cleanOnlySession) {
       packet(videoBuffer,videoInfo)?.let { p ->
         synchronized(lock) {
-          if (accepting) {
+          if (accepting && !cleanOnlySession) {
             video.addLast(p)
             storedBytes += p.size
             lastPts = p.pts
