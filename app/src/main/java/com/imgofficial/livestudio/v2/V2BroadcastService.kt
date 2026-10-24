@@ -425,7 +425,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   animateReplayFrames(V2ReplayFilter.FULL,replayLayoutEpoch,850L)
  }
  private fun endReplayLayout(){
-  if(replayScreenMode==0&&replayTempRect==null)return
+  // Back to Live and decoder-ended callbacks may arrive for the same exit.
+  if(replayLayoutRestoring||(replayScreenMode==0&&replayTempRect==null))return
   val mode=replayScreenMode
   val initialRect=replayTempRect
   val original=originalGraphicsRect()
