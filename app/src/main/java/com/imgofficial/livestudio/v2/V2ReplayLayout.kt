@@ -21,6 +21,30 @@ object V2ReplayLayout {
   * lower-left canvas area, for both Diagonal and Corner. Preserve the
   * approved artwork and its aspect ratio.
   */
+ /** Interpolated window bounds used by BOTH video shader and broadcast frames.
+  * progress=0: start of transition. progress=1: final mode geometry.
+  * All coordinates are TOP-left percent of the encoded 16:9 canvas.
+  */
+ private fun tween(a:Rect,b:Rect,f:Float):Rect{
+  val t=f.coerceIn(0f,1f)
+  return Rect(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,
+   a.w+(b.w-a.w)*t,a.h+(b.h-a.h)*t)
+ }
+ fun animatedWindows(mode:Int,progress:Float):List<Rect>{
+  val t=progress.coerceIn(0f,1f)
+  return when(mode){
+   V2ReplayFilter.FULL->listOf(
+    tween(Rect(66.5f,66.5f,30f,30f),Rect(0f,0f,100f,100f),t))
+   V2ReplayFilter.DIAGONAL->listOf(
+    tween(Rect(0f,0f,100f,100f),windows(mode)[0],t),
+    tween(Rect(97.4f,97.4f,.1f,.1f),windows(mode)[1],t))
+   V2ReplayFilter.CORNER->listOf(
+    tween(Rect(96.5f,96.4f,.1f,.1f),windows(mode)[0],t))
+   else->emptyList()
+  }
+ }
+ fun interpolate(a:Rect,b:Rect,progress:Float)=tween(a,b,progress)
+
  fun choose(mode:Int,original:Rect,vertical:Boolean):Result? {
   if(!original.inCanvas())return null
   val occupied=windows(mode)
