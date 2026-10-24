@@ -542,3 +542,41 @@ test('Home hides the entire Offline Recordings section until a saved clip exists
  assert.ok(!home.includes('Choose a connected destination in Broadcast Settings to start a stream.'),'No connected destination helper on Home');
  assert.ok(studio.includes("window.addEventListener('img-native-recordings'"),'Home continues to receive automatic saved native clip updates');
 });
+
+test('Native V2 replay: rolling encoded ring, on-air 3-mode GPU compositor and offline controls',async()=>{
+ const root=new URL('../java/com/imgofficial/livestudio/v2/',import.meta.url);
+ const files=Object.fromEntries(await Promise.all([
+  'V2ReplayRing.kt','V2ReplayFilter.java','V2ReplayPlayback.kt',
+  'V2ReplayPanel.kt','V2ReplayManager.kt','V2BroadcastService.kt',
+  'PrivateYoutubeCameraActivity.kt'
+ ].map(async name=>[name,await readFile(new URL(name,root),'utf8')])));
+ const ring=files['V2ReplayRing.kt'],render=files['V2ReplayFilter.java'],
+  decoder=files['V2ReplayPlayback.kt'],panel=files['V2ReplayPanel.kt'],
+  manager=files['V2ReplayManager.kt'],service=files['V2BroadcastService.kt'],
+  activity=files['PrivateYoutubeCameraActivity.kt'];
+ assert.ok(ring.includes('RecordController by delegate'),'Retain approved original recording lifecycle');
+ assert.ok(ring.includes('13_000_000L')&&ring.includes('48L * 1024L * 1024L'),
+  'Rolling buffer bounded by duration and memory');
+ assert.ok(ring.includes('lastPts - 10_000_000L'),'Capture last ten seconds');
+ assert.ok(ring.includes('it.key')&&ring.includes('MediaMuxer('),'Saved clip starts with keyframe and is MP4');
+ assert.ok(service.includes('replay.setCapturing(true)'),'Capture active in both live and offline modes');
+ assert.ok(service.includes('replay.setCapturing(false)'),'Pause/stop clears unavailable footage');
+ assert.ok(service.includes('replay.installGl(engine)'),'Decoder overlay runs in GPU production compositor');
+ assert.ok(render.includes('DIAGONAL=2')&&render.includes('CORNER=3'));
+ assert.ok(render.includes('samplerExternalOES'),'Replay source decoded onto separate OES texture');
+ assert.ok(render.includes('vec4(.025,.525,.475,.975)'),'Diagonal has top-left window');
+ assert.ok(render.includes('vec4(.525,.025,.975,.475)'),'Diagonal has separate bottom-right window');
+ assert.ok(render.includes('float elapsed=')&&render.includes('/500f'),'500ms transitions');
+ assert.ok(render.includes('Math.min(4f,amount)'),'Full replay zoom max 4x');
+ assert.ok(decoder.includes('MediaExtractor')&&decoder.includes('MediaCodec.createDecoderByType'));
+ assert.ok(decoder.includes('safeSpeed=speed().coerceIn(.25f,1f)'));
+ assert.ok(panel.includes('listOf("Full","Diagonal","Corner")'),'Three equal display buttons');
+ assert.ok(panel.includes('listOf(.25f,.5f,1f)'),'Three speed choices');
+ assert.ok(panel.includes('button("Save")')&&panel.includes('button("Back to Live")'));
+ assert.ok(panel.includes('instantReplayIsFull()!=true'),'Touch gestures only while Full replay active');
+ assert.ok(activity.includes('replayUi.show(replayButton)'),'Operator REPLAY button');
+ assert.ok(manager.includes('indexSavedClip(destination!!,source.name)'),
+  'Exported gallery clips accessible in IMG recordings');
+ assert.ok(manager.includes('context.contentResolver.openOutputStream(destination!!)'));
+ assert.ok(!panel.includes('INSTANT REPLAY')&&!panel.includes('10s"'),'No panel heading/countdown');
+});
