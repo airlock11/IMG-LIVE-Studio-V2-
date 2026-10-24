@@ -580,3 +580,37 @@ test('Native V2 replay: rolling encoded ring, on-air 3-mode GPU compositor and o
  assert.ok(manager.includes('context.contentResolver.openOutputStream(destination!!)'));
  assert.ok(!panel.includes('INSTANT REPLAY')&&!panel.includes('10s"'),'No panel heading/countdown');
 });
+
+test('V2 Instant Replay update: four compact rows, fixed OFF AIR snapshot, bidirectional drag and autoplay',async()=>{
+ const root=new URL('../java/com/imgofficial/livestudio/v2/',import.meta.url);
+ const files=Object.fromEntries(await Promise.all([
+  'V2ReplayManager.kt','V2ReplayPlayback.kt','V2ReplayPanel.kt',
+  'PrivateYoutubeCameraActivity.kt','V2BroadcastService.kt'
+ ].map(async name=>[name,await readFile(new URL(name,root),'utf8')])));
+ const m=files['V2ReplayManager.kt'],player=files['V2ReplayPlayback.kt'],
+ panel=files['V2ReplayPanel.kt'],activity=files['PrivateYoutubeCameraActivity.kt'],
+ service=files['V2BroadcastService.kt'];
+ assert.ok(activity.includes('darkButton("INSTANT REPLAY")'));
+ assert.ok(activity.includes('val keys=listOf(start,timeoutButton,replayButton,'));
+ assert.ok(activity.includes('iconButton(darkButton("TOOLS")'),'Tool control unchanged');
+ assert.ok(activity.includes('TextureView(this)')&&activity.includes('prepareInstantReplay'));
+ assert.ok(activity.includes('privateReplayView.visibility=View.VISIBLE'),'Private footage is operator-only');
+ assert.ok(panel.includes('listOf("Full","Diagonal","Corner")'),'Display modes row');
+ assert.ok(panel.includes('val timeline=line()')&&panel.includes('SeekBar(activity)'),'Seek slider second row');
+ assert.ok(panel.includes('listOf(.25f,.5f,1f)'),'Speed third row');
+ assert.ok(panel.includes('button("Save")')&&panel.includes('button("Back to Live")'),'Actions fourth row');
+ assert.ok(!panel.includes('button("Play")'),'Never require an extra Play button');
+ assert.ok(panel.includes('seekInstantReplay(progress.toLong(),true)'),'Dragging requests frame target');
+ assert.ok(panel.includes('seekInstantReplay(seekBar.progress.toLong(),false)'),'Release auto-plays forward');
+ assert.ok(m.includes('val sample=ring.snapshot()'),'OFF AIR preparation freezes snapshot');
+ assert.ok(m.includes('ring.export(sample,output)'),'Original fixed clip is exported privately');
+ assert.ok(m.includes('fun attachPrivatePreview(surface:android.view.Surface)'),'Separate private decoder surface');
+ assert.ok(m.includes('fun putOnAir(mode:Int)'),'Broadcast only on mode tap');
+ assert.ok(m.includes('if(active)onAirDecoder?.seekTo(safe,dragging)'),'ON AIR scrubbing moves actual compositor');
+ assert.ok(m.includes('else operatorDecoder?.seekTo(safe,dragging)'),'OFF AIR scrubbing stays private');
+ assert.ok(player.includes('MediaExtractor.SEEK_TO_PREVIOUS_SYNC'),'Seek starts from decode keyframe');
+ assert.ok(player.includes('if(pts+frameDurationUs/2<requestedUs)'),'Decode dependent frames to requested time');
+ assert.ok(player.includes('val safeSpeed=speed().coerceIn(.25f,1f)'),'Auto-play honors selected rate');
+ assert.ok(player.includes('private val returnToLiveAtEnd:Boolean'),'Only ON AIR completion returns to LIVE');
+ assert.ok(service.includes('fun seekInstantReplay(positionMs:Long,dragging:Boolean)'),'Both broadcast modes share seek');
+});
