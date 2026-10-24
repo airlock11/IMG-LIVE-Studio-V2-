@@ -98,6 +98,12 @@ class V2ReplayRing(
       }
     }
   }
+  /** Timestamp of the most recent CLEAN captured video frame.
+   * Scoreboard state changes use the same video clock for historical replay.
+   */
+  fun currentVideoPtsUs():Long? = synchronized(lock) {
+    if(accepting && video.isNotEmpty())lastPts else null
+  }
   fun ready(): Boolean = synchronized(lock) {
     video.size > 5 &&
       lastPts - video.peekFirst().pts >= 10_000_000L &&
