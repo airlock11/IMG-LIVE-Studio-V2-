@@ -138,6 +138,7 @@ public final class V2ReplayFilter extends BaseFilterRender {
     // Preserve the selected replay frame and zoom until GPU exit completes.
   }
   public boolean isFull(){return mode==FULL&&!leaving;}
+  public boolean hasDecodedFrame(){return hasFrame&&mode!=NONE&&!leaving;}
   public boolean isActive(){return mode!=NONE;}
   public void resetZoom(){zoom=1f;focusX=.5f;focusY=.5f;}
   public void setZoom(float amount,float x,float y){
