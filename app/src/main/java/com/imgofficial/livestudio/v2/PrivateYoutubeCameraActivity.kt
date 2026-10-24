@@ -254,8 +254,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    if(mode==V2ReplayFilter.FULL)View.VISIBLE else View.GONE
   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
  },{
-  hidePrivateReplay()
-  restoreOperatorReplayLayout()
+  if(operatorReplayMode==V2ReplayFilter.FULL)animateOperatorFullReplayExit()
+  else{
+   hidePrivateReplay()
+   restoreOperatorReplayLayout()
+  }
   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
   animateOperatorReplayExpansion(false)
  })}
@@ -287,6 +290,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
  }
  private var operatorReplayMode=0
+ private var fullOperatorExitAnimator:android.animation.ValueAnimator?=null
  private var flipPreviewButton:View?=null
  private fun restoreOperatorReplayLayout(){
   operatorReplayMode=0
@@ -314,6 +318,37 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    params.bottomMargin=if(operatorReplayMode==V2ReplayFilter.DIAGONAL)(h*.025f).toInt() else dp(5)
   }
   privateReplayView.layoutParams=params
+ }
+ private fun animateOperatorFullReplayExit(){
+  if(!::privateReplayView.isInitialized||!privateReplayVisible){
+   hidePrivateReplay();restoreOperatorReplayLayout();return
+  }
+  fullOperatorExitAnimator?.cancel()
+  val view=privateReplayView
+  view.pivotX=view.width.toFloat()
+  view.pivotY=view.height.toFloat()
+  fullOperatorExitAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
+   duration=850L
+   addUpdateListener{frame->
+    val p=frame.animatedValue as Float
+    val motion=(p*850f/700f).coerceIn(0f,1f)
+    val smooth=motion*motion*(3f-2f*motion)
+    val scale=1f-.70f*smooth
+    view.scaleX=scale;view.scaleY=scale
+    val fade=((p*850f-700f)/150f).coerceIn(0f,1f)
+    view.alpha=1f-fade*fade*(3f-2f*fade)
+   }
+   addListener(object:android.animation.AnimatorListenerAdapter(){
+    override fun onAnimationEnd(animation:android.animation.Animator){
+     hidePrivateReplay()
+     restoreOperatorReplayLayout()
+     view.scaleX=1f;view.scaleY=1f
+     view.pivotX=view.width/2f;view.pivotY=view.height/2f
+     fullOperatorExitAnimator=null
+    }
+   })
+   start()
+  }
  }
  private fun showOnAirReplayPreview(mode:Int){
   operatorReplayMode=mode
@@ -1299,6 +1334,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    super.onSaveInstanceState(outState)
  }
  override fun onDestroy(){
+  fullOperatorExitAnimator?.cancel();fullOperatorExitAnimator=null
   timer.removeCallbacks(tick)
   operatorSheet?.dismiss()
   operatorSheet=null
