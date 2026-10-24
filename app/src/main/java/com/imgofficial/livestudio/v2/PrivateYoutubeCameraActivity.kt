@@ -95,8 +95,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      if(!isFinishing&&!isDestroyed)replayUi.onTimelinePosition(pos)
     }
     broadcast?.setReplayCompletedListener{
-     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true)
+     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true){
+      animateOperatorReplayExpansion(false)
       showPrivateReplay()
+     }
     }
    draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
@@ -241,7 +243,40 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
- private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{hidePrivateReplay()},{hidePrivateReplay()})}
+ private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
+  hidePrivateReplay()
+  animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
+ },{
+  hidePrivateReplay()
+  animateOperatorReplayExpansion(false)
+ })}
+ private var operatorCameraFrame:FrameLayout?=null
+ private var operatorPreviewExpanded=false
+ private var operatorPreviewAnimator:android.animation.ValueAnimator?=null
+ private fun animateOperatorReplayExpansion(expand:Boolean){
+  val camera=operatorCameraFrame?:return
+  if(operatorPreviewExpanded==expand)return
+  val parent=camera.parent as? LinearLayout?:return
+  val target=if(expand){
+   val cards=(0 until parent.childCount).map{parent.getChildAt(it)}
+    .filter{it!==camera}
+   // Keep game clock, period buttons and system safe areas visible.
+   val available=cards.all{it.width>=dp(145)}&&parent.width>=dp(770)
+   if(available).44f else .36f
+  }else .36f
+  operatorPreviewExpanded=expand&&target>.36f
+  operatorPreviewAnimator?.cancel()
+  val params=camera.layoutParams as? LinearLayout.LayoutParams?:return
+  operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(params.weight,target).apply{
+   duration=300L
+   interpolator=android.view.animation.DecelerateInterpolator()
+   addUpdateListener{
+    params.weight=it.animatedValue as Float
+    camera.layoutParams=params
+   }
+   start()
+  }
+ }
  private lateinit var privateReplayView:android.view.TextureView
  private var privateReplaySurface:android.view.Surface?=null
  private var privateReplayVisible=false
@@ -771,7 +806,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     }
    }
   }
-  camera.addView(privateReplayView,FrameLayout.LayoutParams(1,1,Gravity.CENTER))
+  camera.addView(privateReplayView,FrameLayout.LayoutParams(1,1,
+   Gravity.RIGHT or Gravity.BOTTOM))
   // Separate native operator preview of the *same* GL-uploaded Bitmap.
   // Screen-only ImageView never enters camera capture or H.264 encoding.
   // The livestream still uses the original ImageFilterRender directly.
@@ -792,9 +828,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
+    val replayW=(w*.38f).toInt().coerceAtLeast(1)
+    val replayH=(h*.38f).toInt().coerceAtLeast(1)
     val replayParams=privateReplayView.layoutParams
-    if(w>0&&h>0&&(replayParams.width!=w||replayParams.height!=h))
-     privateReplayView.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
+    if(w>0&&h>0&&(replayParams.width!=replayW||replayParams.height!=replayH))
+     privateReplayView.layoutParams=FrameLayout.LayoutParams(replayW,replayH,
+      Gravity.RIGHT or Gravity.BOTTOM).apply{
+      rightMargin=dp(5);bottomMargin=dp(5)
+     }
     graphicsPreview.post{placePreviewGraphic()}
    }
   }
@@ -802,7 +843,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
 
   // Single aligned strip: video, game clock, and game period.
   val top=horizontal()
-  top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
+  operatorCameraFrame=camera
+   top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
   val clockCard=card()
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
@@ -1195,6 +1237,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    timeoutPreview=null
    replayUi.close()
    hidePrivateReplay()
+   operatorPreviewAnimator?.cancel();operatorPreviewAnimator=null
    if(bound){
    broadcast?.unregister(this)
    broadcast?.detachPreview()
