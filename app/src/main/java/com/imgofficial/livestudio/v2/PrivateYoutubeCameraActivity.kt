@@ -374,7 +374,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val left=(w*last.x/100f).toInt()
   val top=(h*last.y/100f).toInt()
   if(params.width!=finalWidth||params.height!=finalHeight||
-    params.leftMargin!=left||params.topMargin!=top||params.gravity!=Gravity.TOP or Gravity.LEFT){
+    params.leftMargin!=left||params.topMargin!=top||params.gravity!=(Gravity.TOP or Gravity.LEFT)){
    params.width=finalWidth;params.height=finalHeight
    params.gravity=Gravity.TOP or Gravity.LEFT
    params.leftMargin=left;params.topMargin=top
