@@ -577,7 +577,24 @@ class MainActivity : Activity() {
    val uri=try{Uri.parse(clip.optString("uri"))}catch(_:Exception){return}
    if(uri.scheme!="content"||uri.authority!="media")return
    val label=clip.optString("home","HOME")+" vs "+clip.optString("away","AWAY")
-   savedPlayer.show(uri,label)
+   // Android player chooser: keeps the MediaStore file intact.
+   try{
+    contentResolver.openAssetFileDescriptor(uri,"r")?.use{descriptor->
+     if(descriptor.length==0L)throw java.io.FileNotFoundException("Empty recording")
+    }?:throw java.io.FileNotFoundException("Saved recording is unavailable")
+    val view=Intent(Intent.ACTION_VIEW).apply{
+     setDataAndType(uri,"video/mp4")
+     clipData=android.content.ClipData.newUri(contentResolver,label,uri)
+     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    startActivity(Intent.createChooser(view,"Play recording with").apply{
+     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    })
+   }catch(ex:android.content.ActivityNotFoundException){
+    savedPlayer.show(uri,label)
+   }catch(ex:Exception){
+    Toast.makeText(this,"Cannot open video: "+(ex.message?:"unknown error"),Toast.LENGTH_LONG).show()
+   }
    return
   }
  }
