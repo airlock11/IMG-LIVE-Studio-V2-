@@ -131,6 +131,9 @@ public final class V2ReplayFilter extends BaseFilterRender {
     mode=selectedMode;priorMode=selectedMode;leaving=false;
     changeAt=SystemClock.uptimeMillis();
     zoom=1f;focusX=.5f;focusY=.5f;hasFrame=false;
+    // Never mistake a queued frame from the preceding replay for the newly
+    // selected clip's first decoded frame.
+    freshFrame.set(false);
   }
   public void exit(){
     if(mode==NONE||leaving)return;
