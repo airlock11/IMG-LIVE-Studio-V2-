@@ -143,6 +143,19 @@ public final class V2ReplayFilter extends BaseFilterRender {
   public boolean isFull(){return mode==FULL&&!leaving;}
   public boolean hasDecodedFrame(){return hasFrame&&mode!=NONE&&!leaving;}
   public boolean isActive(){return mode!=NONE;}
+  /** Must match shader's smoothstep transition clock for all replay modes. */
+  public float visualProgress(){
+    if(mode==NONE||!hasFrame)return 0f;
+    float ms=Math.max(0f,(float)(SystemClock.uptimeMillis()-changeAt));
+    if(mode==FULL){
+      float f=Math.min(1f,ms/(leaving?700f:850f));
+      float e=f*f*(3f-2f*f);
+      return leaving?1f-e:e;
+    }
+    float f=Math.min(1f,ms/500f);
+    float e=f*f*(3f-2f*f);
+    return leaving?1f-e:e;
+  }
   public void resetZoom(){zoom=1f;focusX=.5f;focusY=.5f;}
   public void setZoom(float amount,float x,float y){
     if(!isFull())return;
