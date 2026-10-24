@@ -57,6 +57,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val replay=V2ReplayManager(this){message->notifyState(message)}
  fun replayReady()=replay.ready()&&(running||(offlineRecording&&!offlinePaused))
  fun instantReplayIsActive()=replay.active
+ fun instantReplayModeLocked()=replay.isModeLocked()
  fun instantReplayIsFull()=replay.fullActive()
  fun instantReplayIsPrepared()=replay.isPrepared()
  fun instantReplayDurationMs()=replay.durationMs()
@@ -65,20 +66,25 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun attachPrivateReplayPreview(surface:android.view.Surface)=replay.attachPrivatePreview(surface)
  fun detachPrivateReplayPreview()=replay.detachPrivatePreview()
  fun startInstantReplay(mode:Int):Boolean{
+  if(replay.isModeLocked())return false
   if(mode==V2ReplayFilter.FULL){
-   endReplayLayout()
-   return replay.putOnAir(mode)
+   if(!replay.putOnAir(mode))return false
+   replayLayoutEpoch++
+   replayScreenMode=mode
+   // Full preview keeps the separate operator graphic; encoded replay hides it.
+   replayScoreFade=0f
+   updateScorecard()
+   updateReplayBorders(mode,1f)
+   return true
   }
   if(mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return false
   val candidate=V2ReplayLayout.choose(mode,originalGraphicsRect(),
    V2BroadcastGraphicsRenderer.compact(graphicsStyle))
   if(candidate==null){
-   notifyState("Scoreboard cannot fit beside replay without clipping. Choose Full.")
+   notifyState("Cannot fit scoreboard beside replay without overlap.")
    return false
   }
-  if(!replay.isPrepared())return false
-  // Fade old scoreboard out and move it to a verified free sector BEFORE
-  // the replay window becomes visible on the encoded stream.
+  if(!replay.putOnAir(mode))return false
   startReplayLayout(mode,candidate.scoreboard)
   return true
  }
@@ -376,12 +382,6 @@ class V2BroadcastService:Service(),ConnectChecker {
     if(step==3){
      replayTempRect=rect
      placeGraphics()
-     // Scoreboard is now fully transparent, clear of both video windows.
-     if(!replay.putOnAir(mode)){
-      notifyState("Unable to show this replay mode; LIVE preserved.")
-      endReplayLayout()
-      return@postDelayed
-     }
     }
     if(step==6)replayScoreFade=1f
     updateScorecard()
@@ -395,19 +395,21 @@ class V2BroadcastService:Service(),ConnectChecker {
   val mode=replayScreenMode
   replayScreenMode=0
   val epoch=++replayLayoutEpoch
-  for(step in 1..8){
+  val steps=if(mode==V2ReplayFilter.FULL)10 else 8
+  for(step in 1..steps){
    ui.postDelayed({
     if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    // Keep scoreboard invisible until 500ms GPU replay exit completes.
-    replayScoreFade=when{
+    replayScoreFade=if(mode==V2ReplayFilter.FULL){
+     if(step<=7)0f else (step-7)/3f
+    }else when{
      step<=2->1f-step/2f
      step<=5->0f
      else->(step-5)/3f
     }
     if(step==3){replayTempRect=null;placeGraphics()}
-    if(step==8)replayScoreFade=1f
+    if(step==steps)replayScoreFade=1f
     updateScorecard()
-    updateReplayBorders(mode,(1f-step/6f).coerceIn(0f,1f))
+    updateReplayBorders(mode,(1f-step.toFloat()/steps).coerceIn(0f,1f))
    },step*90L)
   }
  }
