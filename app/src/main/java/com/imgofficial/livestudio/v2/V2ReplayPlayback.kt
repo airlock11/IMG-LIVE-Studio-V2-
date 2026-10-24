@@ -76,7 +76,9 @@ class V2ReplayPlayback(
       decoder.releaseOutputBuffer(output,false)
       completed=true;break
      }
-     if(info.size>0){
+     // Surface decoders may report size=0 even for displayable frames.
+     // The output presentation timestamp, not buffer size, drives rendering.
+     if(info.presentationTimeUs>=0L){
       if(firstPts<0){firstPts=info.presentationTimeUs;startAt=SystemClock.elapsedRealtimeNanos()}
       val mediaDeltaUs=(info.presentationTimeUs-firstPts).coerceAtLeast(0L)
       val position=mediaDeltaUs/1_000_000f
