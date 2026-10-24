@@ -72,10 +72,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    topMargin=top
   }
  }
- override fun onPreviewReplayFrame(image:android.graphics.Bitmap){
+ override fun onPreviewReplayFrame(image:android.graphics.Bitmap,mode:Int,progress:Float){
   runOnUiThread {
    if(isFinishing||isDestroyed||!::replayFramePreview.isInitialized)return@runOnUiThread
    replayFramePreview.setImageBitmap(image)
+   syncOperatorReplayLayout(mode,progress)
   }
  }
  override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
@@ -255,20 +256,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
- private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
-  showOnAirReplayPreview(mode)
-  // The operator must see exactly the same single scoreboard as the output:
-  // historical during FULL, current LIVE to the left in other replay modes.
-  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
-  animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
+ private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{_->
+  // Wait for actual decoded ON AIR frame; preview must not lead broadcast.
  },{
-  if(operatorReplayMode==V2ReplayFilter.FULL)animateOperatorFullReplayExit()
-  else{
+  // Continue mirroring the output during its exit animation. The last
+  // output callback restores the normal 16:9 LIVE monitor and size.
+  if(operatorReplayMode==0){
    hidePrivateReplay()
    restoreOperatorReplayLayout()
+   animateOperatorReplayExpansion(false)
   }
-  if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
-  animateOperatorReplayExpansion(false)
  },{
   // OFF AIR footage becomes visible only when the operator scrubs.
   if(broadcast?.instantReplayIsActive()!=true)showPrivateReplay()
@@ -347,6 +344,56 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     .translationX(0f).translationY(0f).setDuration(240).start()
   }
  }
+ /** Operator monitor and encoded replay receive identical window geometry.
+  * Full expansion still changes only the screen card, never the output format.
+  */
+ private fun syncOperatorReplayLayout(mode:Int,progress:Float){
+  if(mode==V2ReplayFilter.NONE){
+   if(operatorReplayMode!=0){
+    hidePrivateReplay()
+    restoreOperatorReplayLayout()
+    animateOperatorReplayExpansion(false)
+   }
+   return
+  }
+  if(!::privateReplayView.isInitialized||!::monitor.isInitialized)return
+  if(operatorReplayMode!=mode){
+   showOnAirReplayPreview(mode)
+   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
+   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
+  }
+  val w=monitor.width.toFloat()
+  val h=monitor.height.toFloat()
+  if(w<=0f||h<=0f)return
+  val animated=V2ReplayLayout.animatedWindows(mode,progress.coerceIn(0f,1f))
+  val current=animated.lastOrNull()?:return
+  val last=V2ReplayLayout.animatedWindows(mode,1f).last()
+  val params=privateReplayView.layoutParams as FrameLayout.LayoutParams
+  val finalWidth=(w*last.w/100f).toInt().coerceAtLeast(1)
+  val finalHeight=(h*last.h/100f).toInt().coerceAtLeast(1)
+  val left=(w*last.x/100f).toInt()
+  val top=(h*last.y/100f).toInt()
+  if(params.width!=finalWidth||params.height!=finalHeight||
+    params.leftMargin!=left||params.topMargin!=top||params.gravity!=Gravity.TOP or Gravity.LEFT){
+   params.width=finalWidth;params.height=finalHeight
+   params.gravity=Gravity.TOP or Gravity.LEFT
+   params.leftMargin=left;params.topMargin=top
+   privateReplayView.layoutParams=params
+  }
+  privateReplayView.pivotX=0f;privateReplayView.pivotY=0f
+  privateReplayView.scaleX=current.w/last.w
+  privateReplayView.scaleY=current.h/last.h
+  privateReplayView.translationX=w*(current.x-last.x)/100f
+  privateReplayView.translationY=h*(current.y-last.y)/100f
+  // In Diagonal, transform the LIVE screen exactly like the on-air shader.
+  val live=if(mode==V2ReplayFilter.DIAGONAL)animated.first() else
+   V2ReplayLayout.Rect(0f,0f,100f,100f)
+  monitor.animate().cancel()
+  monitor.pivotX=0f;monitor.pivotY=0f
+  monitor.scaleX=live.w/100f;monitor.scaleY=live.h/100f
+  monitor.translationX=w*live.x/100f
+  monitor.translationY=h*live.y/100f
+ }
  private fun updateOperatorReplayGeometry(w:Int,h:Int){
   if(w<=0||h<=0||!::privateReplayView.isInitialized)return
   val factor=when(operatorReplayMode){
@@ -404,23 +451,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   privateReplayView.alpha=0f
   privateReplayView.visibility=View.VISIBLE
   flipPreviewButton?.visibility=View.GONE
-  val camera=operatorCameraFrame
-  val w=camera?.width?:0
-  val h=camera?.height?:0
-  val frameWidth=minOf(w,h*16/9).coerceAtLeast(1)
-  val frameHeight=(frameWidth*9/16).coerceAtLeast(1)
-  updateOperatorReplayGeometry(frameWidth,frameHeight)
-  // Hold the preview surface until the NEW on-air snapshot is exported.
+  // The first broadcast callback drives all actual video/frame bounds.
   if(privateReplayView.isAvailable)attachPrivateReplay()
-  if(mode==V2ReplayFilter.DIAGONAL){
-   // Transform Android's view only: LIVE Surface is never detached.
-   monitor.animate().scaleX(.45f).scaleY(.45f)
-    .translationX(-frameWidth*.25f).translationY(-frameHeight*.25f)
-    .setDuration(300).start()
-  }else{
-   monitor.animate().scaleX(1f).scaleY(1f)
-    .translationX(0f).translationY(0f).setDuration(300).start()
-  }
  }
  private lateinit var privateReplayView:android.view.TextureView
  private var privateReplaySurface:android.view.Surface?=null
