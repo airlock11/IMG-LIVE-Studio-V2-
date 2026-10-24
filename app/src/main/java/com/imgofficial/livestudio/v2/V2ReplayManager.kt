@@ -32,6 +32,12 @@ class V2ReplayManager(
  private var onAirDecoder:V2ReplayPlayback?=null
  private var preparedFile:File?=null
  private var snapshot:V2ReplayRing.Snapshot?=null
+ // History is sampled against clean H.264 video PTS, NOT the current LIVE clock.
+ private data class TimedScoreboard(val ptsUs:Long,val value:V2Scorecard.State)
+ private val scoreHistory=java.util.ArrayDeque<TimedScoreboard>()
+ @Volatile private var lockedScoreHistory:List<TimedScoreboard> = emptyList()
+ private var latestScoreboard=V2Scorecard.State()
+ private var historicalScoreListener:(V2Scorecard.State?)->Unit={}
  private var epoch=0
  @Volatile var speed=1f
   private set
@@ -66,6 +72,8 @@ class V2ReplayManager(
  }
  fun setCapturing(enabled:Boolean){
   if(!enabled){
+   synchronized(scoreHistory){scoreHistory.clear()}
+   lockedScoreHistory=emptyList()
    cleanCapture.stop()
    backToLive()
    ring.setCleanCaptureEnabled(false)
@@ -88,6 +96,39 @@ class V2ReplayManager(
  fun setTimelineListener(listener:(Long)->Unit){timelineChanged=listener}
  fun setOnAirEnded(listener:()->Unit){onAirEnded=listener}
  fun setOnAirStartedListener(listener:(Int)->Unit){onAirStarted=listener}
+ internal fun setHistoricalScoreListener(listener:(V2Scorecard.State?)->Unit){
+  historicalScoreListener=listener
+ }
+ /** Keep at most 15 seconds of original, timestamped LIVE scoreboard changes. */
+ internal fun recordScoreboardState(state:V2Scorecard.State){
+  synchronized(scoreHistory){
+   latestScoreboard=state.copy()
+   val time=ring.currentVideoPtsUs()?:return
+   if(scoreHistory.peekLast()?.value==state)return
+   val stamp=maxOf(time,(scoreHistory.peekLast()?.ptsUs?:-1L)+1L)
+   scoreHistory.addLast(TimedScoreboard(stamp,state.copy()))
+   while(scoreHistory.size>1 &&
+    (scoreHistory.size>1000 ||
+     scoreHistory.elementAt(1).ptsUs<stamp-15_000_000L))scoreHistory.removeFirst()
+  }
+ }
+ private fun lockScoreboardHistory(sample:V2ReplayRing.Snapshot){
+  lockedScoreHistory=synchronized(scoreHistory){
+   val from=sample.video.first().pts
+   val to=sample.video.last().pts
+   val baseline=scoreHistory.lastOrNull{it.ptsUs<=from}
+   val within=scoreHistory.filter{it.ptsUs>from&&it.ptsUs<=to}
+   val values= (listOfNotNull(baseline)+within)
+   if(values.isEmpty())listOf(TimedScoreboard(from,latestScoreboard.copy()))
+   else values
+  }
+ }
+ internal fun historicalAtPlayhead():V2Scorecard.State? {
+  val s=snapshot?:return null
+  val timeline=s.video.first().pts+s.playbackOffsetUs+playheadMs*1000L
+  val history=lockedScoreHistory
+  return (history.lastOrNull{it.ptsUs<=timeline}?:history.firstOrNull())?.value
+ }
 
  /**
   * Tap the button: freeze one immutable 10-second snapshot, export it on a
@@ -180,6 +221,7 @@ class V2ReplayManager(
    preparedFile=output
    if(old!=null&&old!==output)ui.postDelayed({old.delete()},1700L)
    snapshot=fresh
+   lockScoreboardHistory(fresh)
    snapshotDurationMs=10_000L
    playbackOffsetMs=fresh.playbackOffsetUs/1000L
    playheadMs=0L
@@ -189,6 +231,7 @@ class V2ReplayManager(
    renderer.enter(mode)
    // Apply GPU graphics/layout only when the selected clip is actually ready.
    onAirStarted(mode)
+   if(mode==V2ReplayFilter.FULL)historicalScoreListener(historicalAtPlayhead())
    // The operator sees the SAME selected MP4 privately on a dedicated
    // TextureView. The broadcast uses its separate GL decoder/Surface.
    operatorSurface?.let{previewSurface->
@@ -199,7 +242,12 @@ class V2ReplayManager(
      }
    }
    onAirDecoder=V2ReplayPlayback(output,surface,{speed},{pos->
-    if(active){val visible=(pos-playbackOffsetMs).coerceIn(0L,snapshotDurationMs);playheadMs=visible;timelineChanged(visible)}
+    if(active){
+     val visible=(pos-playbackOffsetMs).coerceIn(0L,snapshotDurationMs)
+     playheadMs=visible
+     if(mode==V2ReplayFilter.FULL)historicalScoreListener(historicalAtPlayhead())
+     timelineChanged(visible)
+    }
    },mode!=V2ReplayFilter.FULL,{successful->
     if(playbackRevision==epoch&&active){
      stopOnAir()
@@ -256,6 +304,7 @@ class V2ReplayManager(
   prepared=false
   playheadMs=0L
   snapshot=null
+  lockedScoreHistory=emptyList()
   playbackOffsetMs=0L
   val old=preparedFile
   preparedFile=null
