@@ -299,56 +299,37 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   * adds black sidebars instead of increasing video size. Encoded output is unchanged.
   */
  private fun animateOperatorReplayExpansion(expand:Boolean){
-  val camera=operatorCameraFrame?:return
-  val clock=operatorClockCard?:return
-  val quarter=operatorQuarterCard?:return
   val top=operatorTopRow?:return
   val score=operatorScoreRow?:return
-  val parent=camera.parent as? LinearLayout?:return
+  val parent=top.parent as? LinearLayout?:return
   val isPickleball=intent.getStringExtra("img_sport")=="pickleball"
   val normalTop=if(isPickleball).54f else .51f
   val normalScore=if(isPickleball).46f else .35f
   val normalFouls=if(isPickleball)0f else .14f
-  val usableWidth=(parent.width-2*dp(5)).coerceAtLeast(1)
-  // Retain comfortable clock and quarter hit areas on smaller phones.
-  val clockMinimum=dp(155)
-  val quarterMinimum=dp(if(isPickleball)135 else 165)
-  val maximumCamera=(usableWidth-clockMinimum-quarterMinimum).coerceAtLeast(0)
-  val safeScale=if(expand)
-   minOf(1.30f,maximumCamera/(usableWidth*.36f)).coerceIn(1f,1.30f)
-   else 1f
-  val fullSize=expand&&safeScale>1.001f
-  if(operatorPreviewExpanded==fullSize&&!expand)return
-  operatorPreviewExpanded=fullSize
+  // Grow the visible 16:9 preview by up to 30%; keep adjacent controls usable.
+  val freeWidth=parent.width-dp(10)-dp(155)-dp(if(isPickleball)135 else 165)
+  val normalHeight=parent.height*normalTop
+  val maxScale=if(normalHeight>0f)freeWidth*9f/(16f*normalHeight) else 1f
+  val scale=if(expand)minOf(1.30f,maxScale).coerceIn(1f,1.30f) else 1f
+  val isExpanded=expand&&scale>1.001f
+  if(operatorPreviewExpanded==isExpanded&&!expand)return
+  operatorPreviewExpanded=isExpanded
   operatorPreviewAnimator?.cancel()
-  val cameraWeight=.36f*safeScale
-  val otherFactor=(1f-cameraWeight)/.64f
-  val targetClock=.34f*otherFactor
-  val targetQuarter=.30f*otherFactor
-  val targetTop=normalTop*safeScale
+  val targetTop=(normalTop*scale).coerceAtMost(.75f)
   val restFactor=(1f-targetTop)/(1f-normalTop)
-  val targetScore=normalScore*restFactor
-  val targetFouls=normalFouls*restFactor
-  fun weight(view:android.view.View)=
-   (view.layoutParams as? LinearLayout.LayoutParams)?.weight?:0f
-  fun setWeight(view:android.view.View,value:Float){
-   val lp=view.layoutParams as? LinearLayout.LayoutParams?:return
-   if(kotlin.math.abs(lp.weight-value)>.0001f){
-    lp.weight=value
-    view.layoutParams=lp
-   }
-  }
-  val views=listOf(camera,clock,quarter,top,score)+listOfNotNull(operatorFoulRow)
-  val ends=listOf(cameraWeight,targetClock,targetQuarter,targetTop,targetScore)+
-   (if(operatorFoulRow!=null)listOf(targetFouls) else emptyList())
-  val begins=views.map{weight(it)}
+  val views=listOf(top,score)+listOfNotNull(operatorFoulRow)
+  val ends=listOf(targetTop,normalScore*restFactor)+
+   (if(operatorFoulRow!=null)listOf(normalFouls*restFactor) else emptyList())
+  val beginnings=views.map{(it.layoutParams as LinearLayout.LayoutParams).weight}
   operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
    duration=320L
    interpolator=android.view.animation.DecelerateInterpolator()
-   addUpdateListener { frame ->
+   addUpdateListener{frame->
     val t=frame.animatedValue as Float
-    views.forEachIndexed{index,view->
-     setWeight(view,begins[index]+(ends[index]-begins[index])*t)
+    views.forEachIndexed{idx,view->
+     val lp=view.layoutParams as LinearLayout.LayoutParams
+     lp.weight=beginnings[idx]+(ends[idx]-beginnings[idx])*t
+     view.layoutParams=lp
     }
    }
    start()
@@ -379,8 +360,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val params=FrameLayout.LayoutParams(rw,rh,
    if(operatorReplayMode==V2ReplayFilter.FULL)Gravity.CENTER else Gravity.RIGHT or Gravity.BOTTOM)
   if(operatorReplayMode!=V2ReplayFilter.FULL){
-   params.rightMargin=if(operatorReplayMode==V2ReplayFilter.DIAGONAL)(w*.025f).toInt() else dp(5)
-   params.bottomMargin=if(operatorReplayMode==V2ReplayFilter.DIAGONAL)(h*.025f).toInt() else dp(5)
+   val gap=if(operatorReplayMode==V2ReplayFilter.DIAGONAL).025f else .035f
+   params.rightMargin=(w*gap).toInt()
+   params.bottomMargin=(h*gap).toInt()
   }
   privateReplayView.layoutParams=params
  }
@@ -1103,6 +1085,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   quarterCard.addView(quickPeriods)
   top.addView(quarterCard,LinearLayout.LayoutParams(0,-1,.30f).apply{leftMargin=gap})
   body.addView(top,sized(if(isPickleball).54f else .51f))
+  // Camera card adopts the physical 16:9 frame, not a wider black container.
+  // Clock and quarter cards receive the remaining width automatically.
+  top.addOnLayoutChangeListener{_,left,_,right,_,_,_,_,_->
+   val available=(right-left).coerceAtLeast(1)
+   val rowHeight=top.height.coerceAtLeast(1)
+   val remaining=available-2*gap-dp(155)-dp(if(isPickleball)135 else 165)
+   val width=minOf((rowHeight*16f/9f).toInt(),remaining).coerceAtLeast(1)
+   val height=(width*9f/16f).toInt().coerceAtLeast(1)
+   val lp=camera.layoutParams as LinearLayout.LayoutParams
+   if(lp.width!=width||lp.height!=height||lp.weight!=0f){
+    lp.width=width;lp.height=height;lp.weight=0f
+    camera.layoutParams=lp
+   }
+  }
 
   // Balanced HOME and AWAY scoreboard, optimized for thumbs and one-tap scoring.
   fun teamCard(team:Int):LinearLayout{
