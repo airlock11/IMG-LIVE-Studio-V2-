@@ -45,7 +45,7 @@ class V2ReplayLayoutTest {
   frame.recycle()
   val full=V2ReplayFrameGraphics.render(V2ReplayFilter.FULL,1280,720)
   assertEquals("Full frame reuses the Corner-style metallic border",1280,full.width)
-  assertNotEquals(0,full.getPixel(29,16))
+  assertNotEquals("Full Corner-style left border",0,full.getPixel(26,360))
   full.recycle()
   val empty=V2ReplayFrameGraphics.render(V2ReplayFilter.NONE,1280,720)
   assertEquals(0,empty.getPixel(32,16))
