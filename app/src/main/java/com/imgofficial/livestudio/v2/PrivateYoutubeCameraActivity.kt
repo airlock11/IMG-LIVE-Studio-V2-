@@ -101,6 +101,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
       animateOperatorReplayExpansion(false)
       // Automatic replay completion restores normal LIVE; no stale replay PiP.
       hidePrivateReplay()
+      restoreOperatorReplayLayout()
       refresh()
      }
     }
@@ -248,13 +249,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
  private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
-  hidePrivateReplay()
-  // Operator-only graphics remain visible for Full, never in a clean split/PiP.
+  showOnAirReplayPreview(mode)
   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=
    if(mode==V2ReplayFilter.FULL)View.VISIBLE else View.GONE
   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
  },{
   hidePrivateReplay()
+  restoreOperatorReplayLayout()
   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
   animateOperatorReplayExpansion(false)
  })}
@@ -285,6 +286,57 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    start()
   }
  }
+ private var operatorReplayMode=0
+ private var flipPreviewButton:View?=null
+ private fun restoreOperatorReplayLayout(){
+  operatorReplayMode=0
+  flipPreviewButton?.visibility=View.VISIBLE
+  if(::monitor.isInitialized){
+   monitor.animate().cancel()
+   monitor.animate().scaleX(1f).scaleY(1f)
+    .translationX(0f).translationY(0f).setDuration(240).start()
+  }
+ }
+ private fun updateOperatorReplayGeometry(w:Int,h:Int){
+  if(w<=0||h<=0||!::privateReplayView.isInitialized)return
+  val factor=when(operatorReplayMode){
+   V2ReplayFilter.FULL->1f
+   V2ReplayFilter.DIAGONAL->.45f
+   V2ReplayFilter.CORNER->.30f
+   else->.38f
+  }
+  val rw=(w*factor).toInt().coerceAtLeast(1)
+  val rh=(h*factor).toInt().coerceAtLeast(1)
+  val params=FrameLayout.LayoutParams(rw,rh,
+   if(operatorReplayMode==V2ReplayFilter.FULL)Gravity.CENTER else Gravity.RIGHT or Gravity.BOTTOM)
+  if(operatorReplayMode!=V2ReplayFilter.FULL){
+   params.rightMargin=if(operatorReplayMode==V2ReplayFilter.DIAGONAL)(w*.025f).toInt() else dp(5)
+   params.bottomMargin=if(operatorReplayMode==V2ReplayFilter.DIAGONAL)(h*.025f).toInt() else dp(5)
+  }
+  privateReplayView.layoutParams=params
+ }
+ private fun showOnAirReplayPreview(mode:Int){
+  operatorReplayMode=mode
+  privateReplayVisible=true
+  privateReplayView.alpha=0f
+  privateReplayView.visibility=View.VISIBLE
+  flipPreviewButton?.visibility=View.GONE
+  val camera=operatorCameraFrame
+  val w=camera?.width?:0
+  val h=camera?.height?:0
+  val frameWidth=minOf(w,h*16/9).coerceAtLeast(1)
+  val frameHeight=(frameWidth*9/16).coerceAtLeast(1)
+  updateOperatorReplayGeometry(frameWidth,frameHeight)
+  if(mode==V2ReplayFilter.DIAGONAL){
+   // Transform Android's view only: LIVE Surface is never detached.
+   monitor.animate().scaleX(.45f).scaleY(.45f)
+    .translationX(-frameWidth*.25f).translationY(-frameHeight*.25f)
+    .setDuration(300).start()
+  }else{
+   monitor.animate().scaleX(1f).scaleY(1f)
+    .translationX(0f).translationY(0f).setDuration(300).start()
+  }
+ }
  private lateinit var privateReplayView:android.view.TextureView
  private var privateReplaySurface:android.view.Surface?=null
  private var privateReplayVisible=false
@@ -304,6 +356,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  private fun hidePrivateReplay(){
   privateReplayVisible=false
+  operatorReplayMode=0
   broadcast?.detachPrivateReplayPreview()
   if(::privateReplayView.isInitialized){
    privateReplayView.visibility=View.GONE;privateReplayView.alpha=0f
@@ -792,6 +845,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
    contentDescription="Flip camera";setPadding(0,0,0,0)
   }
+  flipPreviewButton=flip
   monitor=SurfaceView(this).apply{
     setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
    }
@@ -836,14 +890,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
-    val replayW=(w*.38f).toInt().coerceAtLeast(1)
-    val replayH=(h*.38f).toInt().coerceAtLeast(1)
+    val fraction=when(operatorReplayMode){
+     V2ReplayFilter.FULL->1f
+     V2ReplayFilter.DIAGONAL->.45f
+     V2ReplayFilter.CORNER->.30f
+     else->.38f
+    }
+    val replayW=(w*fraction).toInt().coerceAtLeast(1)
+    val replayH=(h*fraction).toInt().coerceAtLeast(1)
     val replayParams=privateReplayView.layoutParams
     if(w>0&&h>0&&(replayParams.width!=replayW||replayParams.height!=replayH))
-     privateReplayView.layoutParams=FrameLayout.LayoutParams(replayW,replayH,
-      Gravity.RIGHT or Gravity.BOTTOM).apply{
-      rightMargin=dp(5);bottomMargin=dp(5)
-     }
+     updateOperatorReplayGeometry(w,h)
     graphicsPreview.post{placePreviewGraphic()}
    }
   }
