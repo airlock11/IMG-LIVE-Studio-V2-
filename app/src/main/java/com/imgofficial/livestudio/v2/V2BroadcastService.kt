@@ -799,7 +799,11 @@ class V2BroadcastService:Service(),ConnectChecker {
     stream=engine
     applyFraming()
     replay.installGl(engine)
-    replayBorderFilter=ImageFilterRender().also{engine.getGlInterface().addFilter(it)}
+    replayBorderFilter=ImageFilterRender().also{
+    // Only the encoded broadcast receives labels/frames; operator video stays clean.
+    it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+    engine.getGlInterface().addFilter(it)
+   }
     updateReplayBorders(0,0f)
     applyScorecard()
     initSponsorFilter()
@@ -1115,7 +1119,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   val gl=stream?.getGlInterface()?:return
   try{
    if(scoreFilter==null){
-    scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
+    scoreFilter=ImageFilterRender().also{
+     // Prevent double-drawing in the monitor. The existing separate operator
+     // ImageView handles preview graphics; this GPU layer is OUTPUT ONLY.
+     it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+     gl.addFilter(it)
+    }
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
