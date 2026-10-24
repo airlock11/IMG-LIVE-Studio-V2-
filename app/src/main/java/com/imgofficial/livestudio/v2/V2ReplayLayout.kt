@@ -17,20 +17,18 @@ object V2ReplayLayout {
  }
 
  /**
-  * Place the single scoreboard independently of the CLEAN replay footage.
-  * Both mode windows occupy the right/bottom part of the canvas; displaying
-  * another scoreboard INSIDE those pixels would require covering the footage.
-  * Therefore use the nearest available right-edge region immediately ABOVE
-  * the lower-right replay, proportionally scaling the original artwork.
-  * Never stretch, crop, alter fonts or graphics, or move either replay window.
+  * The current LIVE scoreboard stays LEFT of the replay window in the
+  * lower-left canvas area, for both Diagonal and Corner. Preserve the
+  * approved artwork and its aspect ratio.
   */
  fun choose(mode:Int,original:Rect,vertical:Boolean):Result? {
   if(!original.inCanvas())return null
   val occupied=windows(mode)
   if(occupied.isEmpty())return null
+  // The scoreboard ends before the replay starts, with a >=2.5% gap.
   val zone=when(mode) {
-   V2ReplayFilter.CORNER->Rect(64f,3f,33f,59f)
-   V2ReplayFilter.DIAGONAL->Rect(52f,3f,45f,45f)
+   V2ReplayFilter.CORNER->Rect(2.5f,49f,61.5f,47.5f)
+   V2ReplayFilter.DIAGONAL->Rect(2.5f,51.5f,47.5f,46f)
    else->return null
   }
   val factor=minOf(1f,zone.w/original.w,zone.h/original.h)
@@ -39,7 +37,7 @@ object V2ReplayLayout {
   val h=original.h*factor
   // A scoreboard too small to read is a rejected layout, not a 'success'.
   if(w<(if(vertical)17f else 24f)||h<7f)return null
-  // Keep the right edge aligned and stay as close as practical to bottom-right.
+  // Keep the right edge beside the replay and anchor to the lower canvas.
   val x=zone.right-w
   val y=zone.bottom-h
   val result=Rect(x,y,w,h)
