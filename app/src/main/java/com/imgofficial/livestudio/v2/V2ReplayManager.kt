@@ -53,6 +53,7 @@ class V2ReplayManager(
  @Volatile private var playheadMs=0L
  private var timelineChanged:(Long)->Unit={}
  private var onAirEnded:()->Unit={}
+ private var onAirStopping:()->Unit={}
  private var onAirStarted:(Int)->Unit={}
  private var snapshotDurationMs=10_000L
  private var playbackOffsetMs=0L
@@ -96,6 +97,7 @@ class V2ReplayManager(
  fun isPrepared()=prepared
  fun setTimelineListener(listener:(Long)->Unit){timelineChanged=listener}
  fun setOnAirEnded(listener:()->Unit){onAirEnded=listener}
+ fun setOnAirStopping(listener:()->Unit){onAirStopping=listener}
  fun setOnAirStartedListener(listener:(Int)->Unit){onAirStarted=listener}
  internal fun setHistoricalScoreListener(listener:(V2Scorecard.State?)->Unit){
   historicalScoreListener=listener
@@ -296,6 +298,8 @@ class V2ReplayManager(
  /** A completed Diagonal/Corner unlocks AFTER GPU exit, not mid-animation. */
  fun stopOnAir(){
   if(!active)return
+  // Tell the scoreboard and frame compositor that GPU exit has begun.
+  onAirStopping()
   active=false
   epoch++
   onAirDecoder?.cancel();onAirDecoder=null
@@ -315,6 +319,7 @@ class V2ReplayManager(
   preparingOnAir=false
   modeLocked=false
   if(active){
+   onAirStopping()
    active=false
    onAirDecoder?.cancel();onAirDecoder=null
    operatorDecoder?.cancel();operatorDecoder=null
@@ -419,6 +424,7 @@ class V2ReplayManager(
   filter=null
   timelineChanged={}
   onAirEnded={}
+  onAirStopping={}
   onAirStarted={}
  }
 }
