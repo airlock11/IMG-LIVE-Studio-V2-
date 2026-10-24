@@ -39,6 +39,7 @@ class V2ReplayManager(
  @Volatile private var playheadMs=0L
  private var timelineChanged:(Long)->Unit={}
  private var onAirEnded:()->Unit={}
+ private var onAirStarted:(Int)->Unit={}
  private var snapshotDurationMs=10_000L
 
  fun installStreamRecorder(engine:GenericStream){engine.setRecordController(ring)}
@@ -57,6 +58,7 @@ class V2ReplayManager(
  fun isPrepared()=prepared
  fun setTimelineListener(listener:(Long)->Unit){timelineChanged=listener}
  fun setOnAirEnded(listener:()->Unit){onAirEnded=listener}
+ fun setOnAirStartedListener(listener:(Int)->Unit){onAirStarted=listener}
 
  /**
   * Tap the button: freeze one immutable 10-second snapshot, export it on a
@@ -143,6 +145,8 @@ class V2ReplayManager(
    val playbackRevision=++epoch
    active=true
    renderer.enter(mode)
+   // Apply GPU graphics/layout only when the selected clip is actually ready.
+   onAirStarted(mode)
    onAirDecoder=V2ReplayPlayback(output,surface,{speed},{pos->
     if(active){playheadMs=pos;timelineChanged(pos)}
    },mode!=V2ReplayFilter.FULL,{successful->
@@ -289,5 +293,6 @@ class V2ReplayManager(
   filter=null
   timelineChanged={}
   onAirEnded={}
+  onAirStarted={}
  }
 }
