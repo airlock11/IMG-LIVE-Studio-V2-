@@ -144,7 +144,7 @@ class V2ReplayPanel(
   panel.addView(layouts)
   // ROW 2: smooth target-frame seek, with small current/total indicators.
   val timeline=line()
-  val small=(label:String)->TextView(activity).apply{
+  fun small(label:String)=TextView(activity).apply{
    text=label;textSize=10f;gravity=Gravity.CENTER
    setTextColor(Color.rgb(180,220,195))
   }
