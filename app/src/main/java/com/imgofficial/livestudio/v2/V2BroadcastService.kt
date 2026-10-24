@@ -73,7 +73,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     replayScreenMode=V2ReplayFilter.FULL
     replayScoreFade=0f
     updateScorecard()
-    updateReplayBorders(V2ReplayFilter.FULL,1f)
+    updateReplayBorders(V2ReplayFilter.FULL,0f)
     animateFullReplayBorder(true)
    }
    return replay.putOnAir(mode)
@@ -395,6 +395,14 @@ class V2BroadcastService:Service(),ConnectChecker {
  // Scale one uploaded graphic in GL instead of allocating a new bitmap each tick.
  private fun animateFullReplayBorder(enter:Boolean){
   val epoch=replayLayoutEpoch
+  if(enter&&!replay.hasDecodedFrame()){
+   // Keep broadcast frame fully invisible until a NEW decoded clip frame exists.
+   ui.postDelayed({
+    if(epoch==replayLayoutEpoch&&replay.active)animateFullReplayBorder(true)
+   },33L)
+   return
+  }
+  if(enter)updateReplayBorders(V2ReplayFilter.FULL,1f)
   for(step in 0..17){
    ui.postDelayed({
     if(epoch!=replayLayoutEpoch||ended)return@postDelayed
