@@ -68,14 +68,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun startInstantReplay(mode:Int):Boolean{
   if(replay.isModeLocked())return false
   if(mode==V2ReplayFilter.FULL){
-   if(!replay.putOnAir(mode))return false
-   replayLayoutEpoch++
-   replayScreenMode=mode
-   // Full preview keeps the separate operator graphic; encoded replay hides it.
-   replayScoreFade=0f
-   updateScorecard()
-   updateReplayBorders(mode,1f)
-   return true
+   replay.setOnAirStartedListener {
+    replayLayoutEpoch++
+    replayScreenMode=V2ReplayFilter.FULL
+    replayScoreFade=0f
+    updateScorecard()
+    updateReplayBorders(V2ReplayFilter.FULL,1f)
+    animateFullReplayBorder(true)
+   }
+   return replay.putOnAir(mode)
   }
   if(mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return false
   val candidate=V2ReplayLayout.choose(mode,originalGraphicsRect(),
@@ -84,9 +85,8 @@ class V2BroadcastService:Service(),ConnectChecker {
    notifyState("Cannot fit scoreboard beside replay without overlap.")
    return false
   }
-  if(!replay.putOnAir(mode))return false
-  startReplayLayout(mode,candidate.scoreboard)
-  return true
+  replay.setOnAirStartedListener{startReplayLayout(mode,candidate.scoreboard)}
+  return replay.putOnAir(mode)
  }
  fun seekInstantReplay(positionMs:Long,dragging:Boolean)=replay.seek(positionMs,dragging)
  fun setReplayTimelineListener(listener:(Long)->Unit)=replay.setTimelineListener(listener)
@@ -373,21 +373,36 @@ class V2BroadcastService:Service(),ConnectChecker {
  private fun startReplayLayout(mode:Int,rect:V2ReplayLayout.Rect){
   val epoch=++replayLayoutEpoch
   replayScreenMode=mode
+  replayTempRect=rect
+  replayScoreFade=0f
+  placeGraphics()
+  updateScorecard()
   updateReplayBorders(mode,0f)
-  for(step in 1..6){
+  for(step in 1..4){
    ui.postDelayed({
     if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    val t=step/6f
-    replayScoreFade=if(t<=.5f)1f-t*2f else (t-.5f)*2f
-    if(step==3){
-     replayTempRect=rect
-     placeGraphics()
-    }
-    if(step==6)replayScoreFade=1f
+    val t=step/4f
+    replayScoreFade=t*t*(3f-2f*t)
     updateScorecard()
-    val visual=((t-.5f)*2f).coerceIn(0f,1f)
-    updateReplayBorders(mode,visual*visual*(3f-2f*visual))
-   },step*80L)
+    updateReplayBorders(mode,replayScoreFade)
+   },step*60L)
+  }
+ }
+ // Scale one uploaded graphic in GL instead of allocating a new bitmap each tick.
+ private fun animateFullReplayBorder(enter:Boolean){
+  val epoch=replayLayoutEpoch
+  for(step in 0..17){
+   ui.postDelayed({
+    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+    val t=step/17f
+    val e=t*t*(3f-2f*t)
+    val fraction=if(enter)e else 1f-e
+    val width=30f+70f*fraction
+    try{
+     replayBorderFilter?.setScale(width,width)
+     replayBorderFilter?.setPosition(100f-width,100f-width)
+    }catch(_:Exception){}
+   },(step*850L/17L))
   }
  }
  private fun endReplayLayout(){
@@ -395,6 +410,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   val mode=replayScreenMode
   replayScreenMode=0
   val epoch=++replayLayoutEpoch
+  if(mode==V2ReplayFilter.FULL)animateFullReplayBorder(false)
   val steps=if(mode==V2ReplayFilter.FULL)10 else 8
   for(step in 1..steps){
    ui.postDelayed({
@@ -409,13 +425,16 @@ class V2BroadcastService:Service(),ConnectChecker {
     if(step==3){replayTempRect=null;placeGraphics()}
     if(step==steps)replayScoreFade=1f
     updateScorecard()
-    updateReplayBorders(mode,(1f-step.toFloat()/steps).coerceIn(0f,1f))
+    if(mode==V2ReplayFilter.FULL){
+     if(step==steps)updateReplayBorders(0,0f)
+    }else updateReplayBorders(mode,(1f-step.toFloat()/steps).coerceIn(0f,1f))
    },step*90L)
   }
  }
  private var latestGraphics:android.graphics.Bitmap?=null
+ private var latestOperatorGraphics:android.graphics.Bitmap?=null
  private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
- private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestGraphics){
+ private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestOperatorGraphics?:latestGraphics){
   if(image==null)return
   val pos=lastGraphicsGeometry
   listeners.toList().forEach{listener->try{
@@ -1135,7 +1154,11 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Clock ticks should update the native ImageView only once per frame.
    placeGraphics(notifyPreview=false)
    latestGraphics=picture
-   pushPreviewGraphics(picture)
+   latestOperatorGraphics=if(replayScreenMode==V2ReplayFilter.FULL)
+    V2BroadcastGraphicsRenderer.render(
+     scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    else null
+   pushPreviewGraphics(latestOperatorGraphics?:picture)
    // Retry a failed upload on a subsequent state update or surface attach.
    lastScorecardImageState=if(uploaded)scoreboard.copy() else null
    lastRenderedAward=scoreAward
