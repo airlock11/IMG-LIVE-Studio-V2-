@@ -49,6 +49,7 @@ class V2ReplayManager(
  @Volatile private var preparingOnAir=false
  fun isModeLocked()=modeLocked
  fun hasDecodedFrame()=filter?.hasDecodedFrame()==true
+ fun visualProgress()=filter?.visualProgress()?:0f
  @Volatile private var playheadMs=0L
  private var timelineChanged:(Long)->Unit={}
  private var onAirEnded:()->Unit={}
