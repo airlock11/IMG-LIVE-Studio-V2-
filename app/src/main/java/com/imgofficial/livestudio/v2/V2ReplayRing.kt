@@ -19,8 +19,8 @@ import java.util.concurrent.Executors
  * restarts, reconfigures or consumes its encoder buffers. Bounded byte/frame
  * storage guards device RAM during long basketball matches.
  *
- * Packet data here is the current composited encoder output. A separate clean
- * camera encoder is still required before this can claim graphics-free saves.
+ * Only the secondary PREVIEW-surface encoder supplies replay video. The main
+ * composited RootEncoder packets are delegated unchanged for local MP4 saving.
  */
 class V2ReplayRing(
   private val delegate: RecordController = AndroidMuxerRecordController()
@@ -46,6 +46,7 @@ class V2ReplayRing(
   private var storedBytes = 0L
   private var lastPts = 0L
   @Volatile private var accepting = false
+  @Volatile private var cleanRequired=false
   private val saver = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
 
@@ -61,6 +62,28 @@ class V2ReplayRing(
       }
     }
   }
+  /** Switching clean input invalidates previous composited history. */
+  fun setCleanCaptureEnabled(enabled:Boolean)=synchronized(lock){
+    cleanRequired=enabled
+    video.clear();audio.clear();storedBytes=0L;lastPts=0L
+    videoFormat=null
+  }
+  fun setCleanVideoFormat(format:MediaFormat)=synchronized(lock){
+    if(cleanRequired)videoFormat=format
+  }
+  fun recordCleanVideo(buf:ByteBuffer,info:MediaCodec.BufferInfo){
+    if(!cleanRequired||!accepting)return
+    packet(buf,info)?.let{p->
+      synchronized(lock){
+        if(cleanRequired&&accepting){
+          video.addLast(p)
+          storedBytes+=p.size
+          lastPts=p.pts
+          pruneLocked()
+        }
+      }
+    }
+  }
   fun ready(): Boolean = synchronized(lock) {
     video.size > 5 &&
       lastPts - video.peekFirst().pts >= 10_000_000L &&
@@ -68,7 +91,7 @@ class V2ReplayRing(
       videoFormat != null
   }
   override fun setVideoFormat(videoFormat: MediaFormat) {
-    synchronized(lock) { this.videoFormat = videoFormat }
+    synchronized(lock) { if(!cleanRequired)this.videoFormat=videoFormat }
     delegate.setVideoFormat(videoFormat)
   }
   override fun setAudioFormat(audioFormat: MediaFormat) {
@@ -77,7 +100,10 @@ class V2ReplayRing(
   }
   override fun resetFormats() {
     synchronized(lock) {
-      videoFormat = null; audioFormat = null
+      // RootEncoder may reset its recorder while the independent clean
+      // encoder continues. Keep the clean output format across this reset.
+      videoFormat = if(cleanRequired)videoFormat else null
+      audioFormat = null
       video.clear(); audio.clear(); storedBytes = 0L; lastPts = 0L
     }
     delegate.resetFormats()
@@ -94,7 +120,7 @@ class V2ReplayRing(
     return Packet(bytes,info.presentationTimeUs,info.flags)
   }
   override fun recordVideo(videoBuffer: ByteBuffer, videoInfo: MediaCodec.BufferInfo) {
-    if (accepting) {
+    if (accepting && !cleanRequired) {
       packet(videoBuffer,videoInfo)?.let { p ->
         synchronized(lock) {
           if (accepting) {
@@ -144,7 +170,12 @@ class V2ReplayRing(
     if (start < 0 || start == all.lastIndex) return@synchronized null
     val frames = all.subList(start,all.size).toList()
     val begin = frames.first().pts
-    val audioPackets = audio.filter { it.pts >= begin && it.pts <= lastPts }
+    // Video surface-encoder PTS uses EGL/system time while RootEncoder's
+    // AAC encoder may use a different epoch. Align their newest packet clocks
+    // by offset before writing a consistent MP4 timeline.
+    val audioClockShift=if(audio.isNotEmpty())audio.last().pts-lastPts else 0L
+    val audioPackets=audio.map { it.copy(pts=it.pts-audioClockShift) }
+      .filter { it.pts>=begin && it.pts<=lastPts }
     Snapshot(fmt,audioFormat,frames,audioPackets,lastPts - begin,threshold-begin)
   }
   /** Snapshot is immutable, so exporting never blocks the encoder callback. */
