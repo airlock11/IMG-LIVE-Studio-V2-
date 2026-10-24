@@ -16,7 +16,7 @@ object V2ReplayFrameGraphics {
  private fun RectF.copy()=RectF(left,top,right,bottom)
  fun render(mode:Int,width:Int,height:Int,opacity:Float=1f):Bitmap{
   val image=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
-  if(mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return image
+  if(mode!=V2ReplayFilter.FULL&&mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return image
   val c=Canvas(image)
   val a=opacity.coerceIn(0f,1f)
   fun rect(r:V2ReplayLayout.Rect)=RectF(width*r.x/100f,height*r.y/100f,
@@ -56,7 +56,10 @@ object V2ReplayFrameGraphics {
     3f,3f,bg)
    c.drawText(title,lx,ly+size,label)
   }
-  if(mode==V2ReplayFilter.DIAGONAL){
+  if(mode==V2ReplayFilter.FULL){
+   // Exactly the same border/REPLAY label drawing used by the Corner window.
+   frame(V2ReplayLayout.Rect(2f,2f,96f,96f),"REPLAY")
+  }else if(mode==V2ReplayFilter.DIAGONAL){
    frame(V2ReplayLayout.windows(mode)[0],"LIVE")
    frame(V2ReplayLayout.windows(mode)[1],"REPLAY")
   }else{
