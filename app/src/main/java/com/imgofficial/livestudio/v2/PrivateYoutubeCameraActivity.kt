@@ -261,6 +261,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   }
   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
   animateOperatorReplayExpansion(false)
+ },{
+  // OFF AIR footage becomes visible only when the operator scrubs.
+  if(broadcast?.instantReplayIsActive()!=true)showPrivateReplay()
  })}
  private var operatorCameraFrame:FrameLayout?=null
  private var operatorPreviewExpanded=false
@@ -362,6 +365,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   val frameWidth=minOf(w,h*16/9).coerceAtLeast(1)
   val frameHeight=(frameWidth*9/16).coerceAtLeast(1)
   updateOperatorReplayGeometry(frameWidth,frameHeight)
+  // Hold the preview surface until the NEW on-air snapshot is exported.
+  if(privateReplayView.isAvailable)attachPrivateReplay()
   if(mode==V2ReplayFilter.DIAGONAL){
    // Transform Android's view only: LIVE Surface is never detached.
    monitor.animate().scaleX(.45f).scaleY(.45f)
