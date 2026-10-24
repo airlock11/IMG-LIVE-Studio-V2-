@@ -20,6 +20,11 @@ class V2ReplayManager(
  private val context:Context, private val status:(String)->Unit
 ) {
  val ring=V2ReplayRing()
+ private val cleanCapture=V2ReplayCleanCapture(ring)
+ private var sourceEngine:GenericStream?=null
+ private var captureWidth=1280
+ private var captureHeight=720
+ private var captureFps=30
  private val ui=Handler(Looper.getMainLooper())
  private var filter:V2ReplayFilter?=null
  private var operatorDecoder:V2ReplayPlayback?=null
@@ -44,14 +49,35 @@ class V2ReplayManager(
  private var snapshotDurationMs=10_000L
  private var playbackOffsetMs=0L
 
- fun installStreamRecorder(engine:GenericStream){engine.setRecordController(ring)}
- /** Insert BEFORE scorecard overlays, so replay zoom never scales score/clock. */
- fun installGl(engine:GenericStream){
-  filter=V2ReplayFilter().also{engine.getGlInterface().addFilter(it)}
+ fun installStreamRecorder(engine:GenericStream){
+  sourceEngine=engine
+  engine.setRecordController(ring)
+ }
+ /** Replay is OUTPUT-only; PREVIEW path feeds a second graphics-free encoder. */
+ fun installGl(engine:GenericStream,width:Int,height:Int,fps:Int){
+  captureWidth=width
+  captureHeight=height
+  captureFps=fps
+  filter=V2ReplayFilter().also{
+   it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+   engine.getGlInterface().addFilter(it)
+  }
  }
  fun setCapturing(enabled:Boolean){
-  if(!enabled)backToLive()
-  ring.setCaptureEnabled(enabled)
+  if(!enabled){
+   cleanCapture.stop()
+   backToLive()
+   ring.setCleanCaptureEnabled(false)
+   ring.setCaptureEnabled(false)
+   return
+  }
+  ring.setCaptureEnabled(true)
+  val engine=sourceEngine
+  if(engine==null||!cleanCapture.start(engine,captureWidth,captureHeight,captureFps)){
+   ring.setCleanCaptureEnabled(false)
+   ring.setCaptureEnabled(false)
+   status("Instant Replay unavailable: clean camera encoder unsupported. Main recording remains active.")
+  }
  }
  fun ready()=ring.ready()
  fun fullActive()=active&&filter?.isFull==true
@@ -296,8 +322,11 @@ class V2ReplayManager(
   }catch(_:Exception){}
  }
  fun release(){
+  cleanCapture.stop()
   backToLive()
+  ring.setCleanCaptureEnabled(false)
   ring.setCaptureEnabled(false)
+  sourceEngine=null
   filter=null
   timelineChanged={}
   onAirEnded={}
