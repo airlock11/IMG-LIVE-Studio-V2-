@@ -72,7 +72,8 @@ class V2BroadcastService:Service(),ConnectChecker {
     replayLayoutEpoch++
     replayScreenMode=V2ReplayFilter.FULL
     operatorFullReplayExitActive=false
-    replayScoreFade=0f
+    historicalReplayScore=replay.historicalAtPlayhead()
+    replayScoreFade=1f
     updateScorecard()
     updateReplayBorders(V2ReplayFilter.FULL,0f)
     animateFullReplayBorder(true)
@@ -355,6 +356,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var replayLayoutEpoch=0
  private var replayLayoutRestoring=false
  private var replayScoreFade=1f
+ private var historicalReplayScore:V2Scorecard.State?=null
  private fun originalGraphicsRect():V2ReplayLayout.Rect{
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
   var width=(if(compact)31f else 84f)*graphicsSize/60f
@@ -382,6 +384,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   val epoch=++replayLayoutEpoch
   replayLayoutRestoring=false
   replayScreenMode=mode
+  historicalReplayScore=null
   replayTempRect=rect
   replayScoreFade=0f
   placeGraphics()
@@ -426,6 +429,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(replayScreenMode==0&&replayTempRect==null)return
   val mode=replayScreenMode
   replayScreenMode=0
+  historicalReplayScore=null
   operatorFullReplayExitActive=mode==V2ReplayFilter.FULL
   replayLayoutRestoring=true
   val epoch=++replayLayoutEpoch
@@ -683,6 +687,14 @@ class V2BroadcastService:Service(),ConnectChecker {
 
  override fun onCreate(){
   super.onCreate()
+  replay.setHistoricalScoreListener { historical ->
+   if(replayScreenMode==V2ReplayFilter.FULL &&
+     historical!=null && historical!=historicalReplayScore){
+    historicalReplayScore=historical
+    updateScorecard()
+   }
+  }
+  replay.recordScoreboardState(scoreboard)
   if(android.os.Build.VERSION.SDK_INT>=29){
    val manager=getSystemService(POWER_SERVICE) as PowerManager
    try{
@@ -1166,16 +1178,22 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
  }
  private fun updateScorecard(){
+  // Keep timestamping LIVE changes even while historical footage is on air.
+  replay.recordScoreboardState(scoreboard)
   val filter=scoreFilter
-  val onAirAlpha=scoreAlpha*replayScoreFade
-  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==scoreAward &&
-      lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
+  val replayFull=replayScreenMode==V2ReplayFilter.FULL
+  val renderedState=if(replayFull)
+   (historicalReplayScore?:replay.historicalAtPlayhead()?:scoreboard) else scoreboard
+  val renderedAward=if(replayFull)null else scoreAward
+  val onAirAlpha=if(replayFull)1f else scoreAlpha*replayScoreFade
+  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==renderedAward &&
+      lastGraphicsStyle==graphicsStyle && lastScorecardImageState==renderedState)return
   try{
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
    val picture=V2BroadcastGraphicsRenderer.render(
-    scoreboard,onAirAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    renderedState,onAirAlpha*graphicsOpacity,renderedAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can reset on
    // texture replacement in the GPU filter lifecycle. A local preview
    // cannot be treated as proof that the encoded GL upload succeeded.
@@ -1189,14 +1207,14 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Clock ticks should update the native ImageView only once per frame.
    placeGraphics(notifyPreview=false)
    latestGraphics=picture
-   latestOperatorGraphics=if(replayScreenMode==V2ReplayFilter.FULL||operatorFullReplayExitActive)
+   latestOperatorGraphics=if(replayFull)picture else if(operatorFullReplayExitActive)
     V2BroadcastGraphicsRenderer.render(
      scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
     else null
    pushPreviewGraphics(latestOperatorGraphics?:picture)
    // Retry a failed upload on a subsequent state update or surface attach.
-   lastScorecardImageState=if(uploaded)scoreboard.copy() else null
-   lastRenderedAward=scoreAward
+   lastScorecardImageState=if(uploaded)renderedState.copy() else null
+   lastRenderedAward=renderedAward
    lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
    lastScoreAlpha=onAirAlpha
