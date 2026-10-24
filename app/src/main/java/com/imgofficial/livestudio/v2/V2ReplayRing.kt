@@ -34,7 +34,9 @@ class V2ReplayRing(
     val audioFormat: MediaFormat?,
     val video: List<Packet>,
     val audio: List<Packet>,
-    val durationUs: Long
+    val durationUs: Long,
+    // Preceding sync frame is decoder preroll, NOT part of the visible clip.
+    val playbackOffsetUs: Long
   )
   private val lock = Any()
   private val video = ArrayDeque<Packet>()
@@ -61,8 +63,9 @@ class V2ReplayRing(
   }
   fun ready(): Boolean = synchronized(lock) {
     video.size > 5 &&
-      lastPts - video.peekFirst().pts >= 9_000_000L &&
-      video.any { it.key } && videoFormat != null
+      lastPts - video.peekFirst().pts >= 10_000_000L &&
+      video.any { it.key && it.pts <= lastPts - 10_000_000L } &&
+      videoFormat != null
   }
   override fun setVideoFormat(videoFormat: MediaFormat) {
     synchronized(lock) { this.videoFormat = videoFormat }
@@ -132,19 +135,17 @@ class V2ReplayRing(
   }
   fun snapshot(): Snapshot? = synchronized(lock) {
     val fmt = videoFormat ?: return@synchronized null
-    if (video.size < 6 || lastPts-video.peekFirst().pts < 9_000_000L)
+    if (video.size < 6 || lastPts-video.peekFirst().pts < 10_000_000L)
       return@synchronized null
     val all = video.toList()
     val threshold = lastPts - 10_000_000L
     // Prefer the nearest preceding keyframe to avoid undecodable MP4.
-    val start = all.indexOfLast { it.key && it.pts <= threshold }.let { found ->
-      if (found >= 0) found else all.indexOfFirst { it.key }
-    }
+    val start = all.indexOfLast { it.key && it.pts <= threshold }
     if (start < 0 || start == all.lastIndex) return@synchronized null
     val frames = all.subList(start,all.size).toList()
     val begin = frames.first().pts
     val audioPackets = audio.filter { it.pts >= begin && it.pts <= lastPts }
-    Snapshot(fmt,audioFormat,frames,audioPackets,lastPts - begin)
+    Snapshot(fmt,audioFormat,frames,audioPackets,lastPts - begin,threshold-begin)
   }
   /** Snapshot is immutable, so exporting never blocks the encoder callback. */
   fun export(snapshot: Snapshot, file: File, result: (Boolean)->Unit) {
