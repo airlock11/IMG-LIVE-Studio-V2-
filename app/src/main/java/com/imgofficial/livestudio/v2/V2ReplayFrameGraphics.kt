@@ -46,15 +46,28 @@ object V2ReplayFrameGraphics {
     typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
     color=Color.argb((240*a).toInt(),235,248,239)
    }
-   val bg=Paint(Paint.ANTI_ALIAS_FLAG).apply{
-    color=Color.argb((200*a).toInt(),12,26,22)
-   }
-   val tw=label.measureText(title)
+   // Labels are transparent over footage: red status for LIVE, embossed
+   // white with dark text-only shadow for REPLAY. Never draw opaque boxes.
    val lx=dst.left+width*.013f
-   val ly=dst.top+height*.014f
-   c.drawRoundRect(RectF(lx-3f,ly-3f,lx+tw+width*.01f,ly+size+4f),
-    3f,3f,bg)
-   c.drawText(title,lx,ly+size,label)
+   val ly=dst.top+height*.014f+size
+   if(title=="LIVE"){
+    label.color=Color.argb((255*a).toInt(),244,55,62)
+    label.setShadowLayer(2.5f,0f,1.2f,0xBB250709.toInt())
+    val dot=Paint(Paint.ANTI_ALIAS_FLAG).apply{
+     color=Color.argb((255*a).toInt(),245,38,44)
+     setShadowLayer(3f,0f,1f,0xBB3E070B.toInt())
+    }
+    val radius=(size*.24f).coerceAtLeast(3f)
+    c.drawCircle(lx+radius,ly-size*.38f,radius,dot)
+    c.drawText("LIVE",lx+radius*2f+width*.005f,ly,label)
+   }else{
+    label.color=Color.argb((255*a).toInt(),251,252,253)
+    label.setShadowLayer(3.2f,1.1f,2f,0xEF020607.toInt())
+    c.drawText("REPLAY",lx,ly+1f,label)
+    label.clearShadowLayer()
+    label.color=Color.argb((210*a).toInt(),255,255,255)
+    c.drawText("REPLAY",lx,ly,label)
+   }
   }
   if(mode==V2ReplayFilter.FULL){
    // Exactly the same border/REPLAY label drawing used by the Corner window.
@@ -64,13 +77,21 @@ object V2ReplayFrameGraphics {
    frame(V2ReplayLayout.windows(mode)[1],"REPLAY")
   }else{
    frame(V2ReplayLayout.windows(mode)[0],"REPLAY")
+   // Transparent red LIVE identifier, aligned with the video canvas.
    val label=Paint(Paint.ANTI_ALIAS_FLAG).apply{
     textSize=(height*.023f).coerceIn(10f,21f)
     typeface=Typeface.create("sans-serif-medium",Typeface.BOLD)
-    color=Color.argb((235*a).toInt(),78,232,152)
-    setShadowLayer(2f,0f,1f,Color.BLACK)
+    color=Color.argb((255*a).toInt(),244,55,62)
+    setShadowLayer(3f,0f,1.5f,0xCC2B0909.toInt())
    }
-   c.drawText("LIVE",width*.025f,height*.045f,label)
+   val radius=(height*.0058f).coerceAtLeast(3f)
+   val dot=Paint(Paint.ANTI_ALIAS_FLAG).apply{
+    color=Color.argb((255*a).toInt(),244,55,62)
+    setShadowLayer(3f,0f,1f,0xB0220608.toInt())
+   }
+   val y=height*.047f
+   c.drawCircle(width*.025f+radius,y-radius,radius,dot)
+   c.drawText("LIVE",width*.025f+radius*2f+width*.006f,y,label)
   }
   return image
  }
