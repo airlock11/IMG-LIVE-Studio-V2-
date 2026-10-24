@@ -128,12 +128,40 @@ class V2ReplayManager(
     context.contentResolver.update(destination!!,ContentValues().apply{
      put(MediaStore.Video.Media.IS_PENDING,0)
     },null,null)
+    // The gallery MP4 also appears in IMG LIVE Studio's saved local clips.
+    // Its platform is Offline: exporting a video is not a livestream.
+    indexSavedClip(destination!!,source.name)
     true
    }
   }catch(_:Exception){
    destination?.let{try{context.contentResolver.delete(it,null,null)}catch(_:Exception){}}
    false
   }
+ }
+ private fun indexSavedClip(uri:android.net.Uri,name:String){
+  try{
+   val prefs=context.getSharedPreferences("img-v2-native-clips",Context.MODE_PRIVATE)
+   val history=try{org.json.JSONArray(prefs.getString("clips","[]"))}
+    catch(_:Exception){org.json.JSONArray()}
+   val item=org.json.JSONObject()
+    .put("id",System.currentTimeMillis().toString())
+    .put("name",name)
+    .put("createdAt",System.currentTimeMillis())
+    .put("uri",uri.toString())
+    .put("home","REPLAY")
+    .put("away","")
+    .put("scores",org.json.JSONArray())
+    .put("sport","basketball")
+    .put("kind","instant_replay")
+    .put("platform","Offline")
+    .put("platforms",org.json.JSONArray())
+   history.put(item)
+   // Trim metadata to 80 entries, never delete user's actual saved MP4 files.
+   val start=(history.length()-80).coerceAtLeast(0)
+   val trimmed=org.json.JSONArray()
+   for(i in start until history.length())trimmed.put(history.get(i))
+   prefs.edit().putString("clips",trimmed.toString()).apply()
+  }catch(_:Exception){}
  }
  fun release(){
   stop();ring.setCaptureEnabled(false)
