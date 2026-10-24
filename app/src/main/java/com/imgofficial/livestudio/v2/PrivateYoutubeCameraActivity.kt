@@ -265,30 +265,84 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  },{
   // OFF AIR footage becomes visible only when the operator scrubs.
   if(broadcast?.instantReplayIsActive()!=true)showPrivateReplay()
+ },{zoom,x,y->
+  // Mirror on-air zoom in the decoded operator view, never the scoreboard.
+  if(::privateReplayView.isInitialized&&operatorReplayMode==V2ReplayFilter.FULL){
+   val w=privateReplayView.width.toFloat()
+   val h=privateReplayView.height.toFloat()
+   if(w>0f&&h>0f){
+    val matrix=android.graphics.Matrix()
+    matrix.setScale(zoom,zoom,x*w,(1f-y)*h)
+    privateReplayView.setTransform(matrix)
+   }
+  }
  })}
  private var operatorCameraFrame:FrameLayout?=null
+ private var operatorClockCard:LinearLayout?=null
+ private var operatorQuarterCard:LinearLayout?=null
+ private var operatorTopRow:LinearLayout?=null
+ private var operatorScoreRow:LinearLayout?=null
+ private var operatorFoulRow:LinearLayout?=null
  private var operatorPreviewExpanded=false
  private var operatorPreviewAnimator:android.animation.ValueAnimator?=null
+
+ /**
+  * Full Replay enlarges the ACTUAL displayed 16:9 operator video by up to 30%.
+  * Expand the row HEIGHT as well as the preview WIDTH; widening only the card
+  * adds black sidebars instead of increasing video size. Encoded output is unchanged.
+  */
  private fun animateOperatorReplayExpansion(expand:Boolean){
   val camera=operatorCameraFrame?:return
-  if(operatorPreviewExpanded==expand)return
+  val clock=operatorClockCard?:return
+  val quarter=operatorQuarterCard?:return
+  val top=operatorTopRow?:return
+  val score=operatorScoreRow?:return
   val parent=camera.parent as? LinearLayout?:return
-  val target=if(expand){
-   val cards=(0 until parent.childCount).map{parent.getChildAt(it)}
-    .filter{it!==camera}
-   // Keep game clock, period buttons and system safe areas visible.
-   val available=cards.all{it.width>=dp(145)}&&parent.width>=dp(770)
-   if(available).44f else .36f
-  }else .36f
-  operatorPreviewExpanded=expand&&target>.36f
+  val isPickleball=intent.getStringExtra("img_sport")=="pickleball"
+  val normalTop=if(isPickleball).54f else .51f
+  val normalScore=if(isPickleball).46f else .35f
+  val normalFouls=if(isPickleball)0f else .14f
+  val usableWidth=(parent.width-2*dp(5)).coerceAtLeast(1)
+  // Retain comfortable clock and quarter hit areas on smaller phones.
+  val clockMinimum=dp(155)
+  val quarterMinimum=dp(if(isPickleball)135 else 165)
+  val maximumCamera=(usableWidth-clockMinimum-quarterMinimum).coerceAtLeast(0)
+  val safeScale=if(expand)
+   minOf(1.30f,maximumCamera/(usableWidth*.36f)).coerceIn(1f,1.30f)
+   else 1f
+  val fullSize=expand&&safeScale>1.001f
+  if(operatorPreviewExpanded==fullSize&&!expand)return
+  operatorPreviewExpanded=fullSize
   operatorPreviewAnimator?.cancel()
-  val params=camera.layoutParams as? LinearLayout.LayoutParams?:return
-  operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(params.weight,target).apply{
-   duration=300L
+  val cameraWeight=.36f*safeScale
+  val otherFactor=(1f-cameraWeight)/.64f
+  val targetClock=.34f*otherFactor
+  val targetQuarter=.30f*otherFactor
+  val targetTop=normalTop*safeScale
+  val restFactor=(1f-targetTop)/(1f-normalTop)
+  val targetScore=normalScore*restFactor
+  val targetFouls=normalFouls*restFactor
+  fun weight(view:android.view.View)=
+   (view.layoutParams as? LinearLayout.LayoutParams)?.weight?:0f
+  fun setWeight(view:android.view.View,value:Float){
+   val lp=view.layoutParams as? LinearLayout.LayoutParams?:return
+   if(kotlin.math.abs(lp.weight-value)>.0001f){
+    lp.weight=value
+    view.layoutParams=lp
+   }
+  }
+  val views=listOf(camera,clock,quarter,top,score)+listOfNotNull(operatorFoulRow)
+  val ends=listOf(cameraWeight,targetClock,targetQuarter,targetTop,targetScore)+
+   (if(operatorFoulRow!=null)listOf(targetFouls) else emptyList())
+  val begins=views.map{weight(it)}
+  operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
+   duration=320L
    interpolator=android.view.animation.DecelerateInterpolator()
-   addUpdateListener{
-    params.weight=it.animatedValue as Float
-    camera.layoutParams=params
+   addUpdateListener { frame ->
+    val t=frame.animatedValue as Float
+    views.forEachIndexed{index,view->
+     setWeight(view,begins[index]+(ends[index]-begins[index])*t)
+    }
    }
    start()
   }
@@ -356,6 +410,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  private fun showOnAirReplayPreview(mode:Int){
   operatorReplayMode=mode
+  privateReplayView.setTransform(android.graphics.Matrix())
   privateReplayVisible=true
   privateReplayView.alpha=0f
   privateReplayView.visibility=View.VISIBLE
@@ -398,6 +453,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private fun hidePrivateReplay(){
   privateReplayVisible=false
   operatorReplayMode=0
+  if(::privateReplayView.isInitialized)privateReplayView.setTransform(android.graphics.Matrix())
   broadcast?.detachPrivateReplayPreview()
   if(::privateReplayView.isInitialized){
    privateReplayView.visibility=View.GONE;privateReplayView.alpha=0f
@@ -894,6 +950,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   // Operator-only TextureView: never supplied to the live H264 encoder.
   privateReplayView=android.view.TextureView(this).apply{
    visibility=View.GONE;alpha=0f;isOpaque=true
+   // Touch events must reach the visible replay surface, not only LIVE.
+   setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
    surfaceTextureListener=object:android.view.TextureView.SurfaceTextureListener{
     override fun onSurfaceTextureAvailable(t:android.graphics.SurfaceTexture,w:Int,h:Int){
      attachPrivateReplay()
@@ -949,9 +1007,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
 
   // Single aligned strip: video, game clock, and game period.
   val top=horizontal()
+  operatorTopRow=top
   operatorCameraFrame=camera
    top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
   val clockCard=card()
+  operatorClockCard=clockCard
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
   resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset").apply{
@@ -990,6 +1050,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   clockCard.addView(timeActions)
   top.addView(clockCard,LinearLayout.LayoutParams(0,-1,.34f).apply{leftMargin=gap})
   val quarterCard=card()
+  operatorQuarterCard=quarterCard
   quarterCard.addView(smallLabel(if(isPickleball)"GAME / ROUND" else "QUARTER"),
    LinearLayout.LayoutParams(-1,dp(18)))
   val quarterMain=horizontal()
@@ -1047,12 +1108,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    return c
   }
   val scoreGrid=horizontal().apply{setPadding(0,gap,0,0)}
+  operatorScoreRow=scoreGrid
   scoreGrid.addView(teamCard(0),LinearLayout.LayoutParams(0,-1,1f))
   scoreGrid.addView(teamCard(1),LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
   body.addView(scoreGrid,sized(if(isPickleball).46f else .35f))
 
   if(!isPickleball){
    val fouls=horizontal().apply{setPadding(0,dp(3),0,0)}
+   operatorFoulRow=fouls
    fun foulCounter(team:Int):LinearLayout{
     val row=horizontal()
     val display=ink("0",16f).apply{
