@@ -967,10 +967,15 @@ class V2BroadcastService:Service(),ConnectChecker {
   val safe=3f
   val px=if(compact)100f-pw-safe else (100f-pw)/2f
   val py=100f-ph-safe
+  val temporary=replayTempRect
+  val x=temporary?.x?:px
+  val y=temporary?.y?:py
+  val width=temporary?.w?:pw
+  val height=temporary?.h?:ph
   try{
-   filter?.setScale(pw,ph)
-   filter?.setPosition(px,py)
-   lastGraphicsGeometry=floatArrayOf(px,py,pw,ph)
+   filter?.setScale(width,height)
+   filter?.setPosition(x,y)
+   lastGraphicsGeometry=floatArrayOf(x,y,width,height)
    if(notifyPreview)pushPreviewGraphics()
   }catch(_:Exception){notifyState("Unable to size native broadcast graphics.")}
  }
@@ -1090,14 +1095,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private fun updateScorecard(){
   val filter=scoreFilter
-  if(lastScoreAlpha==scoreAlpha && lastRenderedAward==scoreAward &&
+  val onAirAlpha=scoreAlpha*replayScoreFade
+  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==scoreAward &&
       lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
   try{
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
    val picture=V2BroadcastGraphicsRenderer.render(
-    scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    scoreboard,onAirAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can reset on
    // texture replacement in the GPU filter lifecycle. A local preview
    // cannot be treated as proof that the encoded GL upload succeeded.
@@ -1117,7 +1123,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    lastRenderedAward=scoreAward
    lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
-   lastScoreAlpha=scoreAlpha
+   lastScoreAlpha=onAirAlpha
    // No keyframe request for score changes or clock ticks.
   }catch(_:Exception){notifyState("Unable to redraw native video scoreboard.")}
  }
@@ -1260,6 +1266,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  fun stopBroadcast(){
   replay.release()
+  replayScreenMode=0;replayTempRect=null;replayBorderFilter=null
   val wasOffline=offlineRecording
   ui.removeCallbacks(sponsorAdvance)
   sponsorShowing=false;transparentSponsor()
