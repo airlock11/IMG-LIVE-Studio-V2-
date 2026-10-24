@@ -33,6 +33,9 @@ class V2ReplayManager(
   private set
  @Volatile var prepared=false
   private set
+ @Volatile private var modeLocked=false
+ @Volatile private var preparingOnAir=false
+ fun isModeLocked()=modeLocked
  @Volatile private var playheadMs=0L
  private var timelineChanged:(Long)->Unit={}
  private var onAirEnded:()->Unit={}
@@ -62,6 +65,7 @@ class V2ReplayManager(
   */
  fun prepare(sourceActive:Boolean,result:(Boolean)->Unit):Boolean{
   if(!sourceActive){status("Start GO LIVE or RECORD first");return false}
+  if(modeLocked||active||preparingOnAir){status("Finish the active replay before preparing another");return false}
   val sample=ring.snapshot()?:run{status("Replay buffer needs 10 seconds of footage");return false}
   backToLive()
   val request=++epoch
@@ -96,30 +100,60 @@ class V2ReplayManager(
   * Same fixed clip is routed into encoded GPU composition ONLY on explicit
   * Full/Diagonal/Corner tap, retaining current position and speed.
   */
+ /**
+  * Snapshot at DISPLAY MODE selection, never at OFF AIR panel opening.
+  * Export on the worker, leaving the original LIVE pipeline uninterrupted.
+  */
  fun putOnAir(mode:Int):Boolean{
-  if(mode !in V2ReplayFilter.FULL..V2ReplayFilter.CORNER||!prepared)return false
-  val file=preparedFile?.takeIf{it.isFile}?:return false
-  val renderer=filter?:return false
-  val surface=renderer.decoderSurface(250L)?:return false
-  detachPrivatePreview()
-  onAirDecoder?.cancel()
-  onAirDecoder=null
-  val startedAt=playheadMs
+  if(mode !in V2ReplayFilter.FULL..V2ReplayFilter.CORNER ||
+     !prepared||modeLocked||active||preparingOnAir)return false
+  val fresh=ring.snapshot()?:run{
+   status("Replay buffer needs a complete 10-second history");return false
+  }
+  modeLocked=true
+  preparingOnAir=true
   val request=++epoch
-  active=true
-  // The compositor stays live until a decoded frame reaches its OES texture.
-  renderer.enter(mode)
-  onAirDecoder=V2ReplayPlayback(file,surface,{speed},{
-   if(active){playheadMs=it;timelineChanged(it)}
-  },true,{successful->
-   if(request==epoch&&active){
-    stopOnAir()
+  val output=File(context.cacheDir,"IMG_REPLAY_MODE_${System.currentTimeMillis()}.mp4")
+  ring.export(fresh,output){ok->
+   if(request!=epoch){output.delete();return@export}
+   preparingOnAir=false
+   if(!ok){
+    modeLocked=false
+    status("Unable to prepare selected replay; LIVE preserved")
     onAirEnded()
-    if(!successful)status("Replay decoder stopped; LIVE restored")
+    return@export
    }
-  }).also{
-   it.seekTo(startedAt,false)
-   it.start()
+   val renderer=filter
+   val surface=renderer?.decoderSurface(30L)
+   if(renderer==null||surface==null){
+    output.delete();modeLocked=false
+    status("Replay decoder surface unavailable; LIVE preserved")
+    onAirEnded()
+    return@export
+   }
+   detachPrivatePreview()
+   onAirDecoder?.cancel();onAirDecoder=null
+   val old=preparedFile
+   preparedFile=output
+   if(old!=null&&old!==output)ui.postDelayed({old.delete()},1700L)
+   snapshot=fresh
+   snapshotDurationMs=(fresh.durationUs/1000L).coerceAtLeast(1000L)
+   playheadMs=0L
+   timelineChanged(0L)
+   val playbackRevision=++epoch
+   active=true
+   renderer.enter(mode)
+   onAirDecoder=V2ReplayPlayback(output,surface,{speed},{pos->
+    if(active){playheadMs=pos;timelineChanged(pos)}
+   },mode!=V2ReplayFilter.FULL,{successful->
+    if(playbackRevision==epoch&&active){
+     stopOnAir()
+     if(!successful)status("Replay decoder stopped; LIVE restored")
+    }
+   }).also{
+    it.seekTo(0L,false)
+    it.start()
+   }
   }
   return true
  }
@@ -136,25 +170,37 @@ class V2ReplayManager(
   if(active)onAirDecoder?.seekTo(safe,dragging)
   else operatorDecoder?.seekTo(safe,dragging)
  }
+ /** A completed Diagonal/Corner unlocks AFTER GPU exit, not mid-animation. */
  fun stopOnAir(){
   if(!active)return
   active=false
   epoch++
   onAirDecoder?.cancel();onAirDecoder=null
   filter?.exit()
-  filter?.resetZoom()
+  val exitRevision=epoch
+  ui.postDelayed({
+   if(exitRevision==epoch&&!active){
+    modeLocked=false
+    onAirEnded()
+   }
+  },540L)
   status("Back to LIVE")
  }
  fun backToLive(){
-  stopOnAir()
-  epoch++
+  epoch++ // Cancel in-flight mode export and stale decoder completion.
+  preparingOnAir=false
+  modeLocked=false
+  if(active){
+   active=false
+   onAirDecoder?.cancel();onAirDecoder=null
+   filter?.exit()
+  }
   detachPrivatePreview()
   prepared=false
   playheadMs=0L
   snapshot=null
   val old=preparedFile
   preparedFile=null
-  // Give the decoder a moment to release the opened MP4 descriptor.
   if(old!=null)ui.postDelayed({old.delete()},1700L)
   timelineChanged(0L)
  }
