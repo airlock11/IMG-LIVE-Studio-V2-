@@ -327,7 +327,7 @@ test('IMG V2 Issues 5–6: native controls and clean text-only End Stream confir
  assert.ok(native.includes('liveNow->"STOP STREAMING"'));
  assert.ok(native.includes('Color.rgb(181,34,44)'),'Live button should be red');
  assert.ok(native.includes('start.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null)'),'No stop square');
- assert.ok(native.includes('resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset")'));
+ assert.ok(native.includes('resetClockButton=compactIconAction(')&&native.includes('"reset","Reset game clock to configured starting time"'));
  assert.ok(native.includes('clockHeader.addView(resetClockButton'));
  assert.ok(native.includes('timeoutButton=iconButton(darkButton("TIMEOUT")'));
  assert.ok(native.includes('showTimeoutPreview(timeoutButton)'));
@@ -464,7 +464,7 @@ test('Timeout suspends game clock and native GL sponsor slides reach real record
  assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(timeoutSlideshowEnabled)'));
  assert.ok(timeout.includes('broadcast?.setSponsorSlideshow(false)'));
  assert.ok(timeout.includes('gameRunning=gameWasRunningBeforeTimeout&&gameSeconds>0'));
- assert.ok(svc.includes('ImageFilterRender().also{gl.addFilter(it)}'));
+ assert.ok(svc.includes('sponsorFilter=ImageFilterRender().also{')&&svc.includes('gl.addFilter(it)')&&svc.includes('it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)'));
  assert.ok(svc.includes('sponsorFilter?.setImage(frame)'));
  assert.ok(svc.includes('ui.postDelayed(sponsorAdvance,sponsorIntervalMs)'));
  assert.ok(svc.includes('ui.removeCallbacks(sponsorAdvance)'));
@@ -516,7 +516,7 @@ test('V2 home offline recording cards, truthful platform marks and single-tap ti
  assert.ok(app.includes('id="home-offline-recordings"'),'Offline records live on Home');
  assert.ok(app.includes('const streams=clips.filter(x=>recordedPlatforms(x).length>0)'),'My Streams excludes offline MP4');
  assert.ok(app.includes('const offlineRecordings=clips.filter(x=>!recordedPlatforms(x).length)'));
- assert.ok(app.includes("action=(clip.native?'open-native-recording-':'play-recording-')"),'Saved clips remain playable');
+ assert.ok(app.includes("const action=(native?'open-native-recording-':'play-recording-')"),'Saved clips remain playable');
  assert.ok(app.includes('function platformMarks(values)')&&app.includes('recording-platform-logos'));
  assert.ok(app.includes('youtube:')&&app.includes('facebook:'),'Both real destination logos supported');
  assert.ok(app.includes('clip.native?[]:'),'Legacy forced YouTube metadata is not trusted');
@@ -561,7 +561,7 @@ test('Native V2 replay: rolling encoded ring, on-air 3-mode GPU compositor and o
  assert.ok(ring.includes('it.key')&&ring.includes('MediaMuxer('),'Saved clip starts with keyframe and is MP4');
  assert.ok(service.includes('replay.setCapturing(true)'),'Capture active in both live and offline modes');
  assert.ok(service.includes('replay.setCapturing(false)'),'Pause/stop clears unavailable footage');
- assert.ok(service.includes('replay.installGl(engine)'),'Decoder overlay runs in GPU production compositor');
+ assert.ok(service.includes('replay.installGl(engine,videoWidth,videoHeight,videoFps)'),'Decoder overlay runs in GPU production compositor');
  assert.ok(render.includes('DIAGONAL=2')&&render.includes('CORNER=3'));
  assert.ok(render.includes('samplerExternalOES'),'Replay source decoded onto separate OES texture');
  assert.ok(render.includes('vec4(.025,.525,.475,.975)'),'Diagonal has top-left window');
@@ -606,8 +606,8 @@ test('V2 Instant Replay update: four compact rows, fixed OFF AIR snapshot, bidir
  assert.ok(m.includes('ring.export(sample,output)'),'Original fixed clip is exported privately');
  assert.ok(m.includes('fun attachPrivatePreview(surface:android.view.Surface)'),'Separate private decoder surface');
  assert.ok(m.includes('fun putOnAir(mode:Int)'),'Broadcast only on mode tap');
- assert.ok(m.includes('if(active)onAirDecoder?.seekTo(safe,dragging)'),'ON AIR scrubbing moves actual compositor');
- assert.ok(m.includes('else operatorDecoder?.seekTo(safe,dragging)'),'OFF AIR scrubbing stays private');
+ assert.ok(m.includes('if(active)onAirDecoder?.seekTo(safe+playbackOffsetMs,dragging)'),'ON AIR scrubbing moves actual compositor');
+ assert.ok(m.includes('operatorDecoder?.seekTo(safe+playbackOffsetMs,dragging)'),'OFF AIR scrubbing stays private');
  assert.ok(player.includes('MediaExtractor.SEEK_TO_PREVIOUS_SYNC'),'Seek starts from decode keyframe');
  assert.ok(player.includes('if(pts+frameDurationUs/2<requestedUs)'),'Decode dependent frames to requested time');
  assert.ok(player.includes('val rate=speed().coerceIn(.25f,1f)'),'Auto-play honors selected rate');
@@ -619,10 +619,10 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  const base=new URL('../java/com/imgofficial/livestudio/v2/',import.meta.url);
  const names=['MainActivity.kt','V2SavedMp4Player.kt','PrivateYoutubeCameraActivity.kt','V2ReplayPlayback.kt','V2ReplayLayout.kt','V2ReplayFrameGraphics.kt','V2ReplayPanel.kt','V2BroadcastService.kt'];
  const d=Object.fromEntries(await Promise.all(names.map(async n=>[n,await readFile(new URL(n,base),'utf8')])));
- assert.ok(d['MainActivity.kt'].includes('savedPlayer.show(uri,label)'));
+ assert.ok(d['MainActivity.kt'].includes('savedPlayer.show(uri)'));
  assert.ok(!d['MainActivity.kt'].includes('No video player is available for this saved recording.'));
  assert.ok(d['V2SavedMp4Player.kt'].includes('VideoView(activity)'));
- assert.ok(d['V2SavedMp4Player.kt'].includes('MediaController(activity)'));
+ assert.ok(d['V2SavedMp4Player.kt'].includes('SeekBar(activity)')&&d['V2SavedMp4Player.kt'].includes('setCanceledOnTouchOutside(true)'));
  assert.ok(d['V2SavedMp4Player.kt'].includes('openAssetFileDescriptor(uri,"r")'));
  assert.ok(!d['V2SavedMp4Player.kt'].includes('ACTION_VIEW'));
  const a=d['PrivateYoutubeCameraActivity.kt'];
@@ -653,4 +653,35 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  assert.ok(frames.includes('Paint.Style.STROKE'));
  assert.ok(frames.includes('Canvas(image)'));
  assert.ok(d['V2ReplayPanel.kt'].includes('onAirSelected(index+1)'),'Full expansion only after mode tap');
+});
+
+
+test('Update 17: Events and Homepage use consistent saved-recording cards and replay children',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const native=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2RecordingLibrary.kt',import.meta.url),'utf8');
+ const manager=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2ReplayManager.kt',import.meta.url),'utf8');
+ assert.ok(app.includes('function allSavedClips()')&&app.includes('function savedRecordingCard('));
+ assert.ok(app.includes('const library=allSavedClips(),events=upcoming()'));
+ assert.ok(app.includes('const replayDropdownOpen=new Set()'));
+ assert.ok(app.includes('native-export-all-')&&app.includes('native-export-replay-'));
+ assert.ok(native.includes('fun addRecording(')&&native.includes('fun addReplay('));
+ assert.ok(native.includes('fun removeSession(')&&native.includes('sessionId'));
+ assert.ok(manager.includes('automaticSaveOnAir()')&&manager.includes('V2RecordingLibrary.addReplay('));
+});
+test('Update 17: minimal in-app players and deliberate game delete confirmation',async()=>{
+ const app=await readFile(new URL('./app.js',import.meta.url),'utf8');
+ const player=await readFile(new URL('../java/com/imgofficial/livestudio/v2/V2SavedMp4Player.kt',import.meta.url),'utf8');
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/MainActivity.kt',import.meta.url),'utf8');
+ assert.ok(app.includes('img-delete-confirm')&&app.includes('>Cancel</button>')&&app.includes('>Delete</button>'));
+ assert.ok(app.includes('img-player-toolbar')&&app.includes('data-player-seek'));
+ assert.ok(player.includes('VideoView(activity)')&&player.includes('SeekBar(activity)'));
+ assert.ok(!player.includes('MediaController(activity)')&&!player.includes('ACTION_VIEW'));
+ assert.ok(activity.includes('native-export-replay:')&&activity.includes('native-export-all:')&&activity.includes('native-delete-game:'));
+ assert.ok(activity.includes('ZipOutputStream(')&&activity.includes('ACTION_CREATE_DOCUMENT'));
+});
+test('Minor Adjustment 35: only actual on-air Corner or Diagonal frame auto-closes replay panel',async()=>{
+ const activity=await readFile(new URL('../java/com/imgofficial/livestudio/v2/PrivateYoutubeCameraActivity.kt',import.meta.url),'utf8');
+ assert.ok(activity.includes('replayModeWaitingForFrame==mode'));
+ assert.ok(activity.includes('mode==V2ReplayFilter.CORNER||mode==V2ReplayFilter.DIAGONAL'));
+ assert.ok(activity.includes('replayUi.close()'));
 });
