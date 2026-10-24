@@ -44,6 +44,22 @@ object V2ReplayLayout {
   }
  }
  fun interpolate(a:Rect,b:Rect,progress:Float)=tween(a,b,progress)
+ /** Follow the replay panel while keeping a constant no-overlap gap.
+  * Artwork is uniformly resized, never stretched.
+  */
+ fun followingScoreboard(mode:Int,original:Rect,selected:Rect,progress:Float):Rect{
+  val desired=tween(original,selected,progress)
+  val replay=animatedWindows(mode,progress).lastOrNull()?:return desired
+  val gap=2.5f
+  val rightLimit=(replay.x-gap).coerceAtLeast(gap+1f)
+  val available=(rightLimit-gap).coerceAtLeast(1f)
+  val factor=minOf(1f,available/desired.w)
+  val width=desired.w*factor
+  val height=desired.h*factor
+  val x=(minOf(desired.right,rightLimit)-width).coerceAtLeast(gap)
+  val y=desired.y.coerceIn(gap,100f-gap-height)
+  return Rect(x,y,width,height)
+ }
 
  fun choose(mode:Int,original:Rect,vertical:Boolean):Result? {
   if(!original.inCanvas())return null
