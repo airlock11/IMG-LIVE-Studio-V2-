@@ -73,7 +73,12 @@ object V2ReplayFrameGraphics {
   // Border/label position never advances independently of replay video.
   val bounds=V2ReplayLayout.animatedWindows(mode,progress)
   if(mode==V2ReplayFilter.FULL){
-   frame(bounds[0],"REPLAY")
+   // Preserve the approved 2% broadcast-safe inset inside the SAME
+   // growing Full video region; the margin scales with the shared progress.
+   val video=bounds[0]
+   val inset=2f*progress.coerceIn(0f,1f)
+   frame(V2ReplayLayout.Rect(video.x+inset,video.y+inset,
+    video.w-inset*2f,video.h-inset*2f),"REPLAY")
   }else if(mode==V2ReplayFilter.DIAGONAL){
    frame(bounds[0],"LIVE")
    frame(bounds[1],"REPLAY")
