@@ -94,6 +94,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     broadcast?.setReplayTimelineListener{pos->
      if(!isFinishing&&!isDestroyed)replayUi.onTimelinePosition(pos)
     }
+    broadcast?.setReplayCompletedListener{
+     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true)
+      showPrivateReplay()
+    }
    draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
    if(!draftReady){
     autoLaunchAllowed=false
