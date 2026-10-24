@@ -64,11 +64,34 @@ class V2BroadcastService:Service(),ConnectChecker {
   running||(offlineRecording&&!offlinePaused),result)
  fun attachPrivateReplayPreview(surface:android.view.Surface)=replay.attachPrivatePreview(surface)
  fun detachPrivateReplayPreview()=replay.detachPrivatePreview()
- fun startInstantReplay(mode:Int)=replay.putOnAir(mode)
+ fun startInstantReplay(mode:Int):Boolean{
+  if(mode==V2ReplayFilter.FULL){
+   endReplayLayout()
+   return replay.putOnAir(mode)
+  }
+  if(mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return false
+  val candidate=V2ReplayLayout.choose(mode,originalGraphicsRect(),
+   V2BroadcastGraphicsRenderer.compact(graphicsStyle))
+  if(candidate==null){
+   notifyState("Scoreboard cannot fit beside replay without clipping. Choose Full.")
+   return false
+  }
+  if(!replay.isPrepared())return false
+  // Fade old scoreboard out and move it to a verified free sector BEFORE
+  // the replay window becomes visible on the encoded stream.
+  startReplayLayout(mode,candidate.scoreboard)
+  return true
+ }
  fun seekInstantReplay(positionMs:Long,dragging:Boolean)=replay.seek(positionMs,dragging)
  fun setReplayTimelineListener(listener:(Long)->Unit)=replay.setTimelineListener(listener)
- fun setReplayCompletedListener(listener:()->Unit)=replay.setOnAirEnded(listener)
- fun stopInstantReplay()=replay.backToLive()
+ fun setReplayCompletedListener(listener:()->Unit)=replay.setOnAirEnded{
+  endReplayLayout()
+  listener()
+ }
+ fun stopInstantReplay(){
+  replay.backToLive()
+  endReplayLayout()
+ }
  fun setInstantReplaySpeed(speed:Float)=replay.setSpeed(speed)
  fun setInstantReplayZoom(zoom:Float,x:Float,y:Float)=replay.zoom(zoom,x,y)
  fun resetInstantReplayZoom()=replay.resetZoom()
@@ -313,6 +336,81 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private var scoreboard=V2Scorecard.State()
  private var scoreFilter:ImageFilterRender?=null
+ private var replayBorderFilter:ImageFilterRender?=null
+ private var replayTempRect:V2ReplayLayout.Rect?=null
+ private var replayScreenMode=0
+ private var replayLayoutEpoch=0
+ private var replayScoreFade=1f
+ private fun originalGraphicsRect():V2ReplayLayout.Rect{
+  val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
+  var width=(if(compact)31f else 84f)*graphicsSize/60f
+  var height=width*(videoWidth.toFloat()/videoHeight.toFloat())*
+   V2BroadcastGraphicsRenderer.height(graphicsStyle)/
+   V2BroadcastGraphicsRenderer.width(graphicsStyle)
+  val factor=minOf(1f,85f/height,95f/width)
+  width*=factor;height*=factor
+  return V2ReplayLayout.Rect(
+   if(compact)100f-width-3f else (100f-width)/2f,
+   100f-height-3f,width,height)
+ }
+ private fun updateReplayBorders(mode:Int,alpha:Float){
+  try{
+   val filter=replayBorderFilter?:return
+   val image=V2ReplayFrameGraphics.render(mode,videoWidth,videoHeight,alpha)
+   filter.setImage(image)
+   filter.setScale(100f,100f)
+   filter.setPosition(0f,0f)
+  }catch(_:Exception){
+   notifyState("Replay broadcast frames unavailable.")
+  }
+ }
+ private fun startReplayLayout(mode:Int,rect:V2ReplayLayout.Rect){
+  val epoch=++replayLayoutEpoch
+  replayScreenMode=mode
+  updateReplayBorders(mode,0f)
+  for(step in 1..6){
+   ui.postDelayed({
+    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+    val t=step/6f
+    replayScoreFade=if(t<=.5f)1f-t*2f else (t-.5f)*2f
+    if(step==3){
+     replayTempRect=rect
+     placeGraphics()
+     // Scoreboard is now fully transparent, clear of both video windows.
+     if(!replay.putOnAir(mode)){
+      notifyState("Unable to show this replay mode; LIVE preserved.")
+      endReplayLayout()
+      return@postDelayed
+     }
+    }
+    if(step==6)replayScoreFade=1f
+    updateScorecard()
+    val visual=((t-.5f)*2f).coerceIn(0f,1f)
+    updateReplayBorders(mode,visual*visual*(3f-2f*visual))
+   },step*80L)
+  }
+ }
+ private fun endReplayLayout(){
+  if(replayScreenMode==0&&replayTempRect==null)return
+  val mode=replayScreenMode
+  replayScreenMode=0
+  val epoch=++replayLayoutEpoch
+  for(step in 1..8){
+   ui.postDelayed({
+    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+    // Keep scoreboard invisible until 500ms GPU replay exit completes.
+    replayScoreFade=when{
+     step<=2->1f-step/2f
+     step<=5->0f
+     else->(step-5)/3f
+    }
+    if(step==3){replayTempRect=null;placeGraphics()}
+    if(step==8)replayScoreFade=1f
+    updateScorecard()
+    updateReplayBorders(mode,(1f-step/6f).coerceIn(0f,1f))
+   },step*90L)
+  }
+ }
  private var latestGraphics:android.graphics.Bitmap?=null
  private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
  private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestGraphics){
@@ -680,6 +778,8 @@ class V2BroadcastService:Service(),ConnectChecker {
     stream=engine
     applyFraming()
     replay.installGl(engine)
+    replayBorderFilter=ImageFilterRender().also{engine.getGlInterface().addFilter(it)}
+    updateReplayBorders(0,0f)
     applyScorecard()
     initSponsorFilter()
     notifyState("Camera and microphone ready • "+videoWidth+"×"+videoHeight+" / "+videoFps+" FPS")
@@ -883,10 +983,15 @@ class V2BroadcastService:Service(),ConnectChecker {
   val safe=3f
   val px=if(compact)100f-pw-safe else (100f-pw)/2f
   val py=100f-ph-safe
+  val temporary=replayTempRect
+  val x=temporary?.x?:px
+  val y=temporary?.y?:py
+  val width=temporary?.w?:pw
+  val height=temporary?.h?:ph
   try{
-   filter?.setScale(pw,ph)
-   filter?.setPosition(px,py)
-   lastGraphicsGeometry=floatArrayOf(px,py,pw,ph)
+   filter?.setScale(width,height)
+   filter?.setPosition(x,y)
+   lastGraphicsGeometry=floatArrayOf(x,y,width,height)
    if(notifyPreview)pushPreviewGraphics()
   }catch(_:Exception){notifyState("Unable to size native broadcast graphics.")}
  }
@@ -1006,14 +1111,15 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private fun updateScorecard(){
   val filter=scoreFilter
-  if(lastScoreAlpha==scoreAlpha && lastRenderedAward==scoreAward &&
+  val onAirAlpha=scoreAlpha*replayScoreFade
+  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==scoreAward &&
       lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
   try{
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
    val picture=V2BroadcastGraphicsRenderer.render(
-    scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    scoreboard,onAirAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can reset on
    // texture replacement in the GPU filter lifecycle. A local preview
    // cannot be treated as proof that the encoded GL upload succeeded.
@@ -1033,7 +1139,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    lastRenderedAward=scoreAward
    lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
-   lastScoreAlpha=scoreAlpha
+   lastScoreAlpha=onAirAlpha
    // No keyframe request for score changes or clock ticks.
   }catch(_:Exception){notifyState("Unable to redraw native video scoreboard.")}
  }
@@ -1176,6 +1282,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  fun stopBroadcast(){
   replay.release()
+  replayScreenMode=0;replayTempRect=null;replayBorderFilter=null
   val wasOffline=offlineRecording
   ui.removeCallbacks(sponsorAdvance)
   sponsorShowing=false;transparentSponsor()

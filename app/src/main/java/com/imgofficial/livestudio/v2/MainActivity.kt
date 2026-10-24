@@ -29,6 +29,7 @@ import androidx.webkit.WebViewAssetLoader
 
 /** Offline-first hybrid shell with HTTPS assets and Android media permission mediation. */
 class MainActivity : Activity() {
+ private val savedPlayer by lazy { V2SavedMp4Player(this) }
  // Receive origin-verified original sponsor images in bounded chunks and
  // store them locally, without thumbnail degradation or Intent-size failures.
  private val incomingSponsorParts=mutableMapOf<String,MutableList<StringBuilder>>()
@@ -575,14 +576,8 @@ class MainActivity : Activity() {
    if(clip.optString("id")!=key)continue
    val uri=try{Uri.parse(clip.optString("uri"))}catch(_:Exception){return}
    if(uri.scheme!="content"||uri.authority!="media")return
-   try{
-    startActivity(Intent(Intent.ACTION_VIEW).apply{
-     setDataAndType(uri,"video/mp4")
-     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    })
-   }catch(_:Exception){
-    Toast.makeText(this,"No video player is available for this saved recording.",Toast.LENGTH_LONG).show()
-   }
+   val label=clip.optString("home","HOME")+" vs "+clip.optString("away","AWAY")
+   savedPlayer.show(uri,label)
    return
   }
  }

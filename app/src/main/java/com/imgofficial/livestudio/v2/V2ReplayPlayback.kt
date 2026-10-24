@@ -34,6 +34,8 @@ class V2ReplayPlayback(
  @Volatile private var playing=false
  @Volatile private var requestedPositionUs=0L
  @Volatile private var displayedUs=0L
+ @Volatile private var lastRequestMs=0L
+ @Volatile private var dragActive=false
  @Volatile private var requestedPlay=false
  private var worker:Thread?=null
  fun start(){
@@ -44,6 +46,8 @@ class V2ReplayPlayback(
  fun seekTo(positionMs:Long,dragging:Boolean) {
   requestedPositionUs=positionMs.coerceAtLeast(0L)*1000L
   requestedPlay=!dragging
+  dragActive=dragging
+  lastRequestMs=SystemClock.uptimeMillis()
   playing=false
   revision.incrementAndGet()
  }
@@ -74,15 +78,30 @@ class V2ReplayPlayback(
    var inputDone=false
    var frameStartUs=0L
    var wallStartMs=0L
+   var lastDecoderResetMs=0L
    while(!stopped){
     val requestedRevision=revision.get()
     if(requestedRevision!=seenRevision){
+     // Coalesce rapid slider updates, especially during reverse dragging;
+     // never restart the decoder for each touch sample.
+     val now=SystemClock.uptimeMillis()
+     if(dragActive&&now-lastDecoderResetMs<33L){
+      Thread.sleep(5L)
+      continue
+     }
      seenRevision=requestedRevision
      requestedUs=requestedPositionUs
-     // Keyframe is a DECODE START, not the displayed seek result.
-     extractor.seekTo(requestedUs,MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-     decoder.flush()
-     inputDone=false;seeking=true
+     val forwardNearby=!inputDone&&requestedUs>=displayedUs &&
+      requestedUs-displayedUs<=550_000L
+     if(!forwardNearby){
+      // Backwards needs a preceding decode sync frame, followed by all
+      // dependent frames; the keyframe itself is NOT what is displayed.
+      extractor.seekTo(requestedUs,MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+      decoder.flush()
+      inputDone=false
+      lastDecoderResetMs=now
+     }
+     seeking=true
      frameStartUs=-1L;wallStartMs=0L
      playing=false
     }

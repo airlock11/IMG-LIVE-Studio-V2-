@@ -26,7 +26,7 @@ import android.widget.TextView
 class V2ReplayPanel(
  private val activity:Activity,
  private val service:()->V2BroadcastService?,
- private val onAirSelected:()->Unit,
+ private val onAirSelected:(Int)->Unit,
  private val onClosed:()->Unit
 ){
  private var popup:PopupWindow?=null
@@ -134,7 +134,7 @@ class V2ReplayPanel(
   listOf("Full","Diagonal","Corner").forEachIndexed{index,label->
    layouts.addView(button(label){
     if(ready&&service()?.startInstantReplay(index+1)==true){
-     onAirSelected()
+     onAirSelected(index+1)
      zoom=1f;focusX=.5f;focusY=.5f
     }
    },LinearLayout.LayoutParams(0,dp(29),1f).apply{
