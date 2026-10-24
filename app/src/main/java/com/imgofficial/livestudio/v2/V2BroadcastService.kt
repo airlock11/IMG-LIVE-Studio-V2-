@@ -54,6 +54,17 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val ui=Handler(Looper.getMainLooper())
  private var listeners=mutableSetOf<Listener>()
  private var stream:GenericStream?=null
+ private val replay=V2ReplayManager(this){message->notifyState(message)}
+ fun replayReady()=replay.ready()&&(running||(offlineRecording&&!offlinePaused))
+ fun instantReplayIsActive()=replay.active
+ fun instantReplayIsFull()=replay.fullActive()
+ fun startInstantReplay(mode:Int)=replay.start(mode,running||(offlineRecording&&!offlinePaused))
+ fun stopInstantReplay()=replay.stop()
+ fun setInstantReplaySpeed(speed:Float)=replay.setSpeed(speed)
+ fun setInstantReplayZoom(zoom:Float,x:Float,y:Float)=replay.zoom(zoom,x,y)
+ fun resetInstantReplayZoom()=replay.resetZoom()
+ fun saveInstantReplay()=replay.save()
+
  private var saveLocalCopy=false
  private var currentRecordFile:File?=null
  private var offlineRecording=false
@@ -375,6 +386,7 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(resolution !in listOf(720,1080)||fps !in listOf(30,60))return false
    if(running||connecting||stream?.isStreaming==true)return false
    if(stream!=null){
+    replay.release()
     try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
     try{stream?.release()}catch(_:Exception){}
     stream=null;scoreFilter=null;latestGraphics=null;lastScorecardImageState=null
@@ -644,6 +656,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
   return try {
    val engine=GenericStream(this,this)
+   replay.installStreamRecorder(engine)
    // A stable landscape 16:9 H.264 frame; do not rotate it into portrait.
    // Streetball portrait uses a future separate mode/profile.
    if(!engine.prepareVideo(videoWidth,videoHeight,videoBitrate,videoFps,2,0)||
@@ -657,6 +670,7 @@ class V2BroadcastService:Service(),ConnectChecker {
     engine.getStreamClient().setLogs(false)
     stream=engine
     applyFraming()
+    replay.installGl(engine)
     applyScorecard()
     initSponsorFilter()
     notifyState("Camera and microphone ready • "+videoWidth+"×"+videoHeight+" / "+videoFps+" FPS")
@@ -715,18 +729,29 @@ class V2BroadcastService:Service(),ConnectChecker {
   val engine=stream?:return false
   if(!engine.isOnPreview){notifyState("Camera preview is not ready. Allow Camera permission.");return false}
   offlineRecording=true;offlinePaused=false;saveLocalCopy=true
-  if(!beginLocalRecording(engine)){offlineRecording=false;return false}
+  replay.setCapturing(true)
+  if(!beginLocalRecording(engine)){
+   replay.setCapturing(false);offlineRecording=false;return false
+  }
   notifyState("Recording on this device • no streaming platform connected")
   return true
  }
  fun pauseOfflineRecording():Boolean{
   if(!offlineRecording||offlinePaused||currentRecordFile==null)return false
-  return try{stream?.pauseRecord();offlinePaused=true;notifyState("Recording paused • Resume or End");true}
+  return try{
+   replay.setCapturing(false)
+   stream?.pauseRecord();offlinePaused=true
+   notifyState("Recording paused • Resume or End");true
+  }
   catch(_:Exception){notifyState("Could not pause recording.");false}
  }
  fun resumeOfflineRecording():Boolean{
   if(!offlineRecording||!offlinePaused||currentRecordFile==null)return false
-  return try{stream?.resumeRecord();offlinePaused=false;notifyState("Recording resumed");true}
+  return try{
+   stream?.resumeRecord()
+   replay.setCapturing(true);offlinePaused=false
+   notifyState("Recording resumed");true
+  }
   catch(_:Exception){notifyState("Could not resume recording.");false}
  }
  fun startPrivateUpload(draftId:String){
@@ -766,6 +791,7 @@ class V2BroadcastService:Service(),ConnectChecker {
      setReferenceCounted(false);acquire()
     }
     ingestDestination=url
+    replay.setCapturing(true)
     stream?.startStream(url)
     stream?.let{beginLocalRecording(it)}
     notifyState("Connecting private RTMPS; waiting for server…")
@@ -1140,6 +1166,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   },delay)
  }
  fun stopBroadcast(){
+  replay.release()
   val wasOffline=offlineRecording
   ui.removeCallbacks(sponsorAdvance)
   sponsorShowing=false;transparentSponsor()
