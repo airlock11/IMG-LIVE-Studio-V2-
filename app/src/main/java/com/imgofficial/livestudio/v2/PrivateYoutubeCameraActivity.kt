@@ -48,6 +48,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var previousGraphicBitmap:android.graphics.Bitmap?=null
  private var previousGraphicBounds=intArrayOf(-1,-1,-1,-1)
  private lateinit var graphicsPreview:android.widget.ImageView
+ private lateinit var replayFramePreview:android.widget.ImageView
  private var previewGraphicsPos=floatArrayOf(8f,70f,84f,22f)
  private lateinit var status:TextView
  private fun placePreviewGraphic(){
@@ -69,6 +70,13 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   graphicsPreview.layoutParams=FrameLayout.LayoutParams(pw,ph,Gravity.TOP or Gravity.LEFT).apply{
    leftMargin=left
    topMargin=top
+  }
+ }
+ override fun onPreviewReplayFrame(image:android.graphics.Bitmap,mode:Int,progress:Float){
+  runOnUiThread {
+   if(isFinishing||isDestroyed||!::replayFramePreview.isInitialized)return@runOnUiThread
+   replayFramePreview.setImageBitmap(image)
+   syncOperatorReplayLayout(mode,progress)
   }
  }
  override fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){
@@ -95,9 +103,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
      if(!isFinishing&&!isDestroyed)replayUi.onTimelinePosition(pos)
     }
     broadcast?.setReplayCompletedListener{
-     if(!isFinishing&&!isDestroyed&&broadcast?.instantReplayIsPrepared()==true){
+     if(!isFinishing&&!isDestroyed){
+      replayUi.onReplayFinished()
+      if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
       animateOperatorReplayExpansion(false)
-      showPrivateReplay()
+      // Automatic replay completion restores normal LIVE; no stale replay PiP.
+      hidePrivateReplay()
+      restoreOperatorReplayLayout()
+      refresh()
      }
     }
    draftReady=offlineMode||broadcast?.prepareNextDraft(draftId)==true
@@ -243,39 +256,203 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  private var configuredGameSeconds=600
  private var shotClockVisible=true
  private var timeoutPreview:android.widget.PopupWindow?=null
- private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{mode->
-  hidePrivateReplay()
-  animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
+ private val replayUi by lazy{V2ReplayPanel(this,{broadcast},{_->
+  // Wait for actual decoded ON AIR frame; preview must not lead broadcast.
  },{
-  hidePrivateReplay()
-  animateOperatorReplayExpansion(false)
+  // Continue mirroring the output during its exit animation. The last
+  // output callback restores the normal 16:9 LIVE monitor and size.
+  if(operatorReplayMode==0){
+   hidePrivateReplay()
+   restoreOperatorReplayLayout()
+   animateOperatorReplayExpansion(false)
+  }
+ },{
+  // OFF AIR footage becomes visible only when the operator scrubs.
+  if(broadcast?.instantReplayIsActive()!=true)showPrivateReplay()
+ },{zoom,x,y->
+  // Mirror on-air zoom in the decoded operator view, never the scoreboard.
+  if(::privateReplayView.isInitialized&&operatorReplayMode==V2ReplayFilter.FULL){
+   val w=privateReplayView.width.toFloat()
+   val h=privateReplayView.height.toFloat()
+   if(w>0f&&h>0f){
+    val matrix=android.graphics.Matrix()
+    matrix.setScale(zoom,zoom,x*w,(1f-y)*h)
+    privateReplayView.setTransform(matrix)
+   }
+  }
  })}
  private var operatorCameraFrame:FrameLayout?=null
+ private var operatorClockCard:LinearLayout?=null
+ private var operatorQuarterCard:LinearLayout?=null
+ private var operatorTopRow:LinearLayout?=null
+ private var operatorScoreRow:LinearLayout?=null
+ private var operatorFoulRow:LinearLayout?=null
  private var operatorPreviewExpanded=false
  private var operatorPreviewAnimator:android.animation.ValueAnimator?=null
+
+ /**
+  * Full Replay enlarges the ACTUAL displayed 16:9 operator video by up to 30%.
+  * Expand the row HEIGHT as well as the preview WIDTH; widening only the card
+  * adds black sidebars instead of increasing video size. Encoded output is unchanged.
+  */
  private fun animateOperatorReplayExpansion(expand:Boolean){
-  val camera=operatorCameraFrame?:return
-  if(operatorPreviewExpanded==expand)return
-  val parent=camera.parent as? LinearLayout?:return
-  val target=if(expand){
-   val cards=(0 until parent.childCount).map{parent.getChildAt(it)}
-    .filter{it!==camera}
-   // Keep game clock, period buttons and system safe areas visible.
-   val available=cards.all{it.width>=dp(145)}&&parent.width>=dp(770)
-   if(available).44f else .36f
-  }else .36f
-  operatorPreviewExpanded=expand&&target>.36f
+  val top=operatorTopRow?:return
+  val score=operatorScoreRow?:return
+  val parent=top.parent as? LinearLayout?:return
+  val isPickleball=intent.getStringExtra("img_sport")=="pickleball"
+  val normalTop=if(isPickleball).54f else .51f
+  val normalScore=if(isPickleball).46f else .35f
+  val normalFouls=if(isPickleball)0f else .14f
+  // Grow the visible 16:9 preview by up to 30%; keep adjacent controls usable.
+  val freeWidth=parent.width-dp(10)-dp(155)-dp(if(isPickleball)135 else 165)
+  val normalHeight=parent.height*normalTop
+  val maxScale=if(normalHeight>0f)freeWidth*9f/(16f*normalHeight) else 1f
+  val scale=if(expand)minOf(1.30f,maxScale).coerceIn(1f,1.30f) else 1f
+  val isExpanded=expand&&scale>1.001f
+  if(operatorPreviewExpanded==isExpanded&&!expand)return
+  operatorPreviewExpanded=isExpanded
   operatorPreviewAnimator?.cancel()
-  val params=camera.layoutParams as? LinearLayout.LayoutParams?:return
-  operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(params.weight,target).apply{
-   duration=300L
+  val targetTop=(normalTop*scale).coerceAtMost(.75f)
+  val restFactor=(1f-targetTop)/(1f-normalTop)
+  val views=listOf(top,score)+listOfNotNull(operatorFoulRow)
+  val ends=listOf(targetTop,normalScore*restFactor)+
+   (if(operatorFoulRow!=null)listOf(normalFouls*restFactor) else emptyList())
+  val beginnings=views.map{(it.layoutParams as LinearLayout.LayoutParams).weight}
+  operatorPreviewAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
+   duration=320L
    interpolator=android.view.animation.DecelerateInterpolator()
-   addUpdateListener{
-    params.weight=it.animatedValue as Float
-    camera.layoutParams=params
+   addUpdateListener{frame->
+    val t=frame.animatedValue as Float
+    views.forEachIndexed{idx,view->
+     val lp=view.layoutParams as LinearLayout.LayoutParams
+     lp.weight=beginnings[idx]+(ends[idx]-beginnings[idx])*t
+     view.layoutParams=lp
+    }
    }
    start()
   }
+ }
+ private var operatorReplayMode=0
+ private var fullOperatorExitAnimator:android.animation.ValueAnimator?=null
+ private var flipPreviewButton:View?=null
+ private fun restoreOperatorReplayLayout(){
+  operatorReplayMode=0
+  flipPreviewButton?.visibility=View.VISIBLE
+  if(::monitor.isInitialized){
+   monitor.animate().cancel()
+   monitor.animate().scaleX(1f).scaleY(1f)
+    .translationX(0f).translationY(0f).setDuration(240).start()
+  }
+ }
+ /** Operator monitor and encoded replay receive identical window geometry.
+  * Full expansion still changes only the screen card, never the output format.
+  */
+ private fun syncOperatorReplayLayout(mode:Int,progress:Float){
+  if(mode==V2ReplayFilter.NONE){
+   if(operatorReplayMode!=0){
+    hidePrivateReplay()
+    restoreOperatorReplayLayout()
+    animateOperatorReplayExpansion(false)
+   }
+   return
+  }
+  if(!::privateReplayView.isInitialized||!::monitor.isInitialized)return
+  if(operatorReplayMode!=mode){
+   showOnAirReplayPreview(mode)
+   if(::graphicsPreview.isInitialized)graphicsPreview.visibility=View.VISIBLE
+   animateOperatorReplayExpansion(mode==V2ReplayFilter.FULL)
+  }
+  val w=monitor.width.toFloat()
+  val h=monitor.height.toFloat()
+  if(w<=0f||h<=0f)return
+  val animated=V2ReplayLayout.animatedWindows(mode,progress.coerceIn(0f,1f))
+  val current=animated.lastOrNull()?:return
+  val last=V2ReplayLayout.animatedWindows(mode,1f).last()
+  val params=privateReplayView.layoutParams as FrameLayout.LayoutParams
+  val finalWidth=(w*last.w/100f).toInt().coerceAtLeast(1)
+  val finalHeight=(h*last.h/100f).toInt().coerceAtLeast(1)
+  val left=(w*last.x/100f).toInt()
+  val top=(h*last.y/100f).toInt()
+  if(params.width!=finalWidth||params.height!=finalHeight||
+    params.leftMargin!=left||params.topMargin!=top||params.gravity!=(Gravity.TOP or Gravity.LEFT)){
+   params.width=finalWidth;params.height=finalHeight
+   params.gravity=Gravity.TOP or Gravity.LEFT
+   params.leftMargin=left;params.topMargin=top
+   privateReplayView.layoutParams=params
+  }
+  privateReplayView.pivotX=0f;privateReplayView.pivotY=0f
+  privateReplayView.scaleX=current.w/last.w
+  privateReplayView.scaleY=current.h/last.h
+  privateReplayView.translationX=w*(current.x-last.x)/100f
+  privateReplayView.translationY=h*(current.y-last.y)/100f
+  // In Diagonal, transform the LIVE screen exactly like the on-air shader.
+  val live=if(mode==V2ReplayFilter.DIAGONAL)animated.first() else
+   V2ReplayLayout.Rect(0f,0f,100f,100f)
+  monitor.animate().cancel()
+  monitor.pivotX=0f;monitor.pivotY=0f
+  monitor.scaleX=live.w/100f;monitor.scaleY=live.h/100f
+  monitor.translationX=w*live.x/100f
+  monitor.translationY=h*live.y/100f
+ }
+ private fun updateOperatorReplayGeometry(w:Int,h:Int){
+  if(w<=0||h<=0||!::privateReplayView.isInitialized)return
+  val factor=when(operatorReplayMode){
+   V2ReplayFilter.FULL->1f
+   V2ReplayFilter.DIAGONAL->.45f
+   V2ReplayFilter.CORNER->.30f
+   else->.38f
+  }
+  val rw=(w*factor).toInt().coerceAtLeast(1)
+  val rh=(h*factor).toInt().coerceAtLeast(1)
+  val params=FrameLayout.LayoutParams(rw,rh,
+   if(operatorReplayMode==V2ReplayFilter.FULL)Gravity.CENTER else Gravity.RIGHT or Gravity.BOTTOM)
+  if(operatorReplayMode!=V2ReplayFilter.FULL){
+   val gap=if(operatorReplayMode==V2ReplayFilter.DIAGONAL).025f else .035f
+   params.rightMargin=(w*gap).toInt()
+   params.bottomMargin=(h*gap).toInt()
+  }
+  privateReplayView.layoutParams=params
+ }
+ private fun animateOperatorFullReplayExit(){
+  if(!::privateReplayView.isInitialized||!privateReplayVisible){
+   hidePrivateReplay();restoreOperatorReplayLayout();return
+  }
+  fullOperatorExitAnimator?.cancel()
+  val view=privateReplayView
+  view.pivotX=view.width.toFloat()
+  view.pivotY=view.height.toFloat()
+  fullOperatorExitAnimator=android.animation.ValueAnimator.ofFloat(0f,1f).apply{
+   duration=850L
+   addUpdateListener{frame->
+    val p=frame.animatedValue as Float
+    val motion=(p*850f/700f).coerceIn(0f,1f)
+    val smooth=motion*motion*(3f-2f*motion)
+    val scale=1f-.70f*smooth
+    view.scaleX=scale;view.scaleY=scale
+    val fade=((p*850f-700f)/150f).coerceIn(0f,1f)
+    view.alpha=1f-fade*fade*(3f-2f*fade)
+   }
+   addListener(object:android.animation.AnimatorListenerAdapter(){
+    override fun onAnimationEnd(animation:android.animation.Animator){
+     hidePrivateReplay()
+     restoreOperatorReplayLayout()
+     view.scaleX=1f;view.scaleY=1f
+     view.pivotX=view.width/2f;view.pivotY=view.height/2f
+     fullOperatorExitAnimator=null
+    }
+   })
+   start()
+  }
+ }
+ private fun showOnAirReplayPreview(mode:Int){
+  operatorReplayMode=mode
+  privateReplayView.setTransform(android.graphics.Matrix())
+  privateReplayVisible=true
+  privateReplayView.alpha=0f
+  privateReplayView.visibility=View.VISIBLE
+  flipPreviewButton?.visibility=View.GONE
+  // The first broadcast callback drives all actual video/frame bounds.
+  if(privateReplayView.isAvailable)attachPrivateReplay()
  }
  private lateinit var privateReplayView:android.view.TextureView
  private var privateReplaySurface:android.view.Surface?=null
@@ -296,6 +473,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
  }
  private fun hidePrivateReplay(){
   privateReplayVisible=false
+  operatorReplayMode=0
+  if(::privateReplayView.isInitialized)privateReplayView.setTransform(android.graphics.Matrix())
   broadcast?.detachPrivateReplayPreview()
   if(::privateReplayView.isInitialized){
    privateReplayView.visibility=View.GONE;privateReplayView.alpha=0f
@@ -418,6 +597,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   btn.gravity=Gravity.CENTER
   return btn
  }
+ /** Consistent, touch-friendly controls in the two top-row card corners. */
+ private fun compactIconAction(kind:String,description:String,run:()->Unit):Button =
+  darkButton("",run).apply{
+   text=""
+   contentDescription=description
+   val glyph=iconFor(kind)
+   glyph.setBounds(0,0,dp(19),dp(19))
+   setCompoundDrawables(glyph,null,null,null)
+   compoundDrawablePadding=0
+   setPadding(dp(9),0,dp(8),0)
+   gravity=Gravity.CENTER
+   minWidth=dp(38);minimumWidth=dp(38)
+   minHeight=dp(38);minimumHeight=dp(38)
+  }
 
  private fun dangerButton(value:String,run:()->Unit):Button=darkButton(value,run).apply{
   background=touchSurface(Color.rgb(127,42,49),11)
@@ -781,9 +974,11 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.BLACK,11)
    clipToOutline=true
   }
-  val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
-   contentDescription="Flip camera";setPadding(0,0,0,0)
+  val flip=compactIconAction("camera","Flip camera"){
+   broadcast?.flipCamera()
+   refresh()
   }
+  flipPreviewButton=flip
   monitor=SurfaceView(this).apply{
     setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
    }
@@ -791,6 +986,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   // Operator-only TextureView: never supplied to the live H264 encoder.
   privateReplayView=android.view.TextureView(this).apply{
    visibility=View.GONE;alpha=0f;isOpaque=true
+   // Touch events must reach the visible replay surface, not only LIVE.
+   setOnTouchListener{view,event->replayUi.handleTouch(view,event)}
    surfaceTextureListener=object:android.view.TextureView.SurfaceTextureListener{
     override fun onSurfaceTextureAvailable(t:android.graphics.SurfaceTexture,w:Int,h:Int){
      attachPrivateReplay()
@@ -818,8 +1015,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
   camera.addView(graphicsPreview,FrameLayout.LayoutParams(1,1,Gravity.TOP or Gravity.LEFT))
-  camera.addView(flip,FrameLayout.LayoutParams(dp(34),dp(34),Gravity.TOP or Gravity.RIGHT).apply{
-   rightMargin=dp(7);topMargin=dp(7)
+  replayFramePreview=android.widget.ImageView(this).apply{
+   scaleType=android.widget.ImageView.ScaleType.FIT_XY
+   isClickable=false
+   isFocusable=false
+   importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+  }
+  // The same frame/labels bitmap as the on-air GPU compositor.
+  camera.addView(replayFramePreview,FrameLayout.LayoutParams(-1,-1,Gravity.CENTER))
+  camera.addView(flip,FrameLayout.LayoutParams(dp(38),dp(38),Gravity.TOP or Gravity.RIGHT).apply{
+   rightMargin=dp(8);topMargin=dp(8)
   })
   camera.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
    val maxW=r-l;val maxH=b-t
@@ -828,14 +1033,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
     val old=monitor.layoutParams
     if(w>0&&h>0&&(old.width!=w||old.height!=h))
      monitor.layoutParams=FrameLayout.LayoutParams(w,h,Gravity.CENTER)
-    val replayW=(w*.38f).toInt().coerceAtLeast(1)
-    val replayH=(h*.38f).toInt().coerceAtLeast(1)
+    val fraction=when(operatorReplayMode){
+     V2ReplayFilter.FULL->1f
+     V2ReplayFilter.DIAGONAL->.45f
+     V2ReplayFilter.CORNER->.30f
+     else->.38f
+    }
+    val replayW=(w*fraction).toInt().coerceAtLeast(1)
+    val replayH=(h*fraction).toInt().coerceAtLeast(1)
     val replayParams=privateReplayView.layoutParams
     if(w>0&&h>0&&(replayParams.width!=replayW||replayParams.height!=replayH))
-     privateReplayView.layoutParams=FrameLayout.LayoutParams(replayW,replayH,
-      Gravity.RIGHT or Gravity.BOTTOM).apply{
-      rightMargin=dp(5);bottomMargin=dp(5)
-     }
+     updateOperatorReplayGeometry(w,h)
     graphicsPreview.post{placePreviewGraphic()}
    }
   }
@@ -843,19 +1051,17 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
 
   // Single aligned strip: video, game clock, and game period.
   val top=horizontal()
+  operatorTopRow=top
   operatorCameraFrame=camera
    top.addView(camera,LinearLayout.LayoutParams(0,-1,.36f))
   val clockCard=card()
+  operatorClockCard=clockCard
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
-  resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset").apply{
-   contentDescription="Reset game clock to its configured starting time"
-   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
-   compoundDrawablePadding=0
-   setPadding(0,0,0,0)
-  }
-  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(31),dp(26)))
-  clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(28)))
+  resetClockButton=compactIconAction(
+   "reset","Reset game clock to configured starting time"){resetGameClock()}
+  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(38),dp(38)))
+  clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(40)))
   val clockMain=horizontal()
   clockDisplay=ink("10:00",26f).apply{
    gravity=Gravity.CENTER_VERTICAL
@@ -884,6 +1090,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   clockCard.addView(timeActions)
   top.addView(clockCard,LinearLayout.LayoutParams(0,-1,.34f).apply{leftMargin=gap})
   val quarterCard=card()
+  operatorQuarterCard=quarterCard
   quarterCard.addView(smallLabel(if(isPickleball)"GAME / ROUND" else "QUARTER"),
    LinearLayout.LayoutParams(-1,dp(18)))
   val quarterMain=horizontal()
@@ -910,6 +1117,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   quarterCard.addView(quickPeriods)
   top.addView(quarterCard,LinearLayout.LayoutParams(0,-1,.30f).apply{leftMargin=gap})
   body.addView(top,sized(if(isPickleball).54f else .51f))
+  // Camera card adopts the physical 16:9 frame, not a wider black container.
+  // Clock and quarter cards receive the remaining width automatically.
+  top.addOnLayoutChangeListener{_,left,_,right,_,_,_,_,_->
+   val available=(right-left).coerceAtLeast(1)
+   val rowHeight=top.height.coerceAtLeast(1)
+   val remaining=available-2*gap-dp(155)-dp(if(isPickleball)135 else 165)
+   val width=minOf((rowHeight*16f/9f).toInt(),remaining).coerceAtLeast(1)
+   val height=(width*9f/16f).toInt().coerceAtLeast(1)
+   val lp=camera.layoutParams as LinearLayout.LayoutParams
+   if(lp.width!=width||lp.height!=height||lp.weight!=0f){
+    lp.width=width;lp.height=height;lp.weight=0f
+    camera.layoutParams=lp
+   }
+  }
 
   // Balanced HOME and AWAY scoreboard, optimized for thumbs and one-tap scoring.
   fun teamCard(team:Int):LinearLayout{
@@ -941,12 +1162,14 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    return c
   }
   val scoreGrid=horizontal().apply{setPadding(0,gap,0,0)}
+  operatorScoreRow=scoreGrid
   scoreGrid.addView(teamCard(0),LinearLayout.LayoutParams(0,-1,1f))
   scoreGrid.addView(teamCard(1),LinearLayout.LayoutParams(0,-1,1f).apply{leftMargin=gap})
   body.addView(scoreGrid,sized(if(isPickleball).46f else .35f))
 
   if(!isPickleball){
    val fouls=horizontal().apply{setPadding(0,dp(3),0,0)}
+   operatorFoulRow=fouls
    fun foulCounter(team:Int):LinearLayout{
     val row=horizontal()
     val display=ink("0",16f).apply{
@@ -1048,11 +1271,16 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    }
    val replayButton=darkButton("INSTANT REPLAY"){}
    replayButton.setOnClickListener{
+    if(broadcast?.instantReplayModeLocked()==true){
+     status.text="Finish this replay or tap Back to Live first."
+     return@setOnClickListener
+    }
     replayUi.show(replayButton)
     val accepted=broadcast?.prepareInstantReplay{ready->
      if(!isFinishing&&!isDestroyed){
       replayUi.setPrepared(ready,broadcast?.instantReplayDurationMs()?:10_000L)
-      if(ready)showPrivateReplay() else hidePrivateReplay()
+      // A button tap only opens compact OFF AIR controls, never video.
+      hidePrivateReplay()
      }
     }==true
     if(!accepted)replayUi.setPrepared(false)
@@ -1230,6 +1458,7 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    super.onSaveInstanceState(outState)
  }
  override fun onDestroy(){
+  fullOperatorExitAnimator?.cancel();fullOperatorExitAnimator=null
   timer.removeCallbacks(tick)
   operatorSheet?.dismiss()
   operatorSheet=null

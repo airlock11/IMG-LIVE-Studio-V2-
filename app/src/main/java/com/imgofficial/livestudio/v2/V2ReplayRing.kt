@@ -2,6 +2,7 @@ package com.imgofficial.livestudio.v2
 
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.media.MediaExtractor
 import android.media.MediaMuxer
 import android.os.Handler
 import android.os.Looper
@@ -19,8 +20,8 @@ import java.util.concurrent.Executors
  * restarts, reconfigures or consumes its encoder buffers. Bounded byte/frame
  * storage guards device RAM during long basketball matches.
  *
- * Packet data here is the current composited encoder output. A separate clean
- * camera encoder is still required before this can claim graphics-free saves.
+ * Only the secondary PREVIEW-surface encoder supplies replay video. The main
+ * composited RootEncoder packets are delegated unchanged for local MP4 saving.
  */
 class V2ReplayRing(
   private val delegate: RecordController = AndroidMuxerRecordController()
@@ -34,7 +35,9 @@ class V2ReplayRing(
     val audioFormat: MediaFormat?,
     val video: List<Packet>,
     val audio: List<Packet>,
-    val durationUs: Long
+    val durationUs: Long,
+    // Preceding sync frame is decoder preroll, NOT part of the visible clip.
+    val playbackOffsetUs: Long
   )
   private val lock = Any()
   private val video = ArrayDeque<Packet>()
@@ -44,6 +47,11 @@ class V2ReplayRing(
   private var storedBytes = 0L
   private var lastPts = 0L
   @Volatile private var accepting = false
+  @Volatile private var cleanRequired=false
+  // Fail closed: no encoded graphics may enter this ring after clean capture
+  // has been configured, even if the secondary codec later fails.
+  @Volatile private var cleanOnlySession=false
+  private var cleanLastWallUs=0L
   private val saver = Executors.newSingleThreadExecutor()
   private val main = Handler(Looper.getMainLooper())
 
@@ -59,13 +67,52 @@ class V2ReplayRing(
       }
     }
   }
+  /** Switching clean input invalidates previous composited history. */
+  fun setCleanCaptureEnabled(enabled:Boolean)=synchronized(lock){
+    cleanRequired=enabled
+    if(enabled)cleanOnlySession=true
+    video.clear();audio.clear();storedBytes=0L;lastPts=0L
+    cleanLastWallUs=0L
+    videoFormat=null
+  }
+  fun setCleanVideoFormat(format:MediaFormat)=synchronized(lock){
+    if(cleanRequired)videoFormat=format
+  }
+  fun recordCleanVideo(buf:ByteBuffer,info:MediaCodec.BufferInfo){
+    if(!cleanRequired||!accepting)return
+    packet(buf,info)?.let{p->
+      synchronized(lock){
+        if(cleanRequired&&accepting){
+          val wall=android.os.SystemClock.elapsedRealtimeNanos()/1000L
+          // A multi-preview encoder surface may not provide explicit EGL
+          // presentation timestamps. Never allow duplicated/zero PTS to
+          // collapse ten seconds of real footage into one frozen instant.
+          val stamp=if(video.isEmpty()||p.pts>lastPts)p.pts else
+           lastPts+(wall-cleanLastWallUs).coerceAtLeast(1L)
+          val corrected=if(stamp==p.pts)p else p.copy(pts=stamp)
+          video.addLast(corrected)
+          cleanLastWallUs=wall
+          storedBytes+=corrected.size
+          lastPts=corrected.pts
+          pruneLocked()
+        }
+      }
+    }
+  }
+  /** Timestamp of the most recent CLEAN captured video frame.
+   * Scoreboard state changes use the same video clock for historical replay.
+   */
+  fun currentVideoPtsUs():Long? = synchronized(lock) {
+    if(accepting && video.isNotEmpty())lastPts else null
+  }
   fun ready(): Boolean = synchronized(lock) {
     video.size > 5 &&
-      lastPts - video.peekFirst().pts >= 9_000_000L &&
-      video.any { it.key } && videoFormat != null
+      lastPts - video.peekFirst().pts >= 10_000_000L &&
+      video.any { it.key && it.pts <= lastPts - 10_000_000L } &&
+      videoFormat != null
   }
   override fun setVideoFormat(videoFormat: MediaFormat) {
-    synchronized(lock) { this.videoFormat = videoFormat }
+    synchronized(lock) { if(!cleanOnlySession)this.videoFormat=videoFormat }
     delegate.setVideoFormat(videoFormat)
   }
   override fun setAudioFormat(audioFormat: MediaFormat) {
@@ -74,7 +121,10 @@ class V2ReplayRing(
   }
   override fun resetFormats() {
     synchronized(lock) {
-      videoFormat = null; audioFormat = null
+      // RootEncoder may reset its recorder while the independent clean
+      // encoder continues. Keep the clean output format across this reset.
+      videoFormat = if(cleanRequired)videoFormat else null
+      audioFormat = null
       video.clear(); audio.clear(); storedBytes = 0L; lastPts = 0L
     }
     delegate.resetFormats()
@@ -91,10 +141,10 @@ class V2ReplayRing(
     return Packet(bytes,info.presentationTimeUs,info.flags)
   }
   override fun recordVideo(videoBuffer: ByteBuffer, videoInfo: MediaCodec.BufferInfo) {
-    if (accepting) {
+    if (accepting && !cleanOnlySession) {
       packet(videoBuffer,videoInfo)?.let { p ->
         synchronized(lock) {
-          if (accepting) {
+          if (accepting && !cleanOnlySession) {
             video.addLast(p)
             storedBytes += p.size
             lastPts = p.pts
@@ -132,25 +182,33 @@ class V2ReplayRing(
   }
   fun snapshot(): Snapshot? = synchronized(lock) {
     val fmt = videoFormat ?: return@synchronized null
-    if (video.size < 6 || lastPts-video.peekFirst().pts < 9_000_000L)
+    if (video.size < 6 || lastPts-video.peekFirst().pts < 10_000_000L)
       return@synchronized null
     val all = video.toList()
     val threshold = lastPts - 10_000_000L
     // Prefer the nearest preceding keyframe to avoid undecodable MP4.
-    val start = all.indexOfLast { it.key && it.pts <= threshold }.let { found ->
-      if (found >= 0) found else all.indexOfFirst { it.key }
-    }
+    val start = all.indexOfLast { it.key && it.pts <= threshold }
     if (start < 0 || start == all.lastIndex) return@synchronized null
     val frames = all.subList(start,all.size).toList()
     val begin = frames.first().pts
-    val audioPackets = audio.filter { it.pts >= begin && it.pts <= lastPts }
-    Snapshot(fmt,audioFormat,frames,audioPackets,lastPts - begin)
+    // Video surface-encoder PTS uses EGL/system time while RootEncoder's
+    // AAC encoder may use a different epoch. Align their newest packet clocks
+    // by offset before writing a consistent MP4 timeline.
+    val audioClockShift=if(audio.isNotEmpty())audio.last().pts-lastPts else 0L
+    val audioPackets=audio.map { it.copy(pts=it.pts-audioClockShift) }
+      .filter { it.pts>=begin && it.pts<=lastPts }
+    // Clean camera replays are intentionally SILENT. Mixed-clock primary AAC
+    // is retained for the main recording only, never interleaved into replay MP4.
+    Snapshot(fmt,if(cleanOnlySession)null else audioFormat,frames,
+      if(cleanOnlySession)emptyList() else audioPackets,
+      lastPts - begin,threshold-begin)
   }
   /** Snapshot is immutable, so exporting never blocks the encoder callback. */
   fun export(snapshot: Snapshot, file: File, result: (Boolean)->Unit) {
     saver.execute {
       val ok = try {
         mux(snapshot,file)
+        validateVideoTrack(file)
         true
       }catch (_:Exception) {
         try{file.delete()}catch (_:Exception){}
@@ -158,6 +216,32 @@ class V2ReplayRing(
       }
       main.post{result(ok)}
     }
+  }
+  private fun validateVideoTrack(file:File){
+    // A muxer success isn't proof that the export contains real video.
+    val extractor=MediaExtractor()
+    try{
+      extractor.setDataSource(file.absolutePath)
+      val videoTrack=(0 until extractor.trackCount).firstOrNull{
+        extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/")==true
+      }?:throw IllegalStateException("Replay export has no video track")
+      val format=extractor.getTrackFormat(videoTrack)
+      if(format.getInteger(MediaFormat.KEY_WIDTH)<=0 ||
+        format.getInteger(MediaFormat.KEY_HEIGHT)<=0)
+        throw IllegalStateException("Replay has no video dimensions")
+      extractor.selectTrack(videoTrack)
+      var frames=0
+      var first=-1L
+      var last=-1L
+      while(frames<1200 && extractor.sampleTime>=0){
+        if(first<0)first=extractor.sampleTime
+        last=extractor.sampleTime
+        frames++
+        if(!extractor.advance())break
+      }
+      if(frames<10||last-first<9_800_000L)
+        throw IllegalStateException("Replay export missing frames or duration")
+    }finally{extractor.release()}
   }
   private fun mux(s:Snapshot,file:File) {
     var muxer:MediaMuxer?=null

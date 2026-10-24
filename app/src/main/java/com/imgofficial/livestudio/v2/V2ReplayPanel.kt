@@ -27,15 +27,20 @@ class V2ReplayPanel(
  private val activity:Activity,
  private val service:()->V2BroadcastService?,
  private val onAirSelected:(Int)->Unit,
- private val onClosed:()->Unit
+ private val onClosed:()->Unit,
+ private val onPrivateSeek:()->Unit = {},
+ private val onZoomChanged:(Float,Float,Float)->Unit = {_,_,_->}
 ){
  private var popup:PopupWindow?=null
  private var seek:SeekBar?=null
+ private var seekRow:LinearLayout?=null
  private var current:TextView?=null
  private var total:TextView?=null
  private var durationMs=10_000L
  private var dragging=false
  private var ready=false
+ private var displayLocked=false
+ private val displayButtons=mutableListOf<Button>()
  private var zoom=1f
  private var focusX=.5f
  private var focusY=.5f
@@ -73,6 +78,7 @@ class V2ReplayPanel(
     focusX=(detector.focusX/t.width.coerceAtLeast(1)).coerceIn(0f,1f)
     focusY=(1f-detector.focusY/t.height.coerceAtLeast(1)).coerceIn(0f,1f)
     service()?.setInstantReplayZoom(zoom,focusX,focusY)
+     onZoomChanged(zoom,focusX,focusY)
     return true
    }
   })
@@ -83,6 +89,7 @@ class V2ReplayPanel(
    override fun onDoubleTap(e:MotionEvent):Boolean{
     zoom=1f;focusX=.5f;focusY=.5f
     service()?.resetInstantReplayZoom()
+    onZoomChanged(1f,.5f,.5f)
     return true
    }
   })
@@ -100,11 +107,23 @@ class V2ReplayPanel(
      focusX=(focusX-dx/zoom).coerceIn(0f,1f)
      focusY=(focusY+dy/zoom).coerceIn(0f,1f)
      service()?.setInstantReplayZoom(zoom,focusX,focusY)
+     onZoomChanged(zoom,focusX,focusY)
     }
     oldX=event.x;oldY=event.y
    }
   }
   return true
+ }
+ fun setDisplayLocked(locked:Boolean){
+  displayLocked=locked
+  displayButtons.forEach{it.isEnabled=!locked;it.alpha=if(locked).48f else 1f}
+ }
+ private fun setSeekVisible(full:Boolean){
+  seekRow?.visibility=if(full)View.VISIBLE else View.GONE
+ }
+ fun onReplayFinished(){
+  setDisplayLocked(false)
+  setSeekVisible(false)
  }
  fun setPrepared(ok:Boolean,duration:Long=10_000L){
   ready=ok
@@ -132,18 +151,23 @@ class V2ReplayPanel(
   // ROW 1: three display modes. No replay goes to video output until tap.
   val layouts=line()
   listOf("Full","Diagonal","Corner").forEachIndexed{index,label->
-   layouts.addView(button(label){
-    if(ready&&service()?.startInstantReplay(index+1)==true){
+   val option=button(label){
+    if(ready&&!displayLocked&&service()?.startInstantReplay(index+1)==true){
+     setDisplayLocked(true)
+     setSeekVisible(index==0)
      onAirSelected(index+1)
      zoom=1f;focusX=.5f;focusY=.5f
     }
-   },LinearLayout.LayoutParams(0,dp(29),1f).apply{
+   }
+   displayButtons.add(option)
+   layouts.addView(option,LinearLayout.LayoutParams(0,dp(29),1f).apply{
     if(index>0)leftMargin=dp(3)
    })
   }
   panel.addView(layouts)
   // ROW 2: smooth target-frame seek, with small current/total indicators.
   val timeline=line()
+  seekRow=timeline
   fun small(label:String)=TextView(activity).apply{
    text=label;textSize=10f;gravity=Gravity.CENTER
    setTextColor(Color.rgb(180,220,195))
@@ -162,6 +186,8 @@ class V2ReplayPanel(
    setOnSeekBarChangeListener(object:SeekBar.OnSeekBarChangeListener{
     override fun onStartTrackingTouch(seekBar:SeekBar){
      dragging=true
+     // Only an intentional seek reveals a PRIVATE off-air replay preview.
+     if(service()?.instantReplayIsActive()!=true)onPrivateSeek()
      service()?.seekInstantReplay(seekBar.progress.toLong(),true)
     }
     override fun onProgressChanged(seekBar:SeekBar,progress:Int,fromUser:Boolean){
@@ -184,6 +210,7 @@ class V2ReplayPanel(
   timeline.addView(bar,LinearLayout.LayoutParams(0,dp(28),1f))
   timeline.addView(total,LinearLayout.LayoutParams(dp(35),dp(25)))
   panel.addView(timeline,LinearLayout.LayoutParams(-1,dp(29)).apply{topMargin=dp(2)})
+  setSeekVisible(false)
   // ROW 3: speed affects PRIVATE and ON AIR autoplay equally.
   val speeds=line()
   speeds.addView(small("SPEED"),LinearLayout.LayoutParams(dp(48),dp(29)))
@@ -215,7 +242,8 @@ class V2ReplayPanel(
  }
  fun close(){
   popup?.dismiss();popup=null
-  seek=null;current=null;total=null
+  displayButtons.clear();displayLocked=false
+  seek=null;seekRow=null;current=null;total=null
   dragging=false;ready=false
   zoom=1f;focusX=.5f;focusY=.5f
  }

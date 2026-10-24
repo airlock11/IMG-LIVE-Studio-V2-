@@ -35,6 +35,7 @@ public final class V2ReplayFilter extends BaseFilterRender {
       "precision mediump float;varying vec2 vUV;"+
       "uniform sampler2D uLive;uniform samplerExternalOES uReplay;"+
       "uniform mat4 uReplayMatrix;uniform float uMode;uniform float uBlend;"+
+      "uniform float uFullProgress;uniform float uFullOpacity;"+
       "uniform float uZoom;uniform vec2 uFocus;"+
       "vec4 rep(vec2 uv){"+
       "vec2 z=(uv-uFocus)/max(1.,uZoom)+uFocus;"+
@@ -49,24 +50,26 @@ public final class V2ReplayFilter extends BaseFilterRender {
       "void main(){"+
       "vec4 live=texture2D(uLive,vUV);"+
       "if(uMode<0.5||uBlend<=0.0){gl_FragColor=live;return;}"+
-      "if(uMode<1.5){gl_FragColor=mix(live,rep(vUV),uBlend);return;}"+
+      "if(uMode<1.5){"+
+      "vec4 full=mix(vec4(.665,.035,.965,.335),vec4(0.,0.,1.,1.),uFullProgress);"+
+      "gl_FragColor=inRect(vUV,full)?mix(live,rep(inside(vUV,full)),uFullOpacity):live;return;}"+
       "if(uMode<2.5){"+
       // Final view is two same-sized nonoverlapping complete rectangles.
       "vec4 a=mix(vec4(0.,0.,1.,1.),vec4(.025,.525,.475,.975),uBlend);"+
-      "vec4 b=vec4(.525,.025,.975,.475);"+
+      "vec4 b=mix(vec4(.974,.025,.975,.026),vec4(.525,.025,.975,.475),uBlend);"+
       "vec4 outc=vec4(.02,.045,.04,1.);"+
       "if(inRect(vUV,a))outc=texture2D(uLive,inside(vUV,a));"+
-      "if(inRect(vUV,b))outc=mix(outc,rep(inside(vUV,b)),uBlend);"+
-      "gl_FragColor=mix(live,outc,uBlend);return;"+
+      "if(inRect(vUV,b))outc=rep(inside(vUV,b));"+
+      "gl_FragColor=outc;return;"+
       "}"+
       // Small replay in bottom-right while live remains full frame.
-      "vec4 b=vec4(.665,.035,.965,.335);"+
-      "if(inRect(vUV,b))gl_FragColor=mix(live,rep(inside(vUV,b)),uBlend);"+
+      "vec4 b=mix(vec4(.965,.035,.966,.036),vec4(.665,.035,.965,.335),uBlend);"+
+      "if(inRect(vUV,b))gl_FragColor=rep(inside(vUV,b));"+
       "else gl_FragColor=live;"+
       "}";
   private int program,locationPosition,locationUv,locationMvp,locationSt;
   private int locationLive,locationReplay,locationReplayMatrix;
-  private int locationMode,locationBlend,locationZoom,locationFocus;
+  private int locationMode,locationBlend,locationZoom,locationFocus,locationFullProgress,locationFullOpacity;
   private int replayTex=0;
   private SurfaceTexture replayTexture;
   private Surface decoderSurface;
@@ -97,6 +100,8 @@ public final class V2ReplayFilter extends BaseFilterRender {
     locationReplay=GLES20.glGetUniformLocation(program,"uReplay");
     locationReplayMatrix=GLES20.glGetUniformLocation(program,"uReplayMatrix");
     locationMode=GLES20.glGetUniformLocation(program,"uMode");
+    locationFullProgress=GLES20.glGetUniformLocation(program,"uFullProgress");
+    locationFullOpacity=GLES20.glGetUniformLocation(program,"uFullOpacity");
     locationBlend=GLES20.glGetUniformLocation(program,"uBlend");
     locationZoom=GLES20.glGetUniformLocation(program,"uZoom");
     locationFocus=GLES20.glGetUniformLocation(program,"uFocus");
@@ -126,14 +131,31 @@ public final class V2ReplayFilter extends BaseFilterRender {
     mode=selectedMode;priorMode=selectedMode;leaving=false;
     changeAt=SystemClock.uptimeMillis();
     zoom=1f;focusX=.5f;focusY=.5f;hasFrame=false;
+    // Never mistake a queued frame from the preceding replay for the newly
+    // selected clip's first decoded frame.
+    freshFrame.set(false);
   }
   public void exit(){
-    if(mode==NONE)return;
+    if(mode==NONE||leaving)return;
     leaving=true;changeAt=SystemClock.uptimeMillis();
-    zoom=1f;focusX=.5f;focusY=.5f;
+    // Preserve the selected replay frame and zoom until GPU exit completes.
   }
   public boolean isFull(){return mode==FULL&&!leaving;}
+  public boolean hasDecodedFrame(){return hasFrame&&mode!=NONE&&!leaving;}
   public boolean isActive(){return mode!=NONE;}
+  /** Must match shader's smoothstep transition clock for all replay modes. */
+  public float visualProgress(){
+    if(mode==NONE||!hasFrame)return 0f;
+    float ms=Math.max(0f,(float)(SystemClock.uptimeMillis()-changeAt));
+    if(mode==FULL){
+      float f=Math.min(1f,ms/(leaving?700f:850f));
+      float e=f*f*(3f-2f*f);
+      return leaving?1f-e:e;
+    }
+    float f=Math.min(1f,ms/500f);
+    float e=f*f*(3f-2f*f);
+    return leaving?1f-e:e;
+  }
   public void resetZoom(){zoom=1f;focusX=.5f;focusY=.5f;}
   public void setZoom(float amount,float x,float y){
     if(!isFull())return;
@@ -165,14 +187,31 @@ public final class V2ReplayFilter extends BaseFilterRender {
     GLES20.glUniformMatrix4fv(locationMvp,1,false,MVPMatrix,0);
     GLES20.glUniformMatrix4fv(locationSt,1,false,STMatrix,0);
     GLES20.glUniformMatrix4fv(locationReplayMatrix,1,false,replayMatrix,0);
-    float elapsed=Math.min(1f,(SystemClock.uptimeMillis()-changeAt)/500f);
+    float elapsedMs=Math.max(0f,(float)(SystemClock.uptimeMillis()-changeAt));
+    float elapsed=Math.min(1f,elapsedMs/500f);
     float easing=elapsed*elapsed*(3f-2f*elapsed);
-    if(leaving&&elapsed>=1f){mode=NONE;leaving=false;resetZoom();}
-    float blend=!hasFrame||mode==NONE?0f:leaving?1f-easing:easing;
+    float fullProgress=1f,fullOpacity=1f;
+    if(mode==FULL){
+      if(leaving){
+        float shrink=Math.min(1f,elapsedMs/700f);
+        fullProgress=1f-shrink*shrink*(3f-2f*shrink);
+        float fade=Math.max(0f,Math.min(1f,(elapsedMs-700f)/150f));
+        fullOpacity=1f-fade*fade*(3f-2f*fade);
+      }else{
+        float expand=Math.min(1f,elapsedMs/850f);
+        fullProgress=expand*expand*(3f-2f*expand);
+      }
+    }
+    if(leaving&&elapsedMs>=(mode==FULL?850f:500f)){
+      mode=NONE;leaving=false;resetZoom();
+    }
+    float blend=!hasFrame||mode==NONE?0f:mode==FULL?1f:leaving?1f-easing:easing;
     GLES20.glUniform1f(locationMode,mode);
     GLES20.glUniform1f(locationBlend,blend);
     GLES20.glUniform1f(locationZoom,zoom);
     GLES20.glUniform2f(locationFocus,focusX,focusY);
+    GLES20.glUniform1f(locationFullProgress,fullProgress);
+    GLES20.glUniform1f(locationFullOpacity,hasFrame&&mode!=NONE?fullOpacity:0f);
     GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
     GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,previousTexId);
     GLES20.glUniform1i(locationLive,0);

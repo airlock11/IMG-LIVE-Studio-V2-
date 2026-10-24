@@ -48,6 +48,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   // Mirrors the same bitmap submitted to H.264's GL filter. UI receives
   // one frame only when score, clock or a finite transition actually changes.
   fun onPreviewGraphics(image:android.graphics.Bitmap,x:Float,y:Float,w:Float,h:Float){}
+  fun onPreviewReplayFrame(image:android.graphics.Bitmap,mode:Int,progress:Float){}
  }
  inner class LocalBinder:Binder(){ fun service():V2BroadcastService=this@V2BroadcastService }
  private val binder=LocalBinder()
@@ -57,6 +58,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val replay=V2ReplayManager(this){message->notifyState(message)}
  fun replayReady()=replay.ready()&&(running||(offlineRecording&&!offlinePaused))
  fun instantReplayIsActive()=replay.active
+ fun instantReplayModeLocked()=replay.isModeLocked()||replayLayoutRestoring
  fun instantReplayIsFull()=replay.fullActive()
  fun instantReplayIsPrepared()=replay.isPrepared()
  fun instantReplayDurationMs()=replay.durationMs()
@@ -65,28 +67,37 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun attachPrivateReplayPreview(surface:android.view.Surface)=replay.attachPrivatePreview(surface)
  fun detachPrivateReplayPreview()=replay.detachPrivatePreview()
  fun startInstantReplay(mode:Int):Boolean{
+  if(instantReplayModeLocked())return false
   if(mode==V2ReplayFilter.FULL){
-   endReplayLayout()
+   replay.setOnAirStartedListener {
+    replayLayoutEpoch++
+    replayScreenMode=V2ReplayFilter.FULL
+    operatorFullReplayExitActive=false
+    historicalReplayScore=replay.historicalAtPlayhead()
+    replayScoreFade=1f
+    updateScorecard()
+    updateReplayBorders(V2ReplayFilter.FULL,1f,replay.visualProgress())
+    animateFullReplayBorder(true)
+   }
    return replay.putOnAir(mode)
   }
   if(mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return false
   val candidate=V2ReplayLayout.choose(mode,originalGraphicsRect(),
    V2BroadcastGraphicsRenderer.compact(graphicsStyle))
   if(candidate==null){
-   notifyState("Scoreboard cannot fit beside replay without clipping. Choose Full.")
+   notifyState("Cannot fit scoreboard beside replay without overlap.")
    return false
   }
-  if(!replay.isPrepared())return false
-  // Fade old scoreboard out and move it to a verified free sector BEFORE
-  // the replay window becomes visible on the encoded stream.
-  startReplayLayout(mode,candidate.scoreboard)
-  return true
+  replay.setOnAirStartedListener{startReplayLayout(mode,candidate.scoreboard)}
+  return replay.putOnAir(mode)
  }
  fun seekInstantReplay(positionMs:Long,dragging:Boolean)=replay.seek(positionMs,dragging)
  fun setReplayTimelineListener(listener:(Long)->Unit)=replay.setTimelineListener(listener)
  fun setReplayCompletedListener(listener:()->Unit)=replay.setOnAirEnded{
   endReplayLayout()
-  listener()
+  // Re-enable the controls only after normal LIVE graphics are restored.
+  if(replayLayoutRestoring)ui.postDelayed({if(!ended)listener()},760L)
+  else listener()
  }
  fun stopInstantReplay(){
   replay.backToLive()
@@ -129,7 +140,11 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(sponsorFilter!=null)return
   try{
    val gl=stream?.getGlInterface()?:return
-   sponsorFilter=ImageFilterRender().also{gl.addFilter(it)}
+   sponsorFilter=ImageFilterRender().also{
+    // Sponsors belong only to encoded broadcast, never the clean replay feed.
+    it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+    gl.addFilter(it)
+   }
    // Start with a real transparent texture, not a null/black placeholder.
    val blank=android.graphics.Bitmap.createBitmap(8,8,android.graphics.Bitmap.Config.ARGB_8888)
    sponsorFilter?.setImage(blank)
@@ -340,7 +355,9 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var replayTempRect:V2ReplayLayout.Rect?=null
  private var replayScreenMode=0
  private var replayLayoutEpoch=0
+ private var replayLayoutRestoring=false
  private var replayScoreFade=1f
+ private var historicalReplayScore:V2Scorecard.State?=null
  private fun originalGraphicsRect():V2ReplayLayout.Rect{
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
   var width=(if(compact)31f else 84f)*graphicsSize/60f
@@ -353,67 +370,97 @@ class V2BroadcastService:Service(),ConnectChecker {
    if(compact)100f-width-3f else (100f-width)/2f,
    100f-height-3f,width,height)
  }
- private fun updateReplayBorders(mode:Int,alpha:Float){
+ private fun updateReplayBorders(mode:Int,alpha:Float,progress:Float=1f){
   try{
    val filter=replayBorderFilter?:return
-   val image=V2ReplayFrameGraphics.render(mode,videoWidth,videoHeight,alpha)
+   val w=videoWidth.coerceAtMost(1280)
+   val h=(videoHeight.toLong()*w/videoWidth).toInt().coerceAtLeast(1)
+   val image=V2ReplayFrameGraphics.render(mode,w,h,alpha,progress)
    filter.setImage(image)
    filter.setScale(100f,100f)
    filter.setPosition(0f,0f)
-  }catch(_:Exception){
-   notifyState("Replay broadcast frames unavailable.")
-  }
+   listeners.toList().forEach{listener->
+    try{listener.onPreviewReplayFrame(image,mode,progress)}catch(_:Exception){}
+   }
+  }catch(_:Exception){notifyState("Replay broadcast frames unavailable.")}
+ }
+ /** Frame and video use the same GPU transition clock; no independent scale. */
+ private fun animateReplayFrames(mode:Int,epoch:Int,durationMs:Long){
+  val steps=(durationMs/55L).toInt().coerceAtLeast(1)
+  for(step in 0..steps)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   updateReplayBorders(mode,1f,replay.visualProgress())
+  },step*durationMs/steps)
  }
  private fun startReplayLayout(mode:Int,rect:V2ReplayLayout.Rect){
   val epoch=++replayLayoutEpoch
+  replayLayoutRestoring=false
   replayScreenMode=mode
-  updateReplayBorders(mode,0f)
-  for(step in 1..6){
-   ui.postDelayed({
-    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    val t=step/6f
-    replayScoreFade=if(t<=.5f)1f-t*2f else (t-.5f)*2f
-    if(step==3){
-     replayTempRect=rect
-     placeGraphics()
-     // Scoreboard is now fully transparent, clear of both video windows.
-     if(!replay.putOnAir(mode)){
-      notifyState("Unable to show this replay mode; LIVE preserved.")
-      endReplayLayout()
-      return@postDelayed
-     }
-    }
-    if(step==6)replayScoreFade=1f
+  historicalReplayScore=null
+  val original=originalGraphicsRect()
+  replayTempRect=original
+  replayScoreFade=if(mode==V2ReplayFilter.CORNER)1f else 0f
+  updateScorecard()
+  for(step in 0..10)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   val progress=replay.visualProgress()
+   replayTempRect=V2ReplayLayout.followingScoreboard(mode,original,rect,progress)
+   placeGraphics()
+   if(mode==V2ReplayFilter.DIAGONAL){
+    replayScoreFade=progress
     updateScorecard()
-    val visual=((t-.5f)*2f).coerceIn(0f,1f)
-    updateReplayBorders(mode,visual*visual*(3f-2f*visual))
-   },step*80L)
-  }
+   }else replayScoreFade=1f
+   updateReplayBorders(mode,1f,progress)
+   if(step==10){
+    replayTempRect=rect
+    placeGraphics()
+    if(mode==V2ReplayFilter.DIAGONAL){
+     replayScoreFade=1f;updateScorecard()
+    }
+    updateReplayBorders(mode,1f,1f)
+   }
+  },step*50L)
+ }
+ private fun animateFullReplayBorder(enter:Boolean){
+  animateReplayFrames(V2ReplayFilter.FULL,replayLayoutEpoch,850L)
  }
  private fun endReplayLayout(){
-  if(replayScreenMode==0&&replayTempRect==null)return
+  // Back to Live and decoder-ended callbacks may arrive for the same exit.
+  if(replayLayoutRestoring||(replayScreenMode==0&&replayTempRect==null))return
   val mode=replayScreenMode
+  val initialRect=replayTempRect
+  val original=originalGraphicsRect()
   replayScreenMode=0
+  historicalReplayScore=null
+  operatorFullReplayExitActive=mode==V2ReplayFilter.FULL
+  replayLayoutRestoring=true
   val epoch=++replayLayoutEpoch
-  for(step in 1..8){
-   ui.postDelayed({
-    if(epoch!=replayLayoutEpoch||ended)return@postDelayed
-    // Keep scoreboard invisible until 500ms GPU replay exit completes.
-    replayScoreFade=when{
-     step<=2->1f-step/2f
-     step<=5->0f
-     else->(step-5)/3f
-    }
-    if(step==3){replayTempRect=null;placeGraphics()}
-    if(step==8)replayScoreFade=1f
-    updateScorecard()
-    updateReplayBorders(mode,(1f-step/6f).coerceIn(0f,1f))
-   },step*90L)
-  }
+  val totalMs=if(mode==V2ReplayFilter.FULL)850L else 500L
+  val steps=(totalMs/55L).toInt().coerceAtLeast(1)
+  for(step in 0..steps)ui.postDelayed({
+   if(epoch!=replayLayoutEpoch||ended)return@postDelayed
+   val progress=replay.visualProgress()
+   // Corner always retains its existing alpha. Move and scale with video.
+   replayScoreFade=1f
+   if(initialRect!=null){
+    replayTempRect=V2ReplayLayout.followingScoreboard(mode,original,initialRect,progress)
+    placeGraphics()
+   }
+   if(step==steps){
+    replayTempRect=null
+    replayLayoutRestoring=false
+    operatorFullReplayExitActive=false
+    placeGraphics()
+    updateReplayBorders(0,0f)
+   }else updateReplayBorders(mode,1f,progress)
+   updateScorecard()
+  },step*totalMs/steps)
  }
  private var latestGraphics:android.graphics.Bitmap?=null
+ private var latestOperatorGraphics:android.graphics.Bitmap?=null
+ private var operatorFullReplayExitActive=false
  private var lastGraphicsGeometry=floatArrayOf(8f,70f,84f,22f)
- private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestGraphics){
+ private fun pushPreviewGraphics(image:android.graphics.Bitmap?=latestOperatorGraphics?:latestGraphics){
   if(image==null)return
   val pos=lastGraphicsGeometry
   listeners.toList().forEach{listener->try{
@@ -491,7 +538,8 @@ class V2BroadcastService:Service(),ConnectChecker {
   /** Select the actual H.264 capture/encoder profile before preparing the camera. */
   fun configureVideoProfile(resolution:Int,fps:Int):Boolean {
    if(resolution !in listOf(720,1080)||fps !in listOf(30,60))return false
-   if(running||connecting||stream?.isStreaming==true)return false
+   // Never tear down a camera/encoder that is actively saving an offline MP4.
+  if(running||connecting||offlineRecording||stream?.isStreaming==true)return false
    if(stream!=null){
     replay.release()
     try{if(stream?.isOnPreview==true)stream?.stopPreview()}catch(_:Exception){}
@@ -637,6 +685,15 @@ class V2BroadcastService:Service(),ConnectChecker {
 
  override fun onCreate(){
   super.onCreate()
+  replay.setOnAirStopping { endReplayLayout() }
+  replay.setHistoricalScoreListener { historical ->
+   if(replayScreenMode==V2ReplayFilter.FULL &&
+     historical!=null && historical!=historicalReplayScore){
+    historicalReplayScore=historical
+    updateScorecard()
+   }
+  }
+  replay.recordScoreboardState(scoreboard)
   if(android.os.Build.VERSION.SDK_INT>=29){
    val manager=getSystemService(POWER_SERVICE) as PowerManager
    try{
@@ -777,8 +834,12 @@ class V2BroadcastService:Service(),ConnectChecker {
     engine.getStreamClient().setLogs(false)
     stream=engine
     applyFraming()
-    replay.installGl(engine)
-    replayBorderFilter=ImageFilterRender().also{engine.getGlInterface().addFilter(it)}
+    replay.installGl(engine,videoWidth,videoHeight,videoFps)
+    replayBorderFilter=ImageFilterRender().also{
+    // Only the encoded broadcast receives labels/frames; operator video stays clean.
+    it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+    engine.getGlInterface().addFilter(it)
+   }
     updateReplayBorders(0,0f)
     applyScorecard()
     initSponsorFilter()
@@ -900,8 +961,9 @@ class V2BroadcastService:Service(),ConnectChecker {
      setReferenceCounted(false);acquire()
     }
     ingestDestination=url
-    replay.setCapturing(true)
+    // Secondary replay capture requires an active main encoder/GL camera.
     stream?.startStream(url)
+    replay.setCapturing(true)
     stream?.let{beginLocalRecording(it)}
     notifyState("Connecting private RTMPS; waiting for server…")
    }catch(_:Exception){
@@ -1094,7 +1156,12 @@ class V2BroadcastService:Service(),ConnectChecker {
   val gl=stream?.getGlInterface()?:return
   try{
    if(scoreFilter==null){
-    scoreFilter=ImageFilterRender().also{gl.addFilter(it)}
+    scoreFilter=ImageFilterRender().also{
+     // Prevent double-drawing in the monitor. The existing separate operator
+     // ImageView handles preview graphics; this GPU layer is OUTPUT ONLY.
+     it.setRenderMode(com.pedro.encoder.input.gl.render.RenderMode.OUTPUT)
+     gl.addFilter(it)
+    }
    }
    lastScorecardImageState=null
    lastScorecardVisible=null
@@ -1110,16 +1177,22 @@ class V2BroadcastService:Service(),ConnectChecker {
   }
  }
  private fun updateScorecard(){
+  // Keep timestamping LIVE changes even while historical footage is on air.
+  replay.recordScoreboardState(scoreboard)
   val filter=scoreFilter
-  val onAirAlpha=scoreAlpha*replayScoreFade
-  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==scoreAward &&
-      lastGraphicsStyle==graphicsStyle && lastScorecardImageState==scoreboard)return
+  val replayFull=replayScreenMode==V2ReplayFilter.FULL
+  val renderedState=if(replayFull)
+   (historicalReplayScore?:replay.historicalAtPlayhead()?:scoreboard) else scoreboard
+  val renderedAward=if(replayFull)null else scoreAward
+  val onAirAlpha=if(replayFull)1f else scoreAlpha*replayScoreFade
+  if(lastScoreAlpha==onAirAlpha && lastRenderedAward==renderedAward &&
+      lastGraphicsStyle==graphicsStyle && lastScorecardImageState==renderedState)return
   try{
    // Never pass null to setImage: in the native GL renderer a missing
    // texture can leave an opaque dark/black rectangle over the camera.
    // Transparent frames are rendered for hide and fade transitions.
    val picture=V2BroadcastGraphicsRenderer.render(
-    scoreboard,onAirAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    renderedState,onAirAlpha*graphicsOpacity,renderedAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
    // Upload first, then scale: image sprite dimensions can reset on
    // texture replacement in the GPU filter lifecycle. A local preview
    // cannot be treated as proof that the encoded GL upload succeeded.
@@ -1133,10 +1206,14 @@ class V2BroadcastService:Service(),ConnectChecker {
    // Clock ticks should update the native ImageView only once per frame.
    placeGraphics(notifyPreview=false)
    latestGraphics=picture
-   pushPreviewGraphics(picture)
+   latestOperatorGraphics=if(replayFull)picture else if(operatorFullReplayExitActive)
+    V2BroadcastGraphicsRenderer.render(
+     scoreboard,scoreAlpha*graphicsOpacity,scoreAward,graphicsStyle,graphicsHomeLogo,graphicsAwayLogo)
+    else null
+   pushPreviewGraphics(latestOperatorGraphics?:picture)
    // Retry a failed upload on a subsequent state update or surface attach.
-   lastScorecardImageState=if(uploaded)scoreboard.copy() else null
-   lastRenderedAward=scoreAward
+   lastScorecardImageState=if(uploaded)renderedState.copy() else null
+   lastRenderedAward=renderedAward
    lastGraphicsStyle=graphicsStyle
    lastScorecardVisible=scoreVisible
    lastScoreAlpha=onAirAlpha
