@@ -14,7 +14,7 @@ import android.graphics.Typeface
  */
 object V2ReplayFrameGraphics {
  private fun RectF.copy()=RectF(left,top,right,bottom)
- fun render(mode:Int,width:Int,height:Int,opacity:Float=1f):Bitmap{
+ fun render(mode:Int,width:Int,height:Int,opacity:Float=1f,progress:Float=1f):Bitmap{
   val image=Bitmap.createBitmap(width,height,Bitmap.Config.ARGB_8888)
   if(mode!=V2ReplayFilter.FULL&&mode!=V2ReplayFilter.DIAGONAL&&mode!=V2ReplayFilter.CORNER)return image
   val c=Canvas(image)
@@ -69,14 +69,16 @@ object V2ReplayFrameGraphics {
     c.drawText("REPLAY",lx,ly,label)
    }
   }
+  // Use the SAME animated bounds as the GPU video compositor.
+  // Border/label position never advances independently of replay video.
+  val bounds=V2ReplayLayout.animatedWindows(mode,progress)
   if(mode==V2ReplayFilter.FULL){
-   // Exactly the same border/REPLAY label drawing used by the Corner window.
-   frame(V2ReplayLayout.Rect(2f,2f,96f,96f),"REPLAY")
+   frame(bounds[0],"REPLAY")
   }else if(mode==V2ReplayFilter.DIAGONAL){
-   frame(V2ReplayLayout.windows(mode)[0],"LIVE")
-   frame(V2ReplayLayout.windows(mode)[1],"REPLAY")
+   frame(bounds[0],"LIVE")
+   frame(bounds[1],"REPLAY")
   }else{
-   frame(V2ReplayLayout.windows(mode)[0],"REPLAY")
+   frame(bounds[0],"REPLAY")
    // Transparent red LIVE identifier, aligned with the video canvas.
    val label=Paint(Paint.ANTI_ALIAS_FLAG).apply{
     textSize=(height*.023f).coerceIn(10f,21f)
