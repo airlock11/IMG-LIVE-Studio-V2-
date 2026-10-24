@@ -57,7 +57,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private val replay=V2ReplayManager(this){message->notifyState(message)}
  fun replayReady()=replay.ready()&&(running||(offlineRecording&&!offlinePaused))
  fun instantReplayIsActive()=replay.active
- fun instantReplayModeLocked()=replay.isModeLocked()
+ fun instantReplayModeLocked()=replay.isModeLocked()||replayLayoutRestoring
  fun instantReplayIsFull()=replay.fullActive()
  fun instantReplayIsPrepared()=replay.isPrepared()
  fun instantReplayDurationMs()=replay.durationMs()
@@ -66,7 +66,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun attachPrivateReplayPreview(surface:android.view.Surface)=replay.attachPrivatePreview(surface)
  fun detachPrivateReplayPreview()=replay.detachPrivatePreview()
  fun startInstantReplay(mode:Int):Boolean{
-  if(replay.isModeLocked())return false
+  if(instantReplayModeLocked())return false
   if(mode==V2ReplayFilter.FULL){
    replay.setOnAirStartedListener {
     replayLayoutEpoch++
@@ -92,7 +92,9 @@ class V2BroadcastService:Service(),ConnectChecker {
  fun setReplayTimelineListener(listener:(Long)->Unit)=replay.setTimelineListener(listener)
  fun setReplayCompletedListener(listener:()->Unit)=replay.setOnAirEnded{
   endReplayLayout()
-  listener()
+  // Re-enable the controls only after normal LIVE graphics are restored.
+  if(replayLayoutRestoring)ui.postDelayed({if(!ended)listener()},760L)
+  else listener()
  }
  fun stopInstantReplay(){
   replay.backToLive()
@@ -346,6 +348,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  private var replayTempRect:V2ReplayLayout.Rect?=null
  private var replayScreenMode=0
  private var replayLayoutEpoch=0
+ private var replayLayoutRestoring=false
  private var replayScoreFade=1f
  private fun originalGraphicsRect():V2ReplayLayout.Rect{
   val compact=V2BroadcastGraphicsRenderer.compact(graphicsStyle)
@@ -372,6 +375,7 @@ class V2BroadcastService:Service(),ConnectChecker {
  }
  private fun startReplayLayout(mode:Int,rect:V2ReplayLayout.Rect){
   val epoch=++replayLayoutEpoch
+  replayLayoutRestoring=false
   replayScreenMode=mode
   replayTempRect=rect
   replayScoreFade=0f
@@ -409,6 +413,7 @@ class V2BroadcastService:Service(),ConnectChecker {
   if(replayScreenMode==0&&replayTempRect==null)return
   val mode=replayScreenMode
   replayScreenMode=0
+  replayLayoutRestoring=true
   val epoch=++replayLayoutEpoch
   if(mode==V2ReplayFilter.FULL)animateFullReplayBorder(false)
   val steps=if(mode==V2ReplayFilter.FULL)10 else 8
@@ -423,7 +428,10 @@ class V2BroadcastService:Service(),ConnectChecker {
      else->(step-5)/3f
     }
     if(step==3){replayTempRect=null;placeGraphics()}
-    if(step==steps)replayScoreFade=1f
+    if(step==steps){
+     replayScoreFade=1f
+     replayLayoutRestoring=false
+    }
     updateScorecard()
     if(mode==V2ReplayFilter.FULL){
      if(step==steps)updateReplayBorders(0,0f)
