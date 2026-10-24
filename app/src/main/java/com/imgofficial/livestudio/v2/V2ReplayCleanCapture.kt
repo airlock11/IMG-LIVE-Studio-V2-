@@ -3,7 +3,8 @@ package com.imgofficial.livestudio.v2
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
-import android.os.Build
+import android.os.Bundle
+import android.os.SystemClock
 import android.view.Surface
 import com.pedro.encoder.utils.gl.AspectRatioMode
 import com.pedro.library.generic.GenericStream
@@ -57,9 +58,21 @@ class V2ReplayCleanCapture(private val ring: V2ReplayRing) {
    capturing.set(true)
    worker=thread(name="img-clean-replay-encoder",isDaemon=true){
     val info=MediaCodec.BufferInfo()
+    var lastKeyframeRequest=SystemClock.uptimeMillis()
     try {
      while(capturing.get()){
-      val index=prepared!!.dequeueOutputBuffer(info,20_000L)
+      val now=SystemClock.uptimeMillis()
+      if(now-lastKeyframeRequest>=250L){
+       // More sync points mean reverse scrubbing rarely decodes more than
+       // a quarter-second GOP before the selected video frame.
+       try {
+        prepared!!.setParameters(Bundle().apply{
+         putInt(MediaCodec.PARAMETER_KEY_REQUEST_SYNC_FRAME,0)
+        })
+       }catch(_:Exception){}
+       lastKeyframeRequest=now
+      }
+      val index=prepared!!.dequeueOutputBuffer(info,12_000L)
       if(index==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED){
        ring.setCleanVideoFormat(prepared!!.outputFormat)
       }else if(index>=0){
@@ -94,14 +107,15 @@ class V2ReplayCleanCapture(private val ring: V2ReplayRing) {
    if(formerSurface!=null)engine?.getGlInterface()?.removeMultiPreviewSurface(formerSurface)
   }catch(_:Exception){}
   val c=codec
+  val draining=worker
   codec=null;surface=null;engine=null
+  worker=null
   // No blocking wait in the broadcast service's main/UI control path.
   thread(name="img-clean-replay-release",isDaemon=true){
-   try {worker?.join(400L)}catch(_:Exception){}
+   try {draining?.join(400L)}catch(_:Exception){}
    try{c?.stop()}catch(_:Exception){}
    try{c?.release()}catch(_:Exception){}
    try{formerSurface?.release()}catch(_:Exception){}
   }
-  worker=null
  }
 }
