@@ -27,6 +27,8 @@ object V2ReplayLayout {
   */
  private fun tween(a:Rect,b:Rect,f:Float):Rect{
   val t=f.coerceIn(0f,1f)
+  if(t==0f)return a
+  if(t==1f)return b
   return Rect(a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,
    a.w+(b.w-a.w)*t,a.h+(b.h-a.h)*t)
  }
