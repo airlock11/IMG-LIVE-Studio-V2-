@@ -576,6 +576,20 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   btn.gravity=Gravity.CENTER
   return btn
  }
+ /** Consistent, touch-friendly controls in the two top-row card corners. */
+ private fun compactIconAction(kind:String,description:String,run:()->Unit):Button =
+  darkButton("",run).apply{
+   text=""
+   contentDescription=description
+   val glyph=iconFor(kind)
+   glyph.setBounds(0,0,dp(19),dp(19))
+   setCompoundDrawables(glyph,null,null,null)
+   compoundDrawablePadding=0
+   setPadding(dp(9),0,dp(8),0)
+   gravity=Gravity.CENTER
+   minWidth=dp(38);minimumWidth=dp(38)
+   minHeight=dp(38);minimumHeight=dp(38)
+  }
 
  private fun dangerButton(value:String,run:()->Unit):Button=darkButton(value,run).apply{
   background=touchSurface(Color.rgb(127,42,49),11)
@@ -939,8 +953,9 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    background=rounded(Color.BLACK,11)
    clipToOutline=true
   }
-  val flip=iconButton(darkButton(""){broadcast?.flipCamera();refresh()},"camera").apply{
-   contentDescription="Flip camera";setPadding(0,0,0,0)
+  val flip=compactIconAction("camera","Flip camera"){
+   broadcast?.flipCamera()
+   refresh()
   }
   flipPreviewButton=flip
   monitor=SurfaceView(this).apply{
@@ -979,8 +994,8 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
    importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
   }
   camera.addView(graphicsPreview,FrameLayout.LayoutParams(1,1,Gravity.TOP or Gravity.LEFT))
-  camera.addView(flip,FrameLayout.LayoutParams(dp(34),dp(34),Gravity.TOP or Gravity.RIGHT).apply{
-   rightMargin=dp(7);topMargin=dp(7)
+  camera.addView(flip,FrameLayout.LayoutParams(dp(38),dp(38),Gravity.TOP or Gravity.RIGHT).apply{
+   rightMargin=dp(8);topMargin=dp(8)
   })
   camera.addOnLayoutChangeListener{_,l,t,r,b,_,_,_,_->
    val maxW=r-l;val maxH=b-t
@@ -1014,14 +1029,10 @@ class PrivateYoutubeCameraActivity:Activity(),SurfaceHolder.Callback,V2Broadcast
   operatorClockCard=clockCard
   val clockHeader=horizontal()
   clockHeader.addView(smallLabel("GAME CLOCK"),LinearLayout.LayoutParams(0,dp(22),1f))
-  resetClockButton=iconButton(darkButton(""){resetGameClock()},"reset").apply{
-   contentDescription="Reset game clock to its configured starting time"
-   minWidth=0;minimumWidth=0;minHeight=0;minimumHeight=0
-   compoundDrawablePadding=0
-   setPadding(0,0,0,0)
-  }
-  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(31),dp(26)))
-  clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(28)))
+  resetClockButton=compactIconAction(
+   "reset","Reset game clock to configured starting time"){resetGameClock()}
+  clockHeader.addView(resetClockButton,LinearLayout.LayoutParams(dp(38),dp(38)))
+  clockCard.addView(clockHeader,LinearLayout.LayoutParams(-1,dp(40)))
   val clockMain=horizontal()
   clockDisplay=ink("10:00",26f).apply{
    gravity=Gravity.CENTER_VERTICAL
