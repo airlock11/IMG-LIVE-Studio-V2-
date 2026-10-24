@@ -22,67 +22,141 @@ class V2ReplayManager(
  val ring=V2ReplayRing()
  private val ui=Handler(Looper.getMainLooper())
  private var filter:V2ReplayFilter?=null
- private var decoder:V2ReplayPlayback?=null
- private var activeClip:File?=null
+ private var operatorDecoder:V2ReplayPlayback?=null
+ private var onAirDecoder:V2ReplayPlayback?=null
+ private var preparedFile:File?=null
  private var snapshot:V2ReplayRing.Snapshot?=null
  private var epoch=0
  @Volatile var speed=1f
   private set
  @Volatile var active=false
   private set
- fun installStreamRecorder(engine:GenericStream){
-  engine.setRecordController(ring)
- }
- /** Called before the regular scorecard filter is added to the GL chain. */
+ @Volatile var prepared=false
+  private set
+ @Volatile private var playheadMs=0L
+ private var timelineChanged:(Long)->Unit={}
+ private var onAirEnded:()->Unit={}
+ private var snapshotDurationMs=10_000L
+
+ fun installStreamRecorder(engine:GenericStream){engine.setRecordController(ring)}
+ /** Insert BEFORE scorecard overlays, so replay zoom never scales score/clock. */
  fun installGl(engine:GenericStream){
   filter=V2ReplayFilter().also{engine.getGlInterface().addFilter(it)}
  }
  fun setCapturing(enabled:Boolean){
-  if(!enabled)stop()
+  if(!enabled)backToLive()
   ring.setCaptureEnabled(enabled)
  }
  fun ready()=ring.ready()
  fun fullActive()=active&&filter?.isFull==true
+ fun durationMs()=snapshotDurationMs
+ fun positionMs()=playheadMs
+ fun isPrepared()=prepared
+ fun setTimelineListener(listener:(Long)->Unit){timelineChanged=listener}
+ fun setOnAirEnded(listener:()->Unit){onAirEnded=listener}
 
- fun start(mode:Int,sourceActive:Boolean):Boolean{
-  if(mode !in V2ReplayFilter.FULL..V2ReplayFilter.CORNER||!sourceActive){
-   status("Start livestreaming or RECORD before using Instant Replay")
-   return false
-  }
-  val sample=ring.snapshot()
-  if(sample==null){status("Replay buffer needs 10 seconds of footage");return false}
-  val renderer=filter?:run{status("Replay video compositor unavailable");return false}
-  val surface=renderer.decoderSurface(250L)
-   ?:run{status("Replay surface not ready");return false}
-  stop()
-  val session=++epoch
-  active=true;speed=1f;snapshot=sample
-  val path=File(context.cacheDir,"IMG_REPLAY_${System.currentTimeMillis()}.mp4")
-  status("Preparing previous 10 seconds")
-  ring.export(sample,path){ok->
-   if(session!=epoch||!active){path.delete();return@export}
-   if(!ok){active=false;status("Replay export failed");return@export}
-   activeClip?.let{old->if(old!=path)old.delete()}
-   activeClip=path
-   renderer.enter(mode)
-   decoder=V2ReplayPlayback(path,surface,{speed}){success->
-    if(session==epoch&&active){
-     stop()
-     if(!success)status("Replay ended; live camera restored")
-    }
-   }.also{it.start()}
+ /**
+  * Tap the button: freeze one immutable 10-second snapshot, export it on a
+  * worker and leave the actual broadcast GL filter in LIVE (mode NONE).
+  * No replay is on-air until a display mode is explicitly selected.
+  */
+ fun prepare(sourceActive:Boolean,result:(Boolean)->Unit):Boolean{
+  if(!sourceActive){status("Start GO LIVE or RECORD first");return false}
+  val sample=ring.snapshot()?:run{status("Replay buffer needs 10 seconds of footage");return false}
+  backToLive()
+  val request=++epoch
+  snapshot=sample
+  snapshotDurationMs=(sample.durationUs/1000L).coerceAtLeast(1000L)
+  playheadMs=0L
+  speed=1f
+  prepared=false
+  val output=File(context.cacheDir,"IMG_REPLAY_FIXED_${System.currentTimeMillis()}.mp4")
+  status("Preparing replay privately")
+  ring.export(sample,output){ok->
+   if(request!=epoch){output.delete();return@export}
+   if(!ok){prepared=false;status("Unable to prepare replay");result(false);return@export}
+   preparedFile=output;prepared=true
+   result(true)
   }
   return true
  }
- fun stop(){
-  val wasActive=active
-  active=false;epoch++
-  decoder?.cancel();decoder=null
-  filter?.exit();filter?.resetZoom()
-  val old=activeClip
-  activeClip=null
-  if(old!=null)ui.postDelayed({old.delete()},1500L)
-  if(wasActive)status("Back to LIVE")
+
+ /** A separate TextureView on the operator phone. Never fed into encoder. */
+ fun attachPrivatePreview(surface:android.view.Surface):Boolean{
+  val file=preparedFile?.takeIf{prepared&&it.isFile}?:return false
+  operatorDecoder?.cancel()
+  operatorDecoder=V2ReplayPlayback(file,surface,{speed},{
+   if(!active){playheadMs=it;timelineChanged(it)}
+  },{ /* private playback simply pauses on its final frame */ }).also{it.start()}
+  return true
+ }
+ fun detachPrivatePreview(){operatorDecoder?.cancel();operatorDecoder=null}
+
+ /**
+  * Same fixed clip is routed into encoded GPU composition ONLY on explicit
+  * Full/Diagonal/Corner tap, retaining current position and speed.
+  */
+ fun putOnAir(mode:Int):Boolean{
+  if(mode !in V2ReplayFilter.FULL..V2ReplayFilter.CORNER||!prepared)return false
+  val file=preparedFile?.takeIf{it.isFile}?:return false
+  val renderer=filter?:return false
+  val surface=renderer.decoderSurface(250L)?:return false
+  detachPrivatePreview()
+  onAirDecoder?.cancel()
+  onAirDecoder=null
+  val startedAt=playheadMs
+  val request=++epoch
+  active=true
+  // The compositor stays live until a decoded frame reaches its OES texture.
+  renderer.enter(mode)
+  onAirDecoder=V2ReplayPlayback(file,surface,{speed},{
+   if(active){playheadMs=it;timelineChanged(it)}
+  },{successful->
+   if(request==epoch&&active){
+    stopOnAir()
+    onAirEnded()
+    if(!successful)status("Replay decoder stopped; LIVE restored")
+   }
+  }).also{
+   it.seekTo(startedAt,false)
+   it.start()
+  }
+  return true
+ }
+
+ /** Moves the decoder to an exact frame target by decoding from a keyframe.
+  * dragging=true keeps it paused; releasing automatically plays forward.
+  * Both preview and on-air decoder share the same operator playhead.
+  */
+ fun seek(positionMs:Long,dragging:Boolean){
+  if(!prepared)return
+  val safe=positionMs.coerceIn(0L,(snapshotDurationMs-1).coerceAtLeast(0L))
+  playheadMs=safe
+  timelineChanged(safe)
+  if(active)onAirDecoder?.seekTo(safe,dragging)
+  else operatorDecoder?.seekTo(safe,dragging)
+ }
+ fun stopOnAir(){
+  if(!active)return
+  active=false
+  epoch++
+  onAirDecoder?.cancel();onAirDecoder=null
+  filter?.exit()
+  filter?.resetZoom()
+  status("Back to LIVE")
+ }
+ fun backToLive(){
+  stopOnAir()
+  epoch++
+  detachPrivatePreview()
+  prepared=false
+  playheadMs=0L
+  snapshot=null
+  val old=preparedFile
+  preparedFile=null
+  // Give the decoder a moment to release the opened MP4 descriptor.
+  if(old!=null)ui.postDelayed({old.delete()},1700L)
+  timelineChanged(0L)
  }
  fun setSpeed(value:Float){
   if(value in listOf(.25f,.5f,1f))speed=value
@@ -90,17 +164,17 @@ class V2ReplayManager(
  fun zoom(amount:Float,x:Float,y:Float){if(active)filter?.setZoom(amount,x,y)}
  fun resetZoom(){filter?.resetZoom()}
  fun save(){
-  val captured=snapshot?:ring.snapshot()
-  if(captured==null){status("No replay clip to save yet");return}
-  val file=File(context.cacheDir,"IMG_REPLAY_SAVE_${System.currentTimeMillis()}.mp4")
-  status("Saving replay to phone gallery")
-  ring.export(captured,file){ok->
-   if(!ok){status("Replay MP4 export failed");return@export}
+  val captured=snapshot
+  if(captured==null){status("No prepared 10-second replay available");return}
+  val output=File(context.cacheDir,"IMG_REPLAY_SAVE_${System.currentTimeMillis()}.mp4")
+  status("Saving full prepared replay MP4")
+  ring.export(captured,output){ok->
+   if(!ok){status("Replay MP4 save failed");return@export}
    Thread {
-    val good=publish(file)
-    file.delete()
-    ui.post{status(if(good)"Replay MP4 saved to phone gallery" else
-      "Unable to save replay to gallery; live recording is unaffected")}
+    val good=publish(output)
+    output.delete()
+    ui.post{status(if(good)"Replay saved to phone gallery" else
+     "Unable to save clip; main recording remains active")}
    }.start()
   }
  }
@@ -164,7 +238,10 @@ class V2ReplayManager(
   }catch(_:Exception){}
  }
  fun release(){
-  stop();ring.setCaptureEnabled(false)
-  snapshot=null;filter=null
+  backToLive()
+  ring.setCaptureEnabled(false)
+  filter=null
+  timelineChanged={}
+  onAirEnded={}
  }
 }
