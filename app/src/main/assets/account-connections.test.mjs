@@ -575,7 +575,7 @@ test('Native V2 replay: rolling encoded ring, on-air 3-mode GPU compositor and o
  assert.ok(panel.includes('button("Save")')&&panel.includes('button("Back to Live")'));
  assert.ok(panel.includes('instantReplayIsFull()!=true'),'Touch gestures only while Full replay active');
  assert.ok(activity.includes('replayUi.show(replayButton)'),'Operator REPLAY button');
- assert.ok(manager.includes('indexSavedClip(destination!!,source.name)'),
+ assert.ok(manager.includes('V2RecordingLibrary.addReplay(context,owner,destination!!,duration,sport,home,away)'),
   'Exported gallery clips accessible in IMG recordings');
  assert.ok(manager.includes('context.contentResolver.openOutputStream(destination!!)'));
  assert.ok(!panel.includes('INSTANT REPLAY')&&!panel.includes('10s"'),'No panel heading/countdown');
@@ -627,7 +627,7 @@ test('V2 playback issue 34 and six replay updates: source integration',async()=>
  assert.ok(!d['V2SavedMp4Player.kt'].includes('ACTION_VIEW'));
  const a=d['PrivateYoutubeCameraActivity.kt'];
  assert.ok(a.includes('privateReplayView.visibility=View.VISIBLE'));
- assert.ok(a.includes('replayW=(w*.38f)'),'OFF AIR uses small private inset');
+ assert.ok(a.includes('else->.38f')&&a.includes('val replayW=(w*fraction)'),'OFF AIR uses small private inset');
  assert.ok(a.includes('setOnTouchListener'),'On-air gestures remain available');
  assert.ok(a.includes('ValueAnimator.ofFloat(params.weight,target)'),'Full-only local preview resize');
  assert.ok(a.includes('duration=300L'),'Local transition lasts 300ms');
